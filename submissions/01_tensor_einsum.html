@@ -1,0 +1,296 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tensor and Einsum &mdash; Machine Learning Accelerators  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Machine Learning Accelerators" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Machine Learning Accelerators
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Tensor and Einsum</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#task-1-dot-product">Task 1: Dot Product</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-2-matrix-matrix-multiplication">Task 2: Matrix-Matrix Multiplication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-3-einsum">Task 3: Einsum</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-4-tensor-permutation-and-reshaping">Task 4: Tensor Permutation and Reshaping</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#permutation">Permutation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reshape">Reshape</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#view">View</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Machine Learning Accelerators</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Tensor and Einsum</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/submissions/01_tensor_einsum.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tensor-and-einsum">
+<h1>Tensor and Einsum<a class="headerlink" href="#tensor-and-einsum" title="Link to this heading"></a></h1>
+<section id="task-1-dot-product">
+<span id="dot-product"></span><h2>Task 1: Dot Product<a class="headerlink" href="#task-1-dot-product" title="Link to this heading"></a></h2>
+<p>To calculate the dot product of two vectors for variable length, one simply needs to loop over the single shared dimension.</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text"><cite>Single loop over the shared dimension</cite></span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+<span class="linenos">2</span>        <span class="n">result</span> <span class="o">+=</span> <span class="n">a</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="n">b</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="task-2-matrix-matrix-multiplication">
+<span id="mat-mat-mul"></span><h2>Task 2: Matrix-Matrix Multiplication<a class="headerlink" href="#task-2-matrix-matrix-multiplication" title="Link to this heading"></a></h2>
+<p>Calculating a matrix-matrix multiplication simply adds another dimension to the calculation.
+Therefore, calculating the matrix-matrix multiplication using loops can be simply done by adding two more loops for the <code class="docutils literal notranslate"><span class="pre">m</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code> dimensions.</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text"><cite>Three loops to calculate the result of the matrix-matrix multiplication.</cite></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+<span class="linenos">2</span>        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+<span class="linenos">3</span>            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+<span class="linenos">4</span>                <span class="n">C</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="n">A</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">l</span><span class="p">]</span> <span class="o">*</span> <span class="n">B</span><span class="p">[</span><span class="n">l</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>Reusing the dot product calculation from <a class="reference internal" href="#dot-product"><span class="std std-ref">Task 1</span></a> can be achieved by replacing the innermost loop by the function call to the <code class="docutils literal notranslate"><span class="pre">dot_product</span></code> function.</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text"><cite>Two loops iterating over the dot_product function call.</cite></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+<span class="linenos">2</span>        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+<span class="linenos">3</span>            <span class="n">C</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">+=</span> <span class="n">dot_product</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="n">B</span><span class="p">[:,</span> <span class="n">j</span><span class="p">])</span>
+<span class="linenos">4</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="task-3-einsum">
+<h2>Task 3: Einsum<a class="headerlink" href="#task-3-einsum" title="Link to this heading"></a></h2>
+<p>In order to properly calculate the einsum expression, we need one loop for each dimension.
+The loops have been ordered according to their indices. The further an index is on the right, the further it is nested.</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text"><cite>Several nested loops to calculate the einsum expression.</cite></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_a</span><span class="p">):</span>
+<span class="linenos">2</span>        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_b</span><span class="p">):</span>
+<span class="linenos">3</span>            <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_c</span><span class="p">):</span>
+<span class="linenos">4</span>                <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_s</span><span class="p">):</span>
+<span class="linenos">5</span>                    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_x</span><span class="p">):</span>
+<span class="linenos">6</span>                        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_p</span><span class="p">):</span>
+<span class="linenos">7</span>                            <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_y</span><span class="p">):</span>
+<span class="linenos">8</span>                                <span class="n">C</span><span class="p">[</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">]</span> <span class="o">+=</span> <span class="n">A</span><span class="p">[</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">]</span> <span class="o">*</span> <span class="n">B</span><span class="p">[</span><span class="n">b</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">y</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>The nesting depth of the first calculation can be reduced by invoking the <code class="docutils literal notranslate"><span class="pre">matmul_dot</span></code> function from <a class="reference internal" href="#mat-mat-mul"><span class="std std-ref">Task 2</span></a>.
+We selected the innermost dimensions of the matrices <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> to pass to the <code class="docutils literal notranslate"><span class="pre">matmul_dot</span></code> function.</p>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text"><cite>Calculating the einsum expression by calling the matmul_dot function.</cite></span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_a</span><span class="p">):</span>
+<span class="linenos">2</span>        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_b</span><span class="p">):</span>
+<span class="linenos">3</span>            <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_c</span><span class="p">):</span>
+<span class="linenos">4</span>                <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">size_s</span><span class="p">):</span>
+<span class="linenos">5</span>                    <span class="n">C</span><span class="p">[</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">+=</span> <span class="n">matmul_dot</span><span class="p">(</span><span class="n">A</span><span class="p">[</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">B</span><span class="p">[</span><span class="n">b</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="task-4-tensor-permutation-and-reshaping">
+<h2>Task 4: Tensor Permutation and Reshaping<a class="headerlink" href="#task-4-tensor-permutation-and-reshaping" title="Link to this heading"></a></h2>
+<p>The experiments for the tensor permutation and reshaping are located in the <code class="docutils literal notranslate"><span class="pre">permute_reshape.py</span></code> file.</p>
+<p>Assume we initially have the following tensor:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Initial tensor
+tensor([[ 1,  2,  3,  4],
+        [ 5,  6,  7,  8],
+        [ 9, 10, 11, 12],
+        [13, 14, 15, 16]])
+
+# Shape
+torch.Size([4, 4])
+
+# Stride
+(4, 1)
+
+# Contiguity
+True
+</pre></div>
+</div>
+<section id="permutation">
+<h3>Permutation<a class="headerlink" href="#permutation" title="Link to this heading"></a></h3>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.permute.html#torch-permute">torch.permute</a> takes two input parameters:</p>
+<ol class="arabic simple">
+<li><p>the input tensor and</p></li>
+<li><p>the permuted dimensions.</p></li>
+</ol>
+<p>This function returns a view of the original tensor with the permuted dimensions.
+Alternatively, one can also call <code class="docutils literal notranslate"><span class="pre">&lt;tensor&gt;.permute(&lt;dims&gt;)</span></code>.</p>
+<p>After applying the <code class="docutils literal notranslate"><span class="pre">torch.permute(0,</span> <span class="pre">1)</span></code> function, the initial tensor changes to:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Tensor after permute
+tensor([[ 1,  5,  9, 13],
+        [ 2,  6, 10, 14],
+        [ 3,  7, 11, 15],
+        [ 4,  8, 12, 16]])
+
+# Shape
+torch.Size([4, 4])
+
+# Stride
+(1, 4)
+
+# Contiguity
+False
+</pre></div>
+</div>
+<p>This shows that the memory layout <strong>does</strong> change after applying the <code class="docutils literal notranslate"><span class="pre">torch.permute</span></code> function.
+Furthermore, the resulting tensor is <strong>no</strong> longer stored continuously in memory.</p>
+</section>
+<section id="reshape">
+<h3>Reshape<a class="headerlink" href="#reshape" title="Link to this heading"></a></h3>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.reshape.html#torch-reshape">torch.reshape</a> takes two input parameters:</p>
+<ol class="arabic simple">
+<li><p>the input tensor and</p></li>
+<li><p>the new shape.</p></li>
+</ol>
+<p>This function returns a tensor with the same data and number of elements as the original input tensor, simply with a new shape.
+If possible, the returned tensor comes in the shape of a view, otherwise it will be a copy.
+For example, contiguous inputs and inputs with compatible strides are reshaped <strong>without</strong> copying.</p>
+<p>In comparison, if we apply the <code class="docutils literal notranslate"><span class="pre">torch.reshape(1,</span> <span class="pre">-1)</span></code> function, the tensor looks like:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Tensor after reshape
+tensor([[ 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16]])
+
+# Shape
+torch.Size([1, 16])
+
+# Stride
+(16, 1)
+
+# Contiguity
+True
+</pre></div>
+</div>
+<p>This shows that the order of the tensor elements is the same as the initial tensor.
+Therefore, the memory layout does <strong>not</strong> change after this <code class="docutils literal notranslate"><span class="pre">torch.reshape</span></code> function call.</p>
+</section>
+<section id="view">
+<h3>View<a class="headerlink" href="#view" title="Link to this heading"></a></h3>
+<p>Depending on the contiguity of the given tensor, the result of the <code class="docutils literal notranslate"><span class="pre">torch.view</span></code> operation differs from <code class="docutils literal notranslate"><span class="pre">torch.reshape</span></code>.
+We experimented with two different parameter assignments.
+If we apply <code class="docutils literal notranslate"><span class="pre">torch.reshape(1,</span> <span class="pre">-1)</span></code> and <code class="docutils literal notranslate"><span class="pre">torch.view(1,</span> <span class="pre">-1)</span></code> to the same initial tensor, everything works the same.</p>
+<p>However, if we first transpose the tensor using <code class="docutils literal notranslate"><span class="pre">torch.transpose(0,</span> <span class="pre">1)</span></code>, we can still apply the <code class="docutils literal notranslate"><span class="pre">torch.reshape(1,</span> <span class="pre">-1)</span></code> operation, but we can’t apply the <code class="docutils literal notranslate"><span class="pre">torch.view(1,</span> <span class="pre">-1)</span></code> operation.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Tensor after transpose
+tensor([[ 1,  5,  9, 13],
+        [ 2,  6, 10, 14],
+        [ 3,  7, 11, 15],
+        [ 4,  8, 12, 16]])
+
+# Contiguity
+Tensor contiguity: False
+</pre></div>
+</div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Tensor after transpose and reshape
+tensor([[ 1,  5,  9, 13,  2,  6, 10, 14,  3,  7, 11, 15,  4,  8, 12, 16]])
+
+# Shape
+torch.Size([1, 16])
+
+# Stride
+(16, 1)
+
+# Contiguity
+True
+</pre></div>
+</div>
+<p>It is noticeable that the <code class="docutils literal notranslate"><span class="pre">torch.reshape</span></code> operation can be applied to non-contiguous tensors.
+Furthermore, after applying <code class="docutils literal notranslate"><span class="pre">torch.reshape</span></code>, the memory layout is contiguous again.</p>
+<p>The reason why a permuted tensor can be reshaped is that the <code class="docutils literal notranslate"><span class="pre">torch.reshape</span></code> operation is not influenced by the memory layout of the given tensor.
+As the description in torch already mentions, <code class="docutils literal notranslate"><span class="pre">torch.reshape</span></code> can handle tensors differently.
+In the case of a <strong>permuted</strong> tensor, the reshape operation creates a <strong>copy</strong> of the permuted tensor.
+In the case of a <strong>freshly</strong> created tensor, the reshape operation does <strong>not</strong> create a copy but rather creates a <strong>view</strong> of the freshly created tensor.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="Machine Learning Accelerators" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Lucas Obitz, Luca-Philipp Grumbach.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
