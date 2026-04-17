@@ -16,18 +16,13 @@ def next_power_of_two(n: int) -> int:
 
 
 @ct.kernel
-def tensor_elementwise_addition_kl_kernel(A, B, C, tK: ConstInt, tL: ConstInt,
-):
-    # Tiling over (K, L) and parallelization over (M, N).
-	block_id = ct.bid(0)
-	M = A.shape[0]
-	N = A.shape[1]
-
-	m = block_id // N
-	n = block_id % N
+def tensor_elementwise_addition_kl_kernel(A, B, C, tK: ConstInt, tL: ConstInt):
+	# Tiling over (K, L) and parallelization over (M, N).
+	m = ct.bid(0)
+	n = ct.bid(1)
 
 	tile_a = ct.load(
-        A,
+		A,
 		index=(m, n, 0, 0),
 		shape=(1, 1, tK, tL),
 		padding_mode=ct.PaddingMode.ZERO,
@@ -46,12 +41,8 @@ def tensor_elementwise_addition_kl_kernel(A, B, C, tK: ConstInt, tL: ConstInt,
 @ct.kernel
 def tensor_elementwise_addition_mn_kernel(A, B, C, tM: ConstInt, tN: ConstInt):
 	# Tiling over (M, N) and parallelization over (K, L).
-	block_id = ct.bid(0)
-	K = A.shape[2]
-	L = A.shape[3]
-
-	k = block_id // L
-	l = block_id % L
+	k = ct.bid(0)
+	l = ct.bid(1)
 
 	tile_a = ct.load(
 		A,
@@ -82,7 +73,7 @@ def tensor_elementwise_addition_kl(A: torch.Tensor, B: torch.Tensor) -> torch.Te
 	tK = next_power_of_two(K)
 	tL = next_power_of_two(L)
 
-	grid = (M * N, 1, 1)
+	grid = (M, N, 1)
 	C = torch.empty_like(A)
 
 	ct.launch(
@@ -106,7 +97,7 @@ def tensor_elementwise_addition_mn(A: torch.Tensor, B: torch.Tensor) -> torch.Te
 	tM = next_power_of_two(M)
 	tN = next_power_of_two(N)
 
-	grid = (K * L, 1, 1)
+	grid = (K, L, 1)
 	C = torch.empty_like(A)
 
 	ct.launch(
@@ -138,7 +129,7 @@ def test_tensor_elementwise_addition_mn():
 	assert torch.allclose(result, expected, rtol=1e-2), "MN-tile 4D addition failed"
 
 
-def run_benchmark(warmup: int = 20, iters: int = 100):
+def run_benchmark(warmup: int = 10, iters: int = 100):
 	M, N, K, L = 16, 128, 16, 128
 	A = torch.rand((M, N, K, L), dtype=torch.float16, device="cuda")
 	B = torch.rand((M, N, K, L), dtype=torch.float16, device="cuda")
@@ -149,8 +140,8 @@ def run_benchmark(warmup: int = 20, iters: int = 100):
 	tL = next_power_of_two(L)
 	tM = next_power_of_two(M)
 	tN = next_power_of_two(N)
-	grid_kl = (M * N, 1, 1)
-	grid_mn = (K * L, 1, 1)
+	grid_kl = (M, N, 1)
+	grid_mn = (K, L, 1)
 
 	C_kl = torch.empty_like(A)
 	C_mn = torch.empty_like(A)
@@ -175,9 +166,9 @@ def run_benchmark(warmup: int = 20, iters: int = 100):
 	def launch_torch():
 		torch.add(A, B, out=C_torch)
 
-	kl_ms = triton.testing.do_bench(launch_kl, warmup, iters)
-	mn_ms = triton.testing.do_bench(launch_mn, warmup, iters)
-	torch_ms = triton.testing.do_bench(launch_torch, warmup, iters)
+	kl_ms = triton.testing.do_bench(launch_kl, warmup=warmup, rep=iters)
+	mn_ms = triton.testing.do_bench(launch_mn, warmup=warmup, rep=iters)
+	torch_ms = triton.testing.do_bench(launch_torch, warmup=warmup, rep=iters)
 
 	print("Benchmark (ms per launch):")
 	print(f"  cuTile KL-tiling: {kl_ms:.4f} ms")

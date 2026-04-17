@@ -27,16 +27,17 @@ def matrix_sum_reduction(input_matrix, tM):
     grid = (ct.cdiv(num_rows, tM), 1, 1)
     output_vector = torch.zeros(num_rows, dtype=input_matrix.dtype, device='cuda')
 
-    ct.launch(torch.cuda.current_stream(),
-              grid,
-              matrix_sum_reduction_kernel,
-              (input_matrix, output_vector, tM, tK))
+    ct.launch(
+        torch.cuda.current_stream(),
+        grid,
+        matrix_sum_reduction_kernel,
+        (input_matrix, output_vector, tM, tK)
+    )
     
     return output_vector
 
 def test_matrix_sum_reduction():
-    M = 2**7
-    K = 2**5
+    M, K = 2**7, 2**5
     tM = 2**4
 
     input_matrix = torch.rand((M, K), dtype=torch.float16, device='cuda')
