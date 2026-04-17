@@ -47,3 +47,4 @@ def test_matrix_sum_reduction():
 
 if __name__ == "__main__":
     test_matrix_sum_reduction()
+    print("Task 2 tests passed.")
