@@ -111,7 +111,7 @@ We obtained the following results on the DGX Spark:
 
 We can see that the kernel that tiles over the K and L dimensions performs on par with PyTorch's built-in addition operation, 
 while the kernel that tiles over the M and N dimensions is significantly slower.
-We can assume that pytorch uses a similar tiling strategy to the first kernel, which is why it achieves similar performance.
+We can assume that PyTorch uses a similar tiling strategy as the first kernel, which is why it achieves similar performance.
 The second kernel, on the other hand, shows that tiling over the M and N dimensions is not as efficient for this particular operation, 
 likely due to less optimal memory access patterns and reduced parallelism.
 
