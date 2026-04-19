@@ -1,0 +1,463 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPU Architecture and cuTile &mdash; Machine Learning Accelerators  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Tensor and Einsum" href="01_tensor_einsum.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Machine Learning Accelerators
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">GPU Architecture and cuTile</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#task-1-gpu-device-properties">Task 1: GPU Device Properties</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-2-matrix-reduction-kernel">Task 2: Matrix Reduction Kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-3-4d-tensor-element-wise-addition">Task 3: 4D Tensor Element-wise Addition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-4-benchmarking-bandwidth">Task 4: Benchmarking Bandwidth</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Machine Learning Accelerators</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">GPU Architecture and cuTile</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/submissions/02_gpu_arch_cutile.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="gpu-architecture-and-cutile">
+<h1>GPU Architecture and cuTile<a class="headerlink" href="#gpu-architecture-and-cutile" title="Link to this heading"></a></h1>
+<section id="task-1-gpu-device-properties">
+<span id="gpu-properties"></span><h2>Task 1: GPU Device Properties<a class="headerlink" href="#task-1-gpu-device-properties" title="Link to this heading"></a></h2>
+<p>Using the given function, we obtained the following information about the GPU device:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>L2CacheSize: 24.00 MiB
+MaxSharedMemoryPerMultiprocessor: 100.0 KiB
+ClockRate: 2.418 GHz
+</pre></div>
+</div>
+</section>
+<section id="task-2-matrix-reduction-kernel">
+<h2>Task 2: Matrix Reduction Kernel<a class="headerlink" href="#task-2-matrix-reduction-kernel" title="Link to this heading"></a></h2>
+<p>In this task, we had to write a cuTile kernel that reduces a 2D input matrix of arbitrary shape (M, K)
+along its last dimension (K), producing a 1D output vector of shape (M,) that contains the per-row sum.
+For the reduction, the kernel relies on <cite>ct.sum</cite> to perform the summation of elements along the specified dimension:</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text"><cite>Kernel for matrix reduction using ct.sum.</cite></span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="linenos"> 2</span><span class="k">def</span> <span class="nf">matrix_sum_reduction_kernel</span><span class="p">(</span><span class="n">input_matrix</span><span class="p">,</span> <span class="n">output_vector</span><span class="p">,</span> <span class="n">tM</span><span class="p">:</span> <span class="n">ct</span><span class="o">.</span><span class="n">Constant</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">tK</span><span class="p">:</span> <span class="n">ct</span><span class="o">.</span><span class="n">Constant</span><span class="p">[</span><span class="nb">int</span><span class="p">]):</span>
+<span class="linenos"> 3</span>    <span class="n">block_id</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="linenos"> 4</span>    <span class="c1"># load a tile of shape (tM, tK) with zero-padding</span>
+<span class="linenos"> 5</span>    <span class="c1"># -&gt; only one tile in K dimension (index 0)</span>
+<span class="linenos"> 6</span>    <span class="n">input_tile</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">input_matrix</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">block_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span>
+<span class="linenos"> 7</span>                         <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">input_matrix</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+<span class="linenos"> 8</span>    <span class="c1"># sum along the columns to get a tile of shape (tM,)</span>
+<span class="linenos"> 9</span>    <span class="n">output_tile</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">input_tile</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos">10</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">output_vector</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">block_id</span><span class="p">,),</span> <span class="n">tile</span><span class="o">=</span><span class="n">output_tile</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Since we only tile in the M dimension, we use a 1D grid.</p>
+<p>The kernel is launched using a utility function, which also pads the number of columns (K) to the nearest multiple of 2:</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text"><cite>Launching the reduction kernel with appropriate tile size and grid dimensions.</cite></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">matrix_sum_reduction</span><span class="p">(</span><span class="n">input_matrix</span><span class="p">,</span> <span class="n">tM</span><span class="p">):</span>
+<span class="linenos"> 2</span>    <span class="n">num_rows</span> <span class="o">=</span> <span class="n">input_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="linenos"> 3</span>    <span class="n">num_cols</span> <span class="o">=</span> <span class="n">input_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos"> 4</span>    <span class="c1"># tile dimensions must be powers of 2 -&gt; round up</span>
+<span class="linenos"> 5</span>    <span class="n">tK</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="linenos"> 6</span>    <span class="k">while</span> <span class="n">tK</span> <span class="o">&lt;</span> <span class="n">num_cols</span><span class="p">:</span>
+<span class="linenos"> 7</span>        <span class="n">tK</span> <span class="o">*=</span> <span class="mi">2</span>
+<span class="linenos"> 8</span>    
+<span class="linenos"> 9</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">10</span>    <span class="n">output_vector</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">input_matrix</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="linenos">11</span>
+<span class="linenos">12</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span>
+<span class="linenos">13</span>        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">14</span>        <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">15</span>        <span class="n">matrix_sum_reduction_kernel</span><span class="p">,</span>
+<span class="linenos">16</span>        <span class="p">(</span><span class="n">input_matrix</span><span class="p">,</span> <span class="n">output_vector</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">)</span>
+<span class="linenos">17</span>    <span class="p">)</span>
+<span class="linenos">18</span>    
+<span class="linenos">19</span>    <span class="k">return</span> <span class="n">output_vector</span>
+</pre></div>
+</div>
+</div>
+<p>Next, to verify the correctness of the kernel, we compare its output with the result obtained from PyTorch’s built-in reduction function:</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text"><cite>Testing the reduction kernel by comparing its output with PyTorch’s torch.sum result.</cite></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="k">def</span> <span class="nf">test_matrix_sum_reduction</span><span class="p">():</span>
+<span class="linenos">2</span>    <span class="n">M</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="mi">5</span>
+<span class="linenos">3</span>    <span class="n">tM</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">4</span>
+<span class="linenos">4</span>
+<span class="linenos">5</span>    <span class="n">input_matrix</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">M</span><span class="p">,</span> <span class="n">K</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="linenos">6</span>    <span class="n">output_vector</span> <span class="o">=</span> <span class="n">matrix_sum_reduction</span><span class="p">(</span><span class="n">input_matrix</span><span class="p">,</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos">7</span>    
+<span class="linenos">8</span>    <span class="n">expected_output</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">input_matrix</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos">9</span>    <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">output_vector</span><span class="p">,</span> <span class="n">expected_output</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">),</span> <span class="s2">&quot;Matrix sum reduction failed!&quot;</span>
+</pre></div>
+</div>
+</div>
+<p>Since we only tile in the M dimension, parallelism is only achieved across the rows of the input matrix.
+If we increase the M dimension, more tiles will be launched, potentially allowing for better utilization of the GPU’s resources and thus improving performance.
+However, since we are not tiling in the K dimension, the performance may not scale well with larger K values.
+Each thread will still have to process a large number of elements sequentially.</p>
+</section>
+<section id="task-3-4d-tensor-element-wise-addition">
+<h2>Task 3: 4D Tensor Element-wise Addition<a class="headerlink" href="#task-3-4d-tensor-element-wise-addition" title="Link to this heading"></a></h2>
+<p>In this task, we implemented a cuTile kernel that adds two 4D tensors A and B element-wise and stores the result in C.
+Note that all tensors have identical shape and dimensions (M, N, K, L).</p>
+<p>Part of the task was to implement two kernels, where one tiles over the K and L dimensions, and the other tiles over the M and N dimensions:</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text"><cite>Kernel for element-wise addition of two 4D tensors with tiling over K and L dimensions.</cite></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="linenos"> 2</span><span class="k">def</span> <span class="nf">tensor_elementwise_addition_kl_kernel</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tK</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tL</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+<span class="linenos"> 3</span>	<span class="c1"># Tiling over (K, L) and parallelization over (M, N).</span>
+<span class="linenos"> 4</span>	<span class="n">m</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="linenos"> 5</span>	<span class="n">n</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>	<span class="n">tile_a</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+<span class="linenos"> 8</span>		<span class="n">A</span><span class="p">,</span>
+<span class="linenos"> 9</span>		<span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+<span class="linenos">10</span>		<span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tL</span><span class="p">),</span>
+<span class="linenos">11</span>		<span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">,</span>
+<span class="linenos">12</span>	<span class="p">)</span>
+<span class="linenos">13</span>	<span class="n">tile_b</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+<span class="linenos">14</span>		<span class="n">B</span><span class="p">,</span>
+<span class="linenos">15</span>		<span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+<span class="linenos">16</span>		<span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tL</span><span class="p">),</span>
+<span class="linenos">17</span>		<span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">,</span>
+<span class="linenos">18</span>	<span class="p">)</span>
+<span class="linenos">19</span>
+<span class="linenos">20</span>	<span class="n">tile_c</span> <span class="o">=</span> <span class="n">tile_a</span> <span class="o">+</span> <span class="n">tile_b</span>
+<span class="linenos">21</span>	<span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">tile_c</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text"><cite>Kernel for element-wise addition of two 4D tensors with tiling over M and N dimensions.</cite></span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="linenos"> 2</span><span class="k">def</span> <span class="nf">tensor_elementwise_addition_mn_kernel</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tN</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+<span class="linenos"> 3</span>	<span class="c1"># Tiling over (M, N) and parallelization over (K, L).</span>
+<span class="linenos"> 4</span>	<span class="n">k</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="linenos"> 5</span>	<span class="n">l</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>	<span class="n">tile_a</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+<span class="linenos"> 8</span>		<span class="n">A</span><span class="p">,</span>
+<span class="linenos"> 9</span>		<span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">),</span>
+<span class="linenos">10</span>		<span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+<span class="linenos">11</span>		<span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">,</span>
+<span class="linenos">12</span>	<span class="p">)</span>
+<span class="linenos">13</span>	<span class="n">tile_b</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+<span class="linenos">14</span>		<span class="n">B</span><span class="p">,</span>
+<span class="linenos">15</span>		<span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">),</span>
+<span class="linenos">16</span>		<span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+<span class="linenos">17</span>		<span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">,</span>
+<span class="linenos">18</span>	<span class="p">)</span>
+<span class="linenos">19</span>
+<span class="linenos">20</span>	<span class="n">tile_c</span> <span class="o">=</span> <span class="n">tile_a</span> <span class="o">+</span> <span class="n">tile_b</span>
+<span class="linenos">21</span>	<span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">tile_c</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>In both kernels, we access the tiles using a 2D grid and simply add up the tiles.
+In addition to the tensors, the kernels also take the tile sizes as constant input parameters.
+Similarly to the previous task, we launch the kernels using a utility function that pads the dimensions of the input tensors to the nearest multiple of the tile sizes:</p>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text"><cite>Launching the element-wise addition kernel.</cite></span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">tensor_elementwise_addition_kl</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="linenos"> 2</span>	<span class="k">if</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+<span class="linenos"> 3</span>		<span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input tensors must have the same shape.&quot;</span><span class="p">)</span>
+<span class="linenos"> 4</span>	<span class="k">if</span> <span class="n">A</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">B</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+<span class="linenos"> 5</span>		<span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input tensors must be on the same device.&quot;</span><span class="p">)</span>
+<span class="linenos"> 6</span>	<span class="k">if</span> <span class="ow">not</span> <span class="n">A</span><span class="o">.</span><span class="n">is_cuda</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">B</span><span class="o">.</span><span class="n">is_cuda</span><span class="p">:</span>
+<span class="linenos"> 7</span>		<span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input tensors must be on CUDA.&quot;</span><span class="p">)</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span>	<span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span>
+<span class="linenos">10</span>	<span class="n">tK</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+<span class="linenos">11</span>	<span class="n">tL</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">L</span><span class="p">)</span>
+<span class="linenos">12</span>
+<span class="linenos">13</span>	<span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">14</span>	<span class="n">C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">15</span>
+<span class="linenos">16</span>	<span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span>
+<span class="linenos">17</span>		<span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">18</span>		<span class="n">grid</span><span class="p">,</span>
+<span class="linenos">19</span>		<span class="n">tensor_elementwise_addition_kl_kernel</span><span class="p">,</span>
+<span class="linenos">20</span>		<span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tL</span><span class="p">),</span>
+<span class="linenos">21</span>	<span class="p">)</span>
+<span class="linenos">22</span>	<span class="k">return</span> <span class="n">C</span>
+</pre></div>
+</div>
+</div>
+<p>The function for launching the second kernel is very similar, with the only two differences being that we first compute <cite>tM</cite> and <cite>tN</cite> instead of <cite>tK</cite> and <cite>tL</cite>
+and then use <cite>K</cite> and <cite>L</cite> instead of <cite>M</cite> and <cite>N</cite> for the grid dimensions.</p>
+<p>Next, we verify the correctness of both kernels by comparing their outputs with the result obtained from PyTorch’s built-in addition operation:</p>
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text"><cite>Testing the element-wise addition kernel.</cite></span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="k">def</span> <span class="nf">test_tensor_elementwise_addition_kl</span><span class="p">():</span>
+<span class="linenos">2</span>	<span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span> <span class="o">=</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">99</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">76</span>
+<span class="linenos">3</span>	<span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">4</span>	<span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">5</span>
+<span class="linenos">6</span>	<span class="n">result</span> <span class="o">=</span> <span class="n">tensor_elementwise_addition_kl</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+<span class="linenos">7</span>	<span class="n">expected</span> <span class="o">=</span> <span class="n">A</span> <span class="o">+</span> <span class="n">B</span>
+<span class="linenos">8</span>	<span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">expected</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">),</span> <span class="s2">&quot;KL-tile 4D addition failed&quot;</span>
+</pre></div>
+</div>
+</div>
+<p>Lastly, we analyze the performance of both kernels by benchmarking the addition of matrices of shape (16, 128, 16, 128).
+For measuring the time per kernel execution, we use <cite>triton.testing.do_bench</cite> with a warmup time of 0.2 seconds and a repetition time of 2 seconds:</p>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text"><cite>Benchmarking both element-wise addition kernel.</cite></span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">run_benchmark</span><span class="p">(</span><span class="n">warmup</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="n">iters</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2000</span><span class="p">):</span>
+<span class="linenos"> 2</span>	<span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">128</span>
+<span class="linenos"> 3</span>	<span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos"> 4</span>	<span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">L</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos"> 5</span>	<span class="n">stream</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>	<span class="c1"># Precompute launch parameters</span>
+<span class="linenos"> 8</span>	<span class="n">tK</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+<span class="linenos"> 9</span>	<span class="n">tL</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">L</span><span class="p">)</span>
+<span class="linenos">10</span>	<span class="n">tM</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+<span class="linenos">11</span>	<span class="n">tN</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
+<span class="linenos">12</span>	<span class="n">grid_kl</span> <span class="o">=</span> <span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">13</span>	<span class="n">grid_mn</span> <span class="o">=</span> <span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="n">L</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">14</span>
+<span class="linenos">15</span>	<span class="n">C_kl</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">16</span>	<span class="n">C_mn</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">17</span>	<span class="n">C_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">18</span>
+<span class="linenos">19</span>	<span class="k">def</span> <span class="nf">launch_kl</span><span class="p">():</span>
+<span class="linenos">20</span>		<span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span>
+<span class="linenos">21</span>			<span class="n">stream</span><span class="p">,</span>
+<span class="linenos">22</span>			<span class="n">grid_kl</span><span class="p">,</span>
+<span class="linenos">23</span>			<span class="n">tensor_elementwise_addition_kl_kernel</span><span class="p">,</span>
+<span class="linenos">24</span>			<span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C_kl</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tL</span><span class="p">),</span>
+<span class="linenos">25</span>		<span class="p">)</span>
+<span class="linenos">26</span>
+<span class="linenos">27</span>	<span class="k">def</span> <span class="nf">launch_mn</span><span class="p">():</span>
+<span class="linenos">28</span>		<span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span>
+<span class="linenos">29</span>			<span class="n">stream</span><span class="p">,</span>
+<span class="linenos">30</span>			<span class="n">grid_mn</span><span class="p">,</span>
+<span class="linenos">31</span>			<span class="n">tensor_elementwise_addition_mn_kernel</span><span class="p">,</span>
+<span class="linenos">32</span>			<span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C_mn</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>
+<span class="linenos">33</span>		<span class="p">)</span>
+<span class="linenos">34</span>
+<span class="linenos">35</span>	<span class="k">def</span> <span class="nf">launch_torch</span><span class="p">():</span>
+<span class="linenos">36</span>		<span class="n">torch</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">C_torch</span><span class="p">)</span>
+<span class="linenos">37</span>
+<span class="linenos">38</span>	<span class="n">kl_ms</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span><span class="n">launch_kl</span><span class="p">,</span> <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">iters</span><span class="p">)</span>
+<span class="linenos">39</span>	<span class="n">mn_ms</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span><span class="n">launch_mn</span><span class="p">,</span> <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">iters</span><span class="p">)</span>
+<span class="linenos">40</span>	<span class="n">torch_ms</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span><span class="n">launch_torch</span><span class="p">,</span> <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">iters</span><span class="p">)</span>
+<span class="linenos">41</span>
+<span class="linenos">42</span>	<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Benchmark (ms per launch):&quot;</span><span class="p">)</span>
+<span class="linenos">43</span>	<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  cuTile KL-tiling: </span><span class="si">{</span><span class="n">kl_ms</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
+<span class="linenos">44</span>	<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  cuTile MN-tiling: </span><span class="si">{</span><span class="n">mn_ms</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
+<span class="linenos">45</span>	<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  torch.add:  </span><span class="si">{</span><span class="n">torch_ms</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> ms&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>We obtained the following results on the DGX Spark:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Benchmark (ms per launch):
+    cuTile KL-tiling: 0.1386 ms
+    cuTile MN-tiling: 0.4787 ms
+    torch.add: 0.1385 ms
+</pre></div>
+</div>
+<p>We can see that the kernel that tiles over the K and L dimensions performs on par with PyTorch’s built-in addition operation,
+while the kernel that tiles over the M and N dimensions is significantly slower.
+We can assume that PyTorch uses a similar tiling strategy as the first kernel, which is why it achieves similar performance.
+The second kernel, on the other hand, shows that tiling over the M and N dimensions is not as efficient for this particular operation,
+likely due to less optimal memory access patterns and reduced parallelism.</p>
+</section>
+<section id="task-4-benchmarking-bandwidth">
+<h2>Task 4: Benchmarking Bandwidth<a class="headerlink" href="#task-4-benchmarking-bandwidth" title="Link to this heading"></a></h2>
+<p>The goal of this task was to benchmark the bandwidth of the GPU by copying tensors of sizes <cite>16, 32, 64 and 128</cite>.
+Since we only do a copy operation, the kernel is rather simple:</p>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text"><cite>Kernel for copying a tensor from input to output.</cite></span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="linenos"> 2</span><span class="k">def</span> <span class="nf">copy_matrix_kernel</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">tM</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tN</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+<span class="linenos"> 3</span>    <span class="n">m</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="linenos"> 4</span>    <span class="n">n</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span>    <span class="n">tile_a</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+<span class="linenos"> 7</span>        <span class="n">A</span><span class="p">,</span>
+<span class="linenos"> 8</span>        <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span>
+<span class="linenos"> 9</span>        <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>
+<span class="linenos">10</span>        <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">,</span>
+<span class="linenos">11</span>    <span class="p">)</span>
+<span class="linenos">12</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">tile_a</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The kernel is launched using a simple utility function as well, without any manual padding:</p>
+<div class="literal-block-wrapper docutils container" id="id10">
+<div class="code-block-caption"><span class="caption-text"><cite>Launching the copy kernel.</cite></span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">copy_matrix</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">):</span>
+<span class="linenos"> 2</span>    <span class="n">num_rows</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="linenos"> 3</span>    <span class="n">num_cols</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos"> 4</span>
+<span class="linenos"> 5</span>    <span class="k">assert</span> <span class="n">tM</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">tN</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Tile dimensions must be positive&quot;</span>
+<span class="linenos"> 6</span>    <span class="k">assert</span> <span class="p">(</span><span class="n">tM</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">tM</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="p">(</span><span class="n">tN</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">tN</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Tile dimensions must be powers of 2&quot;</span>
+<span class="linenos"> 7</span>    
+<span class="linenos"> 8</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_cols</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos"> 9</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">10</span>
+<span class="linenos">11</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">12</span>              <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">13</span>              <span class="n">copy_matrix_kernel</span><span class="p">,</span>
+<span class="linenos">14</span>              <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">15</span>    
+<span class="linenos">16</span>    <span class="k">return</span> <span class="n">B</span>
+</pre></div>
+</div>
+</div>
+<p>Next, we define a test function to verify the correctness of the copy kernel by comparing its output with the input tensor:</p>
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text"><cite>Testing the copy kernel by comparing its output with the input tensor.</cite></span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="k">def</span> <span class="nf">test_copy_matrix</span><span class="p">():</span>
+<span class="linenos">2</span>    <span class="n">M</span><span class="p">,</span> <span class="n">N</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="mi">7</span>
+<span class="linenos">3</span>    <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="mi">4</span>
+<span class="linenos">4</span>    
+<span class="linenos">5</span>    <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="linenos">6</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">copy_matrix</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos">7</span>    
+<span class="linenos">8</span>    <span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">),</span> <span class="s2">&quot;The copied matrix does not match the original.&quot;</span>
+</pre></div>
+</div>
+</div>
+<p>Lastly, we benchmark the bandwidth of the GPU by copying tensors of varying sizes and measuring the time taken for each copy operation.
+Furthermore, we collect the achieved bandwidth in GB/s for each tensor size and plot the results:</p>
+<div class="literal-block-wrapper docutils container" id="id12">
+<div class="code-block-caption"><span class="caption-text"><cite>Benchmarking the bandwidth of the GPU by copying tensors of varying sizes and plotting the results.</cite></span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">bench_copy_matrix</span><span class="p">():</span>
+<span class="linenos"> 2</span>    <span class="n">M</span> <span class="o">=</span> <span class="mi">2048</span>
+<span class="linenos"> 3</span>    <span class="n">tM</span> <span class="o">=</span> <span class="mi">64</span>
+<span class="linenos"> 4</span>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Running bandwidth benchmark for copy_matrix&quot;</span><span class="p">)</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span>    <span class="n">Ns</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos"> 7</span>    <span class="n">bandwidths</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span>    <span class="k">for</span> <span class="n">N</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">16</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">128</span><span class="p">]:</span>
+<span class="linenos">10</span>        <span class="n">tN</span> <span class="o">=</span> <span class="n">N</span>
+<span class="linenos">11</span>        <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">12</span>
+<span class="linenos">13</span>        <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">14</span>        <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">15</span>
+<span class="linenos">16</span>        <span class="k">def</span> <span class="nf">launch</span><span class="p">():</span>
+<span class="linenos">17</span>            <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span>
+<span class="linenos">18</span>                <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">19</span>                <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">20</span>                <span class="n">copy_matrix_kernel</span><span class="p">,</span>
+<span class="linenos">21</span>                <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>
+<span class="linenos">22</span>            <span class="p">)</span>
+<span class="linenos">23</span>
+<span class="linenos">24</span>        <span class="n">time_ms</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span><span class="n">launch</span><span class="p">,</span> <span class="n">warmup</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="linenos">25</span>        <span class="n">bw</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">M</span> <span class="o">*</span> <span class="n">N</span> <span class="o">*</span> <span class="n">A</span><span class="o">.</span><span class="n">element_size</span><span class="p">())</span> <span class="o">/</span> <span class="p">(</span><span class="n">time_ms</span> <span class="o">/</span> <span class="mf">1000.0</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1024</span> <span class="o">**</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># GB/s</span>
+<span class="linenos">26</span>
+<span class="linenos">27</span>        <span class="n">Ns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
+<span class="linenos">28</span>        <span class="n">bandwidths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bw</span><span class="p">)</span>
+<span class="linenos">29</span>
+<span class="linenos">30</span>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  M=</span><span class="si">{</span><span class="n">M</span><span class="si">:</span><span class="s2">4</span><span class="si">}</span><span class="s2">, N=</span><span class="si">{</span><span class="n">N</span><span class="si">:</span><span class="s2">3</span><span class="si">}</span><span class="s2">, tM=</span><span class="si">{</span><span class="n">tM</span><span class="si">:</span><span class="s2">2</span><span class="si">}</span><span class="s2">, tN=</span><span class="si">{</span><span class="n">tN</span><span class="si">:</span><span class="s2">3</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">bw</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> GB/s&quot;</span><span class="p">)</span>
+<span class="linenos">31</span>
+<span class="linenos">32</span>    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+<span class="linenos">33</span>    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">bandwidths</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">)</span>
+<span class="linenos">34</span>    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;copy_matrix bandwidth vs N&quot;</span><span class="p">)</span>
+<span class="linenos">35</span>    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;N&quot;</span><span class="p">)</span>
+<span class="linenos">36</span>    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Bandwidth (GB/s)&quot;</span><span class="p">)</span>
+<span class="linenos">37</span>    <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+<span class="linenos">38</span>    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+<span class="linenos">39</span>    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;task4_bandwidth.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">160</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The generated plot shows the achieved bandwidth in GB/s for different tensor sizes:</p>
+<img alt="Bandwidth Plot" src="../_images/task4_bandwidth.png" />
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="01_tensor_einsum.html" class="btn btn-neutral float-left" title="Tensor and Einsum" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Lucas Obitz, Luca-Philipp Grumbach.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
