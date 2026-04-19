@@ -1,0 +1,44 @@
+name: Prepare submission archive
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: read
+
+jobs:
+  package-submission:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build submission archive
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          date_stamp="$(date -u +'%d-%m')"
+          submission_dir="submission_grumbach_obitz_${date_stamp}"
+          template_dir=".github/submission-template"
+
+          rm -rf "$submission_dir"
+          mkdir -p "$submission_dir"
+
+          cp "$template_dir/contribution.txt" "$submission_dir/contribution.txt"
+          cp "$template_dir/git_link.txt" "$submission_dir/git_link.txt"
+          printf '%s\n' "$TAG_NAME" > "$submission_dir/git_tag.txt"
+          cp "$template_dir/report_link.txt" "$submission_dir/report_link.txt"
+
+          tar -cJf "${submission_dir}.tar.xz" "$submission_dir"
+
+      - name: Upload submission archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: submission-${{ github.ref_name }}
+          path: submission_grumbach_obitz_*.tar.xz
+          if-no-files-found: error
