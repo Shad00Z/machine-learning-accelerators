@@ -15,7 +15,8 @@ def matrix_sum_reduction_kernel(input_matrix, output_vector, tM: ct.Constant[int
     # sum along the columns to get a tile of shape (tM,)
     output_tile = ct.sum(input_tile, axis=1)
     ct.store(output_vector, index=(block_id,), tile=output_tile)
-    
+
+
 def matrix_sum_reduction(input_matrix, tM):
     num_rows = input_matrix.shape[0]
     num_cols = input_matrix.shape[1]
@@ -36,6 +37,7 @@ def matrix_sum_reduction(input_matrix, tM):
     
     return output_vector
 
+
 def test_matrix_sum_reduction():
     M, K = 2**7, 2**5
     tM = 2**4
@@ -45,6 +47,7 @@ def test_matrix_sum_reduction():
     
     expected_output = torch.sum(input_matrix, dim=1)
     assert torch.allclose(output_vector, expected_output, rtol=1e-2), "Matrix sum reduction failed!"
+
 
 if __name__ == "__main__":
     test_matrix_sum_reduction()

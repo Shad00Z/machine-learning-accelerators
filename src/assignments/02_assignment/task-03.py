@@ -129,7 +129,7 @@ def test_tensor_elementwise_addition_mn():
 	assert torch.allclose(result, expected, rtol=1e-2), "MN-tile 4D addition failed"
 
 
-def run_benchmark(warmup: int = 10, iters: int = 100):
+def run_benchmark(warmup: int = 200, iters: int = 2000):
 	M, N, K, L = 16, 128, 16, 128
 	A = torch.rand((M, N, K, L), dtype=torch.float16, device="cuda")
 	B = torch.rand((M, N, K, L), dtype=torch.float16, device="cuda")

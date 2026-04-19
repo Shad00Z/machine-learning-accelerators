@@ -21,7 +21,8 @@ def copy_matrix_kernel(A, B, tM: ConstInt, tN: ConstInt):
         padding_mode=ct.PaddingMode.ZERO,
     )
     ct.store(B, index=(m, n), tile=tile_a)
-    
+
+
 def copy_matrix(A, tM, tN):
     num_rows = A.shape[0]
     num_cols = A.shape[1]
@@ -39,6 +40,7 @@ def copy_matrix(A, tM, tN):
     
     return B
 
+
 def test_copy_matrix():
     M, N = 2**7, 2**7
     tM, tN = 2**4, 2**4
@@ -47,7 +49,8 @@ def test_copy_matrix():
     B = copy_matrix(A, tM, tN)
     
     assert torch.allclose(A, B), "The copied matrix does not match the original."
-    
+
+
 def bench_copy_matrix():
     M = 2048
     tM = 64
