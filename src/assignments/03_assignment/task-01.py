@@ -1,5 +1,4 @@
 import cuda.tile as ct
-import cupy as cp
 import torch
 import triton
 
@@ -56,7 +55,7 @@ def main():
     grid = (1, 1, 1)
 
     # FP16: Correctness
-    ct.launch(cp.cuda.get_current_stream(),
+    ct.launch(torch.cuda.current_stream(),
               grid,
               kernel_fp16,
               (A16, B16, C32))
@@ -66,7 +65,7 @@ def main():
     # FP16: Correctness
     C32 = torch.zeros(64, 64, dtype=torch.float32, device='cuda')
 
-    ct.launch(cp.cuda.get_current_stream(),
+    ct.launch(torch.cuda.current_stream(),
               grid,
               kernel_fp32,
               (A32, B32, C32))
@@ -79,7 +78,7 @@ def main():
 
     # FP16: Benchmarking
     ms_fp16 = triton.testing.do_bench(
-        lambda: ct.launch(cp.cuda.get_current_stream(),
+        lambda: ct.launch(torch.cuda.current_stream(),
                           grid,
                           kernel_fp16,
                           (A16, B16, C32)),
@@ -89,7 +88,7 @@ def main():
 
     # FP32: Benchmarking
     ms_fp32 = triton.testing.do_bench(
-        lambda: ct.launch(cp.cuda.get_current_stream(),
+        lambda: ct.launch(torch.cuda.current_stream(),
                           grid,
                           kernel_fp32,
                           (A32, B32, C32)),
@@ -99,8 +98,8 @@ def main():
 
     # Comparison
     print("Benchmark (ms per launch):")
-    print("    FP16 time: {}", ms_fp16)
-    print("    FP32 time: {}", ms_fp32)
+    print("    FP16 time: ", ms_fp16)
+    print("    FP32 time: ", ms_fp32)
 
     return
 
