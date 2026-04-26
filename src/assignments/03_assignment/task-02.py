@@ -2,18 +2,13 @@ import cuda.tile as ct
 import random
 import torch
 
+from utils import next_power_of_two
+
 ConstInt = ct.Constant[int]
 
 # ===========================================================================
 # Task 2: Simple Matrix Multiplication Kernel
 # ===========================================================================
-
-def next_power_of_two(n: int) -> int:
-	p = 1
-	while p < n:
-		p *= 2
-	return p
-
 
 @ct.kernel
 def mma_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):

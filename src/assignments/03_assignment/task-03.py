@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import triton
 
+from utils import heatmap
+
 ConstInt = ct.Constant[int]
 
 # ===========================================================================
@@ -84,7 +86,7 @@ def squaredMatrixThroughput():
     plt.savefig("task3_matrix_sizes.png", dpi=160)
     
 
-def tileShapeThroughput(m, n, k):
+def tileShapeThroughput(m, n, k, out_file):
     # Valid Tiles Sizes
     tile_sizes = list(itertools.product([32, 64, 128], repeat=3))
     
@@ -124,11 +126,11 @@ def tileShapeThroughput(m, n, k):
         })
         
     df = pd.DataFrame(records)
-    df.to_csv(f"task_{m}_tile_shapes.csv", index=False)
+    df.to_csv(out_file, index=False)
     
     
-def heatmap(m):
-    df = pd.read_csv(f"src/assignments/03_assignment/task_{m}_tile_shapes.csv")
+def heatmap(m, in_file, out_file):
+    df = pd.read_csv(in_file)
     
     tK = 64
     heatmap_data = (
@@ -137,7 +139,7 @@ def heatmap(m):
     )
     values = heatmap_data.values
     
-    fig, ax = plt.subplots(figsize=(6, 5))
+    _, ax = plt.subplots(figsize=(6, 5))
     im = ax.imshow(heatmap_data.values, cmap="plasma")
     
     ax.set_xticks(range(len(heatmap_data.columns)))
@@ -147,9 +149,6 @@ def heatmap(m):
     ax.set_xlabel("n_tile")
     ax.set_ylabel("m_tile")
     ax.set_title(f"Tile Shape Throughput (TFLOPS)\nm=n=k={m}, k_tile={tK} fixed")
-
-    # Annotate each cell with its TFLOPS value
-    vmax = values.max()
     
     for i in range(values.shape[0]):
         for j in range(values.shape[1]):
@@ -161,20 +160,25 @@ def heatmap(m):
     plt.colorbar(im, ax=ax, label="TFLOPS")
     plt.tight_layout()
 
-    file_name = f"task3_{m}_tile_shapes.png"
+    file_name = out_file
     plt.savefig(file_name, dpi=160)
     print(f"Saved heatmap to {file_name}")
 
 
 def main():
+    # Task 3a)
     squaredMatrixThroughput()
     
     # Collecting results for tile shapes(27)
     tile_shapes = [(s, s, s) for s in [256, 2048]]
     
+    # Task 3b)
     for m, n, k in tile_shapes:
-        tileShapeThroughput(m, n, k)
-        heatmap(m)
+        tileShapeThroughput(m, n, k, f"task3_{m}_tile_shapes.csv")
+        heatmap(m, f"src/assignments/03_assignment/resources-03/task3_{m}_tile_shapes.csv" ,f"task3_{m}_tile_shapes.png")
+        
+    # For Task 4
+    tileShapeThroughput(8192, 8192, 4096, "task3_8192_tile_shapes.csv")
 
 
 if __name__ == "__main__":
