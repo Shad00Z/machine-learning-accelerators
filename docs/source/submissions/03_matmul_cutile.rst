@@ -56,7 +56,7 @@ Task 3: Benchmarking the Matrix Multiplication Kernel
 Benchmarking the matrix multiplication kernel has been approached via a loop over the different matrix sizes and the different tile shapes.
 The results for the different squared matrices can be found in ``task3_matrix_sizes.png``.
 
-.. image:: ../../../src/assignments/03_assignment/task3_matrix_sizes.png
+.. image:: ../../../src/assignments/03_assignment/resources-03/task3_matrix_sizes.png
     :alt: Throughput Plot
 
 These measurements show that the peak computational throughput can be achieved with matrices around a squared size of ``2048`` for a fixed tile shape of ``(64, 64, 64)``.
@@ -66,11 +66,13 @@ This indicates that these fixed tile shapes can be useful for smaller matrix siz
 In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256`` and the ``2048`` matrices.
 It can be clearly seen that the throughput for the larger matrices is significantly higher.
 
-.. image:: ../../../src/assignments/03_assignment/task3_256_tile_shapes.png
+.. image:: ../../../src/assignments/03_assignment/resources-03/task3_256_tile_shapes.png
     :alt: Throughput Plot for ``256`` x ``256`` matrices
 
-.. image:: ../../../src/assignments/03_assignment/task3_2048_tile_shapes.png
+.. image:: ../../../src/assignments/03_assignment/resources-03/task3_2048_tile_shapes.png
     :alt: Throughput Plot for ``2048`` x ``2048`` matrices
+
+.. _benchmarking_results:
 
 In regards to the best-performing tile shape combination the results also differ from one other. 
 For the ``256`` x ``256`` matrices there are several tile shapes with similar throughput values:
@@ -110,17 +112,17 @@ The important part for this task was to recalculate the block IDs for ``m`` and 
 For each block in matrix ``C`` we need a corresponding tile from matrix ``A`` and from matrix ``B``.
 
 We start by calculating the number of tiles in a row-group, the current row group, and the block ID inside this row group.
-A row-group spans ``GROUP_SIZE`` many rows and all columns (``line 19``).
-With this transformation, it is then possible to calculate the starting row index of the current row-group (``line 26``).
+A row-group spans ``GROUP_SIZE`` many rows and all columns (``line 7``).
+With this transformation, it is then possible to calculate the starting row index of the current row-group (``line 14``).
 
-In the case that the number of tiles along the ``m`` dimension does not match ``GROUP_SIZE``, we clamp the result to handle the last, potentially smaller row-group (``line 29``).
+In the case that the number of tiles along the ``m`` dimension does not match ``GROUP_SIZE``, we clamp the result to handle the last, potentially smaller row-group (``line 17``).
 
 Based on the information calculated for the row-group, we compute how many blocks are in a full column-group.
 
 Next, we calculate the block ID information for the column-group. 
 We use the block ID of the row-group to determine which column-group we are in, as well as the local block ID inside that group.
 
-Then, similarly to the calculation for the row dimension, we determine the starting column index for the current column-group (``line 39``).
+Then, similarly to the calculation for the row dimension, we determine the starting column index for the current column-group (``line 27``).
 We also clamp in case the number of tiles in ``n`` does not match the ``GROUP_SIZE`` for the last column-group.
 
 At last, we calculate the new ``m`` and ``n`` block IDs. 
@@ -128,7 +130,7 @@ At last, we calculate the new ``m`` and ``n`` block IDs.
 Note: We calculate the ``bid_m`` using the clamped value for ``n`` because indexing inside the ``mn-block-group`` follows row-major order, and therefore the row index depends on how many columns are available.
 
 
-Comparing the results for matrices of sizes ``256`` x ``256`` and ``2048`` x ``2048`` did not show any significant changes compared to the :ref:`benchmarks from task 2<benchmarking_matmul>`.
+Comparing the results for matrices of sizes ``256`` x ``256`` and ``2048`` x ``2048`` did not show any significant changes compared to the :ref:`benchmarks from task 2<benchmarking_results>`.
 
 However, for :math:`m \times n \times k` with the sizes :math:`8192 \times 8192 \times 4096` the differences were significant. 
 

@@ -92,7 +92,7 @@ Permutation
 This function returns a view of the original tensor with the permuted dimensions.
 Alternatively, one can also call ``<tensor>.permute(<dims>)``.
 
-After applying the ``torch.permute(0, 1)`` function, the initial tensor changes to:
+After applying the ``torch.permute(1, 0)`` function, the initial tensor changes to:
 
 .. code-block:: text
 
