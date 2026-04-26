@@ -99,6 +99,9 @@ If we cross-reference these results the tile shape that performs best on average
 Task 4: L2 Cache Optimization via Block Swizzling
 -------------------------------------------------
 
+a)
+^^^^^
+
 The important part for this task was to recalculate the block IDs for ``m`` and ``n``:
 
 .. _swizzled_matmul_kernel:
@@ -129,8 +132,12 @@ At last, we calculate the new ``m`` and ``n`` block IDs.
 
 Note: We calculate the ``bid_m`` using the clamped value for ``n`` because indexing inside the ``mn-block-group`` follows row-major order, and therefore the row index depends on how many columns are available.
 
+b)
+^^^^^
 
-Comparing the results for matrices of sizes ``256`` x ``256`` and ``2048`` x ``2048`` did not show any significant changes compared to the :ref:`benchmarks from task 2<benchmarking_results>`.
+All benchmarks were run with a ``GROUP_SIZE`` of ``4``.
+
+When comparing the results for matrices of sizes ``256`` x ``256`` and ``2048`` x ``2048`` to the :ref:`benchmarks from task 2<benchmarking_results>`, we did not find any significant changes.
 
 However, for :math:`m \times n \times k` with the sizes :math:`8192 \times 8192 \times 4096` the differences were significant. 
 
