@@ -104,7 +104,8 @@ def main():
         tileShapeSweep(m, n, k, matmul_swizzle_kernel, f"task4_{m}_tile_shapes.csv")
         
     # Benchmarking
-    tileShapeSweep(8192, 8192, 4096, matmul_swizzle_kernel, "task4_8192_tile_shapes.csv")
+    for g_size in [4, 8]:
+        tileShapeSweep(8192, 8192, 4096, matmul_swizzle_kernel, f"task4_8192_tile_shapes_group_{g_size}.csv", g_size)
 
 
 if __name__ == "__main__":

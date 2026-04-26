@@ -154,3 +154,15 @@ For the :ref:`swizzled matrix kernel<swizzled_matmul_kernel>` the throughput was
 3. ``tM=128``,  ``tN=64``,  ``tK=32``, ``58.826 TFLOPS``
 
 Looking at these results the best-perfoming tile shape is closely decided by ``(128, 64, 128)`` and ``(128, 128, 64)``.
+
+Additional
+^^^^^^^^^^
+
+After running the benchmarks with a ``GROUP_SIZE`` of ``4`` we compared these results with a benchmark run, where we set the ``GROUP_SIZE`` to ``8``.
+With this new ``GROUP_SIZE`` value the benchmark results changed slightly:
+
+1. ``tM=128``,  ``tN=64``, ``tK=128``, ``65.907 TFLOPS``
+2. ``tM=128``, ``tN=128``,  ``tK=64``, ``63.006 TFLOPS``
+3. ``tM=128``,  ``tN=64``,  ``tK=32``, ``60.045 TFLOPS``
+
+These results indicate that the larger ``GROUP_SIZE`` slightly increases the performance, but more importantly the best-performing tile shape stays the same.

@@ -49,7 +49,7 @@ def heatmap(m):
     print(f"Saved heatmap to {file_name}")
 
 
-def tileShapeSweep(m, n, k, kernel, out_file):
+def tileShapeSweep(m, n, k, kernel, out_file, group_size):
     # Valid Tiles Sizes
     tile_sizes = list(itertools.product([32, 64, 128], repeat=3))
     
@@ -71,7 +71,7 @@ def tileShapeSweep(m, n, k, kernel, out_file):
             lambda: ct.launch(torch.cuda.current_stream(),
                             grid,
                             kernel,
-                            (A, B, C, A.shape[0], B.shape[1], tM, tN, tK, 4)),
+                            (A, B, C, A.shape[0], B.shape[1], tM, tN, tK, group_size)),
             warmup=warmup,
             rep=rep
         )
