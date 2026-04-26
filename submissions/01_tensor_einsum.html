@@ -57,6 +57,7 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
 </ul>
 
         </div>
@@ -179,7 +180,7 @@ True
 </ol>
 <p>This function returns a view of the original tensor with the permuted dimensions.
 Alternatively, one can also call <code class="docutils literal notranslate"><span class="pre">&lt;tensor&gt;.permute(&lt;dims&gt;)</span></code>.</p>
-<p>After applying the <code class="docutils literal notranslate"><span class="pre">torch.permute(0,</span> <span class="pre">1)</span></code> function, the initial tensor changes to:</p>
+<p>After applying the <code class="docutils literal notranslate"><span class="pre">torch.permute(1,</span> <span class="pre">0)</span></code> function, the initial tensor changes to:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span># Tensor after permute
 tensor([[ 1,  5,  9, 13],
         [ 2,  6, 10, 14],
