@@ -53,6 +53,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#task-4-l2-cache-optimization-via-block-swizzling">Task 4: L2 Cache Optimization via Block Swizzling</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#a">a)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#b">b)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#additional">Additional</a></li>
 </ul>
 </li>
 </ul>
@@ -263,6 +264,17 @@ We also clamp in case the number of tiles in <code class="docutils literal notra
 <li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=32</span></code>, <code class="docutils literal notranslate"><span class="pre">58.826</span> <span class="pre">TFLOPS</span></code></p></li>
 </ol>
 <p>Looking at these results the best-perfoming tile shape is closely decided by <code class="docutils literal notranslate"><span class="pre">(128,</span> <span class="pre">64,</span> <span class="pre">128)</span></code> and <code class="docutils literal notranslate"><span class="pre">(128,</span> <span class="pre">128,</span> <span class="pre">64)</span></code>.</p>
+</section>
+<section id="additional">
+<h3>Additional<a class="headerlink" href="#additional" title="Link to this heading"></a></h3>
+<p>After running the benchmarks with a <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> of <code class="docutils literal notranslate"><span class="pre">4</span></code> we compared these results with a benchmark run, where we set the <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> to <code class="docutils literal notranslate"><span class="pre">8</span></code>.
+With this new <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> value the benchmark results changed slightly:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tK=128</span></code>, <code class="docutils literal notranslate"><span class="pre">65.907</span> <span class="pre">TFLOPS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=64</span></code>, <code class="docutils literal notranslate"><span class="pre">63.006</span> <span class="pre">TFLOPS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=32</span></code>, <code class="docutils literal notranslate"><span class="pre">60.045</span> <span class="pre">TFLOPS</span></code></p></li>
+</ol>
+<p>These results indicate that the larger <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> slightly increases the performance, but more importantly the best-performing tile shape stays the same.</p>
 </section>
 </section>
 </section>
