@@ -166,3 +166,53 @@ With this new ``GROUP_SIZE`` value the benchmark results changed slightly:
 3. ``tM=128``,  ``tN=64``,  ``tK=32``, ``60.045 TFLOPS``
 
 These results indicate that the larger ``GROUP_SIZE`` slightly increases the performance, but more importantly the best-performing tile shape stays the same.
+
+We chose a ``GROUP_SIZE`` of ``4`` and ``8`` to experiment with the L2 reuse compared to the memory footprint.
+A larger ``GROUP_SIZE`` reuses each column-group more times within a ``mn_block_group``.
+Therefore, the DRAM traffic is reduced.
+
+However, there is a trade off with the costs, as the working set in the L2 cache is larger, roughly :math:`GROUP\_SIZE \times tM \times K \times dtype\_bytes` for the ``A`` row-group plus the column-group in ``B``.
+
+And looking at the benchmarks there are some significant differences especially for smaller ``tM`` values:
+
+.. list-table:: Top 3 TFLOPS differences (GROUP_SIZE 4 vs 8)
+   :header-rows: 1
+   :widths: 10 10 10 10 20 20 15
+
+   * - Rank
+     - tM
+     - tN
+     - tK
+     - ``GROUP_SIZE=4``
+     - ``GROUP_SIZE=8``
+     - Difference
+   * - 1
+     - 32
+     - 128
+     - 128
+     - 23.92
+     - 40.73
+     - 16.82
+   * - 2
+     - 64
+     - 64
+     - 128
+     - 36.67
+     - 52.40
+     - 15.73
+   * - 3
+     - 64
+     - 128
+     - 128
+     - 43.71
+     - 59.36
+     - 15.65
+
+The gain comes from reduced **DRAM** traffic rather than having a too large working set in L2, because even when we use ``GROUP_SIZE=8`` the working set stays well under ``24 MiB`` capacity.
+
+However, increasing the ``GROUP_SIZE`` to ``16`` would increase the working set significantly.
+If we consider the largest tile-shapes (``tM=128``), ``k=4096``, and ``FP16`` we quickly approach the L2 capacity limit:
+
+.. math::
+
+    16 \times 4096 \times 128 \times 2 \approx 16 \text{MiB}

@@ -101,7 +101,7 @@ def main():
     tile_shapes = [(s, s, s) for s in [256, 2048]]
     
     for m, n, k in tile_shapes:
-        tileShapeSweep(m, n, k, matmul_swizzle_kernel, f"task4_{m}_tile_shapes.csv")
+        tileShapeSweep(m, n, k, matmul_swizzle_kernel, f"task4_{m}_tile_shapes.csv", 8)
         
     # Benchmarking
     for g_size in [4, 8]:

@@ -170,10 +170,10 @@ def main():
     squaredMatrixThroughput()
     
     # Collecting results for tile shapes(27)
-    tile_shapes = [(s, s, s) for s in [256, 2048]]
+    matrix_shapes = [(s, s, s) for s in [256, 2048]]
     
     # Task 3b)
-    for m, n, k in tile_shapes:
+    for m, n, k in matrix_shapes:
         tileShapeThroughput(m, n, k, f"task3_{m}_tile_shapes.csv")
         heatmap(m, f"src/assignments/03_assignment/resources-03/task3_{m}_tile_shapes.csv" ,f"task3_{m}_tile_shapes.png")
         
