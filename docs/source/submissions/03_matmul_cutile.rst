@@ -12,6 +12,14 @@ Our ``FP16`` and ``FP32`` kernels are implemented equally:
     :lines: 14-24
     :caption: `FP16 kernel for matrix multiplication`
 
+However, the data types for the input matrices differ between the two kernels:
+
+.. literalinclude:: ../../../src/assignments/03_assignment/task-01.py
+    :language: py
+    :linenos:
+    :lines: 44-50
+    :caption: `FP16 and FP32 input matrices`
+
 After implementing both, the ``FP16`` and the ``FP32`` kernel, we measured the following execution times:
 
 .. code-block:: text
@@ -34,7 +42,7 @@ Implementing the matrix multiplication kernel using ``ct.mma``, we followed the 
 .. literalinclude:: ../../../src/assignments/03_assignment/task-02.py
     :language: py
     :linenos:
-    :lines: 58
+    :lines: 53
     :caption: `1d grid`
 
 3. The kernel itself uses the block id to calculate the ``row`` and ``column`` according to a row-major format.
@@ -45,7 +53,7 @@ Implementing the matrix multiplication kernel using ``ct.mma``, we followed the 
 .. literalinclude:: ../../../src/assignments/03_assignment/task-02.py
     :language: py
     :linenos:
-    :lines: 18-35
+    :lines: 13-31
     :caption: `Simple matrix multiplication kernel`
 
 .. _benchmarking_matmul:
