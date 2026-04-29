@@ -71,11 +71,14 @@ These measurements show that the peak computational throughput can be achieved w
 For larger matrices the throuphput reduces from around ``48 TFLOPS`` to ``18 TFLOPS`` and reduces even further with increasing dimension sizes. 
 This indicates that these fixed tile shapes can be useful for smaller matrix sizes (up to :math:`\approx` ``2048``), while for larger matrix sizes different / larger tile shapes might perform better. 
 
-In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256`` and the ``2048`` matrices.
+In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256``, ``512`` and the ``2048`` matrices.
 It can be clearly seen that the throughput for the larger matrices is significantly higher.
 
 .. image:: ../../../src/assignments/03_assignment/resources-03/task3_256_tile_shapes.png
     :alt: Throughput Plot for ``256`` x ``256`` matrices
+
+.. image:: ../../../src/assignments/03_assignment/resources-03/task3_512_tile_shapes.png
+    :alt: Throughput Plot for ``512`` x ``512`` matrices
 
 .. image:: ../../../src/assignments/03_assignment/resources-03/task3_2048_tile_shapes.png
     :alt: Throughput Plot for ``2048`` x ``2048`` matrices
@@ -93,6 +96,16 @@ For the ``256`` x ``256`` matrices there are several tile shapes with similar th
 
 All of the values above have roughly a throughput of ``3.27 TFLOPS``. 
 
+Secondly, the results for the ``512`` x ``512`` matrices:
+
+1.  ``tM=64``, ``tN=128``,  ``tK=64``, ``11.3296 TFLOPS``
+2. ``tM=128``,  ``tN=64``, ``tK=128``, ``11.1169 TFLOPS``
+3.  ``tM=64``, ``tN=128``,  ``tK=32``, ``10.8766 TFLOPS``
+4.  ``tM=64``, ``tN=128``, ``tK=128``, ``10.6779 TFLOPS``
+5. ``tM=128``,  ``tN=64``, ``tK=128``, ``10.2015 TFLOPS``
+
+This shows that the results for the five best performing tile-shapes are all within about one ``TFLOP``.
+
 For the ``2048`` x ``2048`` matrices the distinction between the results are more significant:
 
 1. ``tM=128``, ``tN=128``,  ``tK=64``, ``54.4815 TFLOPS``
@@ -101,7 +114,7 @@ For the ``2048`` x ``2048`` matrices the distinction between the results are mor
 4.  ``tM=64``, ``tN=128``,  ``tK=32``, ``47.4245 TFLOPS``
 5.  ``tM=64``,  ``tN=64``,  ``tK=64``, ``47.3441 TFLOPS``
 
-If we cross-reference these results the tile shape that performs best on average is ``(128, 64, 128)``, ranking 5th and 2nd in both measurements. 
+If we cross-reference these results the tile shape that performs best on average is ``(128, 64, 128)``, ranking 5th, 2nd and 2nd in all three measurements. 
 
 
 Task 4: L2 Cache Optimization via Block Swizzling
@@ -145,7 +158,7 @@ b)
 
 All benchmarks were run with a ``GROUP_SIZE`` of ``4``.
 
-When comparing the results for matrices of sizes ``256`` x ``256`` and ``2048`` x ``2048`` to the :ref:`benchmarks from task 2<benchmarking_results>`, we did not find any significant changes.
+When comparing the results for matrices of sizes ``256`` x ``256``, ``512`` x ``512`` and ``2048`` x ``2048`` to the :ref:`benchmarks from task 2<benchmarking_results>`, we did not find any significant changes.
 
 However, for :math:`m \times n \times k` with the sizes :math:`8192 \times 8192 \times 4096` the differences were significant. 
 

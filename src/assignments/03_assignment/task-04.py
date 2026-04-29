@@ -98,7 +98,7 @@ def main():
     
     # Benchmarking
     # Collecting results for tile shapes(27)
-    tile_shapes = [(s, s, s) for s in [256, 2048]]
+    tile_shapes = [(s, s, s) for s in [256, 512, 2048]]
     
     for m, n, k in tile_shapes:
         tileShapeSweep(m, n, k, matmul_swizzle_kernel, f"task4_{m}_tile_shapes.csv", 8)

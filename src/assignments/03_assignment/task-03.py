@@ -170,7 +170,7 @@ def main():
     squaredMatrixThroughput()
     
     # Collecting results for tile shapes(27)
-    matrix_shapes = [(s, s, s) for s in [256, 2048]]
+    matrix_shapes = [(s, s, s) for s in [256, 512, 2048]]
     
     # Task 3b)
     for m, n, k in matrix_shapes:
