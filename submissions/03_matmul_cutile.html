@@ -105,6 +105,19 @@
 </pre></div>
 </div>
 </div>
+<p>However, the data types for the input matrices differ between the two kernels:</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text"><cite>FP16 and FP32 input matrices</cite></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="c1"># FP16: Matrix initialization</span>
+<span class="linenos">2</span>    <span class="n">A16</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="linenos">3</span>    <span class="n">B16</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="linenos">4</span>
+<span class="linenos">5</span>    <span class="c1"># FP32: Matrix initialization</span>
+<span class="linenos">6</span>    <span class="n">A32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="linenos">7</span>    <span class="n">B32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
 <p>After implementing both, the <code class="docutils literal notranslate"><span class="pre">FP16</span></code> and the <code class="docutils literal notranslate"><span class="pre">FP32</span></code> kernel, we measured the following execution times:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Benchmark (ms per launch):
     FP16 time: 0.028004568445800248
@@ -121,9 +134,9 @@ This shows that performing calculations at a lower precision results in signific
 <li><p>The two input matrices <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> are created with dimensions in the range from <code class="docutils literal notranslate"><span class="pre">1</span></code> to <code class="docutils literal notranslate"><span class="pre">4096</span></code>.</p></li>
 <li><p>Our grid depends on the amount of tiles for the <code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">m</span></code> dimension.</p></li>
 </ol>
-<div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text"><cite>1d grid</cite></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>              <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text"><cite>1d grid</cite></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">tN</span><span class="p">)</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -131,26 +144,27 @@ This shows that performing calculations at a lower precision results in signific
 <li><p>The kernel itself uses the block id to calculate the <code class="docutils literal notranslate"><span class="pre">row</span></code> and <code class="docutils literal notranslate"><span class="pre">column</span></code> according to a row-major format.
 By adding the padding mode to the <code class="docutils literal notranslate"><span class="pre">ct.load</span></code> operations, we are also handling matrix sizes that are not powers of 2.</p></li>
 </ol>
-<div class="literal-block-wrapper docutils container" id="id3">
-<span id="simple-matmul-kernel"></span><div class="code-block-caption"><span class="caption-text"><cite>Simple matrix multiplication kernel</cite></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="n">num_tiles_k</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">tK</span><span class="p">)</span>
-<span class="linenos"> 2</span>    <span class="n">num_tiles_n</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
-<span class="linenos"> 3</span>    <span class="n">m</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">num_tiles_n</span>	<span class="c1"># row</span>
-<span class="linenos"> 4</span>    <span class="n">n</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">num_tiles_n</span>	<span class="c1"># col</span>
-<span class="linenos"> 5</span>    
-<span class="linenos"> 6</span>    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-<span class="linenos"> 7</span>
-<span class="linenos"> 8</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_tiles_k</span><span class="p">):</span>
-<span class="linenos"> 9</span>        <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
-<span class="linenos">10</span>        <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
-<span class="linenos">11</span>        <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="n">tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+<div class="literal-block-wrapper docutils container" id="id4">
+<span id="simple-matmul-kernel"></span><div class="code-block-caption"><span class="caption-text"><cite>Simple matrix multiplication kernel</cite></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="linenos"> 2</span><span class="k">def</span> <span class="nf">mma_kernel</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tN</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tK</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+<span class="linenos"> 3</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="linenos"> 4</span>    
+<span class="linenos"> 5</span>    <span class="c1"># index calculation</span>
+<span class="linenos"> 6</span>    <span class="n">num_tiles_k</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">tK</span><span class="p">)</span>
+<span class="linenos"> 7</span>    <span class="n">num_tiles_n</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 8</span>    <span class="n">m</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">num_tiles_n</span>	<span class="c1"># row</span>
+<span class="linenos"> 9</span>    <span class="n">n</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">num_tiles_n</span>	<span class="c1"># col</span>
+<span class="linenos">10</span>    
+<span class="linenos">11</span>    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 <span class="linenos">12</span>
-<span class="linenos">13</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">acc</span><span class="p">)</span>
-<span class="linenos">14</span>    <span class="k">return</span>
-<span class="linenos">15</span>
-<span class="linenos">16</span>
-<span class="linenos">17</span><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
-<span class="linenos">18</span>    <span class="c1"># Initialize random tensors</span>
+<span class="linenos">13</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_tiles_k</span><span class="p">):</span>
+<span class="linenos">14</span>        <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos">15</span>        <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos">16</span>        <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="n">tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+<span class="linenos">17</span>
+<span class="linenos">18</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">acc</span><span class="p">)</span>
+<span class="linenos">19</span>    <span class="k">return</span>
 </pre></div>
 </div>
 </div>
@@ -163,9 +177,10 @@ The results for the different squared matrices can be found in <code class="docu
 <p>These measurements show that the peak computational throughput can be achieved with matrices around a squared size of <code class="docutils literal notranslate"><span class="pre">2048</span></code> for a fixed tile shape of <code class="docutils literal notranslate"><span class="pre">(64,</span> <span class="pre">64,</span> <span class="pre">64)</span></code>.
 For larger matrices the throuphput reduces from around <code class="docutils literal notranslate"><span class="pre">48</span> <span class="pre">TFLOPS</span></code> to <code class="docutils literal notranslate"><span class="pre">18</span> <span class="pre">TFLOPS</span></code> and reduces even further with increasing dimension sizes.
 This indicates that these fixed tile shapes can be useful for smaller matrix sizes (up to <span class="math notranslate nohighlight">\(\approx\)</span> <code class="docutils literal notranslate"><span class="pre">2048</span></code>), while for larger matrix sizes different / larger tile shapes might perform better.</p>
-<p>In the second benchmark we initially measured the <code class="docutils literal notranslate"><span class="pre">TFLOPS</span></code> for all 27 possible tile shapes and stored the results in respective <code class="docutils literal notranslate"><span class="pre">csv</span></code> files for the <code class="docutils literal notranslate"><span class="pre">256</span></code> and the <code class="docutils literal notranslate"><span class="pre">2048</span></code> matrices.
+<p>In the second benchmark we initially measured the <code class="docutils literal notranslate"><span class="pre">TFLOPS</span></code> for all 27 possible tile shapes and stored the results in respective <code class="docutils literal notranslate"><span class="pre">csv</span></code> files for the <code class="docutils literal notranslate"><span class="pre">256</span></code>, <code class="docutils literal notranslate"><span class="pre">512</span></code> and the <code class="docutils literal notranslate"><span class="pre">2048</span></code> matrices.
 It can be clearly seen that the throughput for the larger matrices is significantly higher.</p>
 <img alt="Throughput Plot for ``256`` x ``256`` matrices" src="../_images/task3_256_tile_shapes.png" />
+<img alt="Throughput Plot for ``512`` x ``512`` matrices" src="../_images/task3_512_tile_shapes.png" />
 <img alt="Throughput Plot for ``2048`` x ``2048`` matrices" src="../_images/task3_2048_tile_shapes.png" />
 <p id="benchmarking-results">In regards to the best-performing tile shape combination the results also differ from one other.
 For the <code class="docutils literal notranslate"><span class="pre">256</span></code> x <code class="docutils literal notranslate"><span class="pre">256</span></code> matrices there are several tile shapes with similar throughput values:</p>
@@ -177,6 +192,15 @@ For the <code class="docutils literal notranslate"><span class="pre">256</span><
 <li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tK=128</span></code>, <code class="docutils literal notranslate"><span class="pre">3.2711</span> <span class="pre">TFLOPS</span></code></p></li>
 </ol>
 <p>All of the values above have roughly a throughput of <code class="docutils literal notranslate"><span class="pre">3.27</span> <span class="pre">TFLOPS</span></code>.</p>
+<p>Secondly, the results for the <code class="docutils literal notranslate"><span class="pre">512</span></code> x <code class="docutils literal notranslate"><span class="pre">512</span></code> matrices:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=64</span></code>, <code class="docutils literal notranslate"><span class="pre">11.3296</span> <span class="pre">TFLOPS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tK=128</span></code>, <code class="docutils literal notranslate"><span class="pre">11.1169</span> <span class="pre">TFLOPS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=32</span></code>, <code class="docutils literal notranslate"><span class="pre">10.8766</span> <span class="pre">TFLOPS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=128</span></code>, <code class="docutils literal notranslate"><span class="pre">tK=128</span></code>, <code class="docutils literal notranslate"><span class="pre">10.6779</span> <span class="pre">TFLOPS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tK=128</span></code>, <code class="docutils literal notranslate"><span class="pre">10.2015</span> <span class="pre">TFLOPS</span></code></p></li>
+</ol>
+<p>This shows that the results for the five best performing tile-shapes are all within about one <code class="docutils literal notranslate"><span class="pre">TFLOP</span></code>.</p>
 <p>For the <code class="docutils literal notranslate"><span class="pre">2048</span></code> x <code class="docutils literal notranslate"><span class="pre">2048</span></code> matrices the distinction between the results are more significant:</p>
 <ol class="arabic simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=64</span></code>, <code class="docutils literal notranslate"><span class="pre">54.4815</span> <span class="pre">TFLOPS</span></code></p></li>
@@ -185,15 +209,15 @@ For the <code class="docutils literal notranslate"><span class="pre">256</span><
 <li><p><code class="docutils literal notranslate"><span class="pre">tM=64</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=32</span></code>, <code class="docutils literal notranslate"><span class="pre">47.4245</span> <span class="pre">TFLOPS</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">tM=64</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=64</span></code>, <code class="docutils literal notranslate"><span class="pre">47.3441</span> <span class="pre">TFLOPS</span></code></p></li>
 </ol>
-<p>If we cross-reference these results the tile shape that performs best on average is <code class="docutils literal notranslate"><span class="pre">(128,</span> <span class="pre">64,</span> <span class="pre">128)</span></code>, ranking 5th and 2nd in both measurements.</p>
+<p>If we cross-reference these results the tile shape that performs best on average is <code class="docutils literal notranslate"><span class="pre">(128,</span> <span class="pre">64,</span> <span class="pre">128)</span></code>, ranking 5th, 2nd and 2nd in all three measurements.</p>
 </section>
 <section id="task-4-l2-cache-optimization-via-block-swizzling">
 <h2>Task 4: L2 Cache Optimization via Block Swizzling<a class="headerlink" href="#task-4-l2-cache-optimization-via-block-swizzling" title="Link to this heading"></a></h2>
 <section id="a">
 <h3>a)<a class="headerlink" href="#a" title="Link to this heading"></a></h3>
 <p>The important part for this task was to recalculate the block IDs for <code class="docutils literal notranslate"><span class="pre">m</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code>:</p>
-<div class="literal-block-wrapper docutils container" id="id4">
-<span id="swizzled-matmul-kernel"></span><div class="code-block-caption"><span class="caption-text"><cite>Swizzled block id calculation</cite></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id5">
+<span id="swizzled-matmul-kernel"></span><div class="code-block-caption"><span class="caption-text"><cite>Swizzled block id calculation</cite></span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">swizzle_2d_from_bid</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">GROUP_SIZE</span><span class="p">,</span> <span class="n">bid</span><span class="p">):</span>
 <span class="linenos"> 2</span>    <span class="n">num_tiles_m</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">tM</span><span class="p">)</span>
 <span class="linenos"> 3</span>    <span class="n">num_tiles_n</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">tN</span><span class="p">)</span>
@@ -249,7 +273,7 @@ We also clamp in case the number of tiles in <code class="docutils literal notra
 <section id="b">
 <h3>b)<a class="headerlink" href="#b" title="Link to this heading"></a></h3>
 <p>All benchmarks were run with a <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> of <code class="docutils literal notranslate"><span class="pre">4</span></code>.</p>
-<p>When comparing the results for matrices of sizes <code class="docutils literal notranslate"><span class="pre">256</span></code> x <code class="docutils literal notranslate"><span class="pre">256</span></code> and <code class="docutils literal notranslate"><span class="pre">2048</span></code> x <code class="docutils literal notranslate"><span class="pre">2048</span></code> to the <a class="reference internal" href="#benchmarking-results"><span class="std std-ref">benchmarks from task 2</span></a>, we did not find any significant changes.</p>
+<p>When comparing the results for matrices of sizes <code class="docutils literal notranslate"><span class="pre">256</span></code> x <code class="docutils literal notranslate"><span class="pre">256</span></code>, <code class="docutils literal notranslate"><span class="pre">512</span></code> x <code class="docutils literal notranslate"><span class="pre">512</span></code> and <code class="docutils literal notranslate"><span class="pre">2048</span></code> x <code class="docutils literal notranslate"><span class="pre">2048</span></code> to the <a class="reference internal" href="#benchmarking-results"><span class="std std-ref">benchmarks from task 2</span></a>, we did not find any significant changes.</p>
 <p>However, for <span class="math notranslate nohighlight">\(m \times n \times k\)</span> with the sizes <span class="math notranslate nohighlight">\(8192 \times 8192 \times 4096\)</span> the differences were significant.</p>
 <p>For the <a class="reference internal" href="#simple-matmul-kernel"><span class="std std-ref">matmul kernel</span></a> from task 2 the best performing tile shapes are:</p>
 <ol class="arabic simple">
@@ -275,6 +299,64 @@ With this new <code class="docutils literal notranslate"><span class="pre">GROUP
 <li><p><code class="docutils literal notranslate"><span class="pre">tM=128</span></code>,  <code class="docutils literal notranslate"><span class="pre">tN=64</span></code>,  <code class="docutils literal notranslate"><span class="pre">tK=32</span></code>, <code class="docutils literal notranslate"><span class="pre">60.045</span> <span class="pre">TFLOPS</span></code></p></li>
 </ol>
 <p>These results indicate that the larger <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> slightly increases the performance, but more importantly the best-performing tile shape stays the same.</p>
+<p>We chose a <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> of <code class="docutils literal notranslate"><span class="pre">4</span></code> and <code class="docutils literal notranslate"><span class="pre">8</span></code> to experiment with the L2 reuse compared to the memory footprint.
+A larger <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> reuses each column-group more times within a <code class="docutils literal notranslate"><span class="pre">mn_block_group</span></code>.
+Therefore, the DRAM traffic is reduced.</p>
+<p>However, there is a trade off with the costs, as the working set in the L2 cache is larger, roughly <span class="math notranslate nohighlight">\(GROUP\_SIZE \times tM \times K \times dtype\_bytes\)</span> for the <code class="docutils literal notranslate"><span class="pre">A</span></code> row-group plus the column-group in <code class="docutils literal notranslate"><span class="pre">B</span></code>.</p>
+<p>And looking at the benchmarks there are some significant differences especially for smaller <code class="docutils literal notranslate"><span class="pre">tM</span></code> values:</p>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Top 3 TFLOPS differences (GROUP_SIZE 4 vs 8)</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 10.5%" />
+<col style="width: 10.5%" />
+<col style="width: 10.5%" />
+<col style="width: 10.5%" />
+<col style="width: 21.1%" />
+<col style="width: 21.1%" />
+<col style="width: 15.8%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Rank</p></th>
+<th class="head"><p>tM</p></th>
+<th class="head"><p>tN</p></th>
+<th class="head"><p>tK</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">GROUP_SIZE=4</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">GROUP_SIZE=8</span></code></p></th>
+<th class="head"><p>Difference</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1</p></td>
+<td><p>32</p></td>
+<td><p>128</p></td>
+<td><p>128</p></td>
+<td><p>23.92</p></td>
+<td><p>40.73</p></td>
+<td><p>16.82</p></td>
+</tr>
+<tr class="row-odd"><td><p>2</p></td>
+<td><p>64</p></td>
+<td><p>64</p></td>
+<td><p>128</p></td>
+<td><p>36.67</p></td>
+<td><p>52.40</p></td>
+<td><p>15.73</p></td>
+</tr>
+<tr class="row-even"><td><p>3</p></td>
+<td><p>64</p></td>
+<td><p>128</p></td>
+<td><p>128</p></td>
+<td><p>43.71</p></td>
+<td><p>59.36</p></td>
+<td><p>15.65</p></td>
+</tr>
+</tbody>
+</table>
+<p>The gain comes from reduced <strong>DRAM</strong> traffic rather than having a too large working set in L2, because even when we use <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE=8</span></code> the working set stays well under <code class="docutils literal notranslate"><span class="pre">24</span> <span class="pre">MiB</span></code> capacity.</p>
+<p>However, increasing the <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> to <code class="docutils literal notranslate"><span class="pre">16</span></code> would increase the working set significantly.
+If we consider the largest tile-shapes (<code class="docutils literal notranslate"><span class="pre">tM=128</span></code>), <code class="docutils literal notranslate"><span class="pre">k=4096</span></code>, and <code class="docutils literal notranslate"><span class="pre">FP16</span></code> we quickly approach the L2 capacity limit:</p>
+<div class="math notranslate nohighlight">
+\[16 \times 4096 \times 128 \times 2 \approx 16 \text{MiB}\]</div>
 </section>
 </section>
 </section>
