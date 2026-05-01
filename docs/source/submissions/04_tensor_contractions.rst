@@ -4,8 +4,8 @@ Tensor Contractions on GPUs
 Task 1: Tiled Contraction Kernel Variants
 -----------------------------------------
 
-Dimension Classification
-^^^^^^^^^^^^^^^^^^^^^^^^
+a) Dimension Classification
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The dimensions for the einsum string ``eabklxy, ecklyz -> eabcxz`` are classified as follows:
 
@@ -14,8 +14,8 @@ The dimensions for the einsum string ``eabklxy, ecklyz -> eabcxz`` are classifie
 - ``K``: ``k``, ``l``, ``y``
 - ``C``: ``e``
 
-cuTile Kernel: Sequentialize over ``k`` and ``l``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+b) cuTile Kernel: Sequentialize over ``k`` and ``l``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We create three tensors ``A``, ``B``, and ``C`` with random dimension sizes and values. 
 For that we use a ``tensor_initialization()`` function that creates these tensors for us:
