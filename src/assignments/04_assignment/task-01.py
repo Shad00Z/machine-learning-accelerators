@@ -114,6 +114,30 @@ def launch_tile_contraction_klb(A, B, C, tM, tN, tK):
               (A, B, C, tM, tN, tK))
 
 
+def benchmark():
+    configs = [
+        # (name,                     e, a, b, c, k, l,  x,  y,  z)
+        ("1b is expected winner",    4, 4, 4, 4, 4, 4, 32, 32, 32),
+        ("1c is expected winner",    4, 4, 4, 4, 4, 4, 32, 32, 32),
+    ]
+    for name, e, a, b, c, k, l, x, y, z in configs:
+        A = torch.rand((e, a, b, k, l, x, y), dtype=torch.float16, device="cuda")
+        B = torch.rand((e, c, k, l, y, z),    dtype=torch.float16, device="cuda")
+        C = torch.zeros((e, a, b, c, x, z),   dtype=torch.float32, device="cuda")
+        tM = next_power_of_two(x // 2)
+        tN = next_power_of_two(z // 2)
+        tK = next_power_of_two(y // 2)
+        grid_1b = e*a*b*c * ct.cdiv(x,tM) * ct.cdiv(z,tN)
+        grid_1c = e*a*c   * ct.cdiv(x,tM) * ct.cdiv(z,tN)
+
+        t_1b = triton.testing.do_bench(lambda: launch_tile_contraction_kl( A, B, C, tM, tN, tK))
+        t_1c = triton.testing.do_bench(lambda: launch_tile_contraction_klb(A, B, C, tM, tN, tK))
+        winner = "1b" if t_1b < t_1c else "1c"
+        print(f"[{name}]")
+        print(f"  grid: 1b={grid_1b} blocks  1c={grid_1c} blocks")
+        print(f"  1b={t_1b:.3f}ms  1c={t_1c:.3f}ms  --> {winner} wins")
+
+
 def main():
     A, B, C = tensor_initialization()
     
@@ -135,7 +159,9 @@ def main():
     C.zero_()
     launch_tile_contraction_klb(A, B, C, tM, tN, tK)
     assert torch.allclose(C, C_torch.to(torch.float32), rtol=1e-2), "Task 1c failed!"
-    
+
+    benchmark()
+
     return
 
 
