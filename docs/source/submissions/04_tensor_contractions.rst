@@ -218,3 +218,115 @@ The last thing is to bring the output matrix ``C`` back into its normal shape.
     :linenos:
     :lines: 248-249
     :caption: `Restore shape of C`
+
+Task 2: Fused vs. Separate Elementwise Multiplication
+-------------------------------------------------------
+
+a) Implementing the Fused Kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+As a starting point, we used the kernel from Task 1b) and added another input tensor ``D`` to both the kernel and the kernel launch functions.
+After the loops for the contraction, we load a tile from tensor ``D`` and perform the elementwise multiplication with the tile from ``C`` before storing the result back to global memory.
+
+.. code-block:: python
+
+    for k in range(A.shape[3]):
+        for l in range(A.shape[4]):
+            for y in range(ct.cdiv(A.shape[6], tK)):
+                tile_A = ct.load(A, index=(e, a, b, k, l, x, y), shape=(1, 1, 1, 1, 1, tM, tK), padding_mode=ct.PaddingMode.ZERO)
+                tile_B = ct.load(B, index=(e, c, k, l, y, z),    shape=(1, 1, 1, 1, tK, tN),    padding_mode=ct.PaddingMode.ZERO)
+                
+                # Reshape due to rank mismatch
+                r_tile_A = ct.reshape(tile_A, (tM, tK))
+                r_tile_B = ct.reshape(tile_B, (tK, tN))
+                
+                acc = ct.mma(r_tile_A, r_tile_B, acc)
+            
+    # Fused elementwise multiplication with D
+    tile_D = ct.load(D, index=(e, a, b, c, x, z), shape=(1, 1, 1, 1, tM, tN), padding_mode=ct.PaddingMode.ZERO)
+    r_tile_D = ct.reshape(tile_D, (tM, tN))
+    acc = acc * r_tile_D
+
+    o_acc = ct.reshape(acc.astype(C.dtype), (1, 1, 1, 1, tM, tN))
+    ct.store(C, index=(e, a, b, c, x, z), tile=o_acc)
+    return
+
+b) Implementing the Separate Elementwise Multiplication Kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This kernel is rather simple, as we only have two input tensors, ``C`` and ``D``.
+These even share the same dimensions, so we can directly load tiles from both tensors, perform the elementwise multiplication and store the result back to global memory.
+
+.. code-block:: python
+
+    @ct.kernel
+    def elem_mult_kernel(C, D, tM: ConstInt, tN: ConstInt):
+        # eabcxz, eabcxz -> eabcxz
+        bid = ct.bid(0)
+
+        z = bid % ct.cdiv(C.shape[5], tN)
+        bid = bid // ct.cdiv(C.shape[5], tN)
+
+        x = bid % ct.cdiv(C.shape[4], tM)
+        bid = bid // ct.cdiv(C.shape[4], tM)
+
+        c = bid % C.shape[3]
+        bid = bid // C.shape[3]
+
+        b = bid % C.shape[2]
+        bid = bid // C.shape[2]
+
+        a = bid % C.shape[1]
+        bid = bid // C.shape[1]
+
+        e = bid % C.shape[0]
+
+        tile_C = ct.load(C, index=(e, a, b, c, x, z), shape=(1, 1, 1, 1, tM, tN), padding_mode=ct.PaddingMode.ZERO)
+        tile_D = ct.load(D, index=(e, a, b, c, x, z), shape=(1, 1, 1, 1, tM, tN), padding_mode=ct.PaddingMode.ZERO)
+
+        r_tile_C = ct.reshape(tile_C, (tM, tN))
+        r_tile_D = ct.reshape(tile_D, (tM, tN))
+
+        result = r_tile_C * r_tile_D
+
+        ct.store(C, index=(e, a, b, c, x, z), tile=ct.reshape(result, (1, 1, 1, 1, tM, tN)))
+        return
+
+The launch function for this kernel is no different than the one for the fused kernel, as we can use the same grid configuration.
+As for the contraction, we use the same kernel as in Task 1b).
+
+For the benchmark, we use the following dimension configuration: ``e=4, a=4, b=4, c=8, k=8, l=8, x=64, y=32, z=128``.
+The reason for this is that we were supposed to match the FLOP count of a ``2048 x 2048`` matrix multiplication, which is ``2 * 2048^3 = 17,179,869,184`` FLOPs.
+For the chosen dimension configuration, we get the same result: ``2 * (4*4*4*8*64*128) * (8*8*32) = 17,179,869,184`` FLOPs.
+
+We then run the benchmark:
+
+.. code-block:: python
+
+    # Benchmark
+    warmup, rep = 100, 1000
+    t_fused = triton.testing.do_bench(
+        lambda: launch_fused_elem_mult_kernel(A, B, C, D, tM, tN, tK),
+        warmup=warmup, rep=rep)
+
+    def no_fusion():
+        launch_tile_contraction_kl(A, B, C, tM, tN, tK)
+        launch_elem_mult_kernel(C, D, tM, tN)
+
+    t_no_fusion = triton.testing.do_bench(no_fusion, warmup=warmup, rep=rep)
+
+and get the following results:
+
+.. code-block:: text
+
+    Benchmark:
+        Fused   : 7.447 ms
+        Separate: 7.582 ms
+        Speedup : 1.02x
+
+The speedup is rather small and negligible, 
+which is not surprising given the fact that the speedup from fusion comes from avoiding a global memory round-trip for C 
+(the contraction result is kept in registers and multiplied before being written).
+If we look at the size of the output tensor C, we see that it has ``e*a*b*c*x*z = 4*4*4*8*64*128 = 4.194.304`` elements,
+which is ``4.194.304 * 4 bytes = 16 MiB``.
+The total traffic of reading and writing C is then around ``32 MiB``, which is very small compared to the bandwidth of the GPU.
