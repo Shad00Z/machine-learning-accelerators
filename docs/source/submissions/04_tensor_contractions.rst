@@ -380,3 +380,118 @@ The implementation of the kernel is rather straightforward, as we can reuse a lo
 b) Performing the sweep
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Both benchmarks use the same function, where the dimension to be swept over is set to zero.
+In each iteration of the sweep, we create new random tensors with the current dimension size and launch the kernel to benchmark it.
+The benchmark uses a warmup time of 100 ms and a repetition time of 1000 ms.
+After the benchmark, we compute the achieved TFLOPS and store it for plotting.
+The plot is then created with Matplotlib, where we plot the achieved TFLOPS against the swept dimension size.
+
+.. code-block:: python
+
+    def size_sweep(m, n, k):
+        warmup, rep = 100, 1000
+        
+        if n == 0:
+            Ns = []
+            compute = []
+        
+            for l_n in range(17, 129):
+                print(f"Iteration: {l_n}")
+                bench_A = torch.rand((a, c, k, m), dtype=torch.float16, device="cuda")
+                bench_B = torch.rand((b, c, l_n, k), dtype=torch.float16, device="cuda")
+                bench_C = torch.zeros((a, b, l_n, m), dtype=torch.float16, device="cuda")
+                
+                # Initialize tile sizes
+                bench_tM = next_power_of_two(bench_A.shape[3] // 2)
+                bench_tN = next_power_of_two(bench_B.shape[2] // 2)
+                bench_tK = next_power_of_two(bench_B.shape[3] // 2)
+                
+                bench_ms = triton.testing.do_bench(
+                    lambda: launch_contraction_kernel(bench_A, bench_B, bench_C, bench_tM, bench_tN, bench_tK), 
+                    warmup=warmup, 
+                    rep=rep
+                )
+                
+                flops = 2 * a * b * l_n * m * c * k
+                tflops = (flops / 1e12) / (bench_ms / 1e3)
+                
+                Ns.append(l_n)
+                compute.append(tflops)
+                
+            plt.figure(figsize=(7, 4))
+            plt.plot(Ns, compute, marker="o")
+            plt.title("Contraction vs N")
+            plt.xlabel("N")
+            plt.ylabel("TFLOPS")
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig("task3_n_bandwidth.png", dpi=160)
+        
+        elif k == 0:
+            Ks = []
+            compute = []
+            
+            for l_k in range(17, 129):
+                print(f"Iteration: {l_k}")
+                bench_A = torch.rand((a, c, l_k, m), dtype=torch.float16, device="cuda")
+                bench_B = torch.rand((b, c, n, l_k), dtype=torch.float16, device="cuda")
+                bench_C = torch.zeros((a, b, n, m), dtype=torch.float16, device="cuda")
+                
+                # Initialize tile sizes
+                bench_tM = next_power_of_two(bench_A.shape[3] // 2)
+                bench_tN = next_power_of_two(bench_B.shape[2] // 2)
+                bench_tK = next_power_of_two(bench_B.shape[3] // 2)
+                
+                bench_ms = triton.testing.do_bench(
+                    lambda: launch_contraction_kernel(bench_A, bench_B, bench_C, bench_tM, bench_tN, bench_tK), 
+                    warmup=warmup, 
+                    rep=rep
+                )
+                
+                flops = 2 * a * b * n * m * c * l_k
+                tflops = (flops / 1e12) / (bench_ms / 1e3)
+                
+                Ks.append(l_k)
+                compute.append(tflops)
+            
+            plt.figure(figsize=(7, 4))
+            plt.plot(Ks, compute, marker="o")
+            plt.title("Contraction vs K")
+            plt.xlabel("K")
+            plt.ylabel("TFLOPS")
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig("task3_k_bandwidth.png", dpi=160)
+
+Benchmark 1
+"""""""""""""
+
+For the first benchmark, we swept over the ``n`` dimension, while keeping the other dimensions fixed to ``m=64`` and ``k=64``:
+
+.. code-block:: python
+
+    size_sweep(64, 0, 64)
+
+Here, we achieved the following results:
+
+.. image:: ../../../src/assignments/04_assignment/task3_n_throughput.png
+    :alt: Throughput Plot for the sweep over N
+
+The plot shows that the achieved TFLOPS increases linearly with the size of the ``n`` dimension, 
+which is expected as larger dimensions typically allow for better utilization of the GPU's computational resources.
+However, we see notable drops in performance at ``n=16``, ``n=32`` and ``n=64``.
+
+
+Benchmark 2
+"""""""""""""
+
+For the second benchmark, we swept over the ``k`` dimension, while keeping the other dimensions fixed to ``m=64`` and ``n=64``:
+
+.. code-block:: python
+
+    size_sweep(64, 64, 0)
+
+Here, we achieved the following results:
+
+.. image:: ../../../src/assignments/04_assignment/task3_k_throughput.png
+    :alt: Throughput Plot for the sweep over K

@@ -1,3 +1,4 @@
+import csv
 import cuda.tile as ct
 import matplotlib.pyplot as plt
 import random
@@ -97,7 +98,12 @@ def size_sweep(m, n, k):
         plt.ylabel("TFLOPS")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig("task3_n_bandwidth.png", dpi=160)
+        plt.savefig("task3_n_throughput.png", dpi=160)
+
+        with open("task3_n_throughput.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["N", "TFLOPS"])
+            writer.writerows(zip(Ns, compute))
     
     elif k == 0:
         Ks = []
@@ -133,7 +139,12 @@ def size_sweep(m, n, k):
         plt.ylabel("TFLOPS")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig("task3_k_bandwidth.png", dpi=160)
+        plt.savefig("task3_k_throughput.png", dpi=160)
+
+        with open("task3_k_throughput.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["K", "TFLOPS"])
+            writer.writerows(zip(Ks, compute))
     
     
 
