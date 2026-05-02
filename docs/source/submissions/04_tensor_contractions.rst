@@ -385,6 +385,7 @@ In each iteration of the sweep, we create new random tensors with the current di
 The benchmark uses a warmup time of 100 ms and a repetition time of 1000 ms.
 After the benchmark, we compute the achieved TFLOPS and store it for plotting.
 The plot is then created with Matplotlib, where we plot the achieved TFLOPS against the swept dimension size.
+Lastly, we also save the results in a CSV file for further analysis.
 
 .. code-block:: python
 
@@ -425,7 +426,12 @@ The plot is then created with Matplotlib, where we plot the achieved TFLOPS agai
             plt.ylabel("TFLOPS")
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig("task3_n_bandwidth.png", dpi=160)
+            plt.savefig("task3_n_throughput.png", dpi=160)
+
+            with open("task3_n_throughput.csv", "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["N", "TFLOPS"])
+                writer.writerows(zip(Ns, compute))
         
         elif k == 0:
             Ks = []
@@ -461,7 +467,12 @@ The plot is then created with Matplotlib, where we plot the achieved TFLOPS agai
             plt.ylabel("TFLOPS")
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
-            plt.savefig("task3_k_bandwidth.png", dpi=160)
+            plt.savefig("task3_k_throughput.png", dpi=160)
+
+            with open("task3_k_throughput.csv", "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["K", "TFLOPS"])
+                writer.writerows(zip(Ks, compute))
 
 Benchmark 1
 """""""""""""
@@ -477,10 +488,27 @@ Here, we achieved the following results:
 .. image:: ../../../src/assignments/04_assignment/task3_n_throughput.png
     :alt: Throughput Plot for the sweep over N
 
-The plot shows that the achieved TFLOPS increases linearly with the size of the ``n`` dimension, 
-which is expected as larger dimensions typically allow for better utilization of the GPU's computational resources.
-However, we see notable drops in performance at ``n=16``, ``n=32`` and ``n=64``.
+Within each constant ``tN`` segment the achieved TFLOPS grows roughly linearly with ``n``.
+The GPU runtime stays approximately constant across a segment because the tile count and tile size are fixed, 
+while the counted FLOPs scale proportionally with ``n``.
 
+Three drops are visible at ``n=17``, ``n=33``, and ``n=65``.
+At each of these points ``cdiv(n, tN)`` jumps from 2 to 3 tiles:
+
+- ``n=17``, ``tN=8``: 3 tiles, last tile contains only 1 of 8 elements.
+- ``n=33``, ``tN=16``: 3 tiles, last tile contains only 1 of 16 elements.
+- ``n=65``, ``tN=32``: 3 tiles, last tile contains only 1 of 32 elements.
+
+The kernel executes a nearly empty third tile for every output block, 
+performing MMA over mostly zero padded data while the FLOPS numerator only counts the real elements.
+
+At ``n=18``, ``n=34``, and ``n=66``, ``tN`` doubles because ``n // 2`` crosses a power of two boundary (8 to 9, 16 to 17, and 32 to 33 respectively), 
+so the tile count returns to 2.
+However, the performance does not immediately return to the level before the drop.
+At ``n=66`` for example, ``tN=64`` and the two tiles together span 128 elements, but only 66 of these are real data.
+The GPU does more actual work per block than at ``n=64`` with ``tN=32``, but the counted FLOPS are nearly the same.
+As a result, ``n=66`` achieves 13.67 TFLOPS while ``n=64`` achieved 15.14 TFLOPS, and performance only recovers to that level around ``n=74``.
+From there, the TFLOPS continue growing linearly.
 
 Benchmark 2
 """""""""""""
@@ -495,3 +523,7 @@ Here, we achieved the following results:
 
 .. image:: ../../../src/assignments/04_assignment/task3_k_throughput.png
     :alt: Throughput Plot for the sweep over K
+
+For the most part, the FLOPs increase linearly with the size of the ``k`` dimension,
+however we have frequent spikes in performance. These spikes occur at ``k=24``, ``k=40``, ``k=48``, ``k=56``, ``k=64``, and so on in increments of 8..
+*TODO: why?*
