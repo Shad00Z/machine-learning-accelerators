@@ -330,3 +330,53 @@ which is not surprising given the fact that the speedup from fusion comes from a
 If we look at the size of the output tensor C, we see that it has ``e*a*b*c*x*z = 4*4*4*8*64*128 = 4.194.304`` elements,
 which is ``4.194.304 * 4 bytes = 16 MiB``.
 The total traffic of reading and writing C is then around ``32 MiB``, which is very small compared to the bandwidth of the GPU.
+
+Task 3: GEMM Dimension Size Sweep
+----------------------------------
+
+a) Implementing the contraction kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+For this task, we were supposed to implement a contraction kernel that computes ``ackm, bcnk -> abnm`` with arbitrary dimension sizes of ``m``, ``n`` and ``k``.
+The other dimensions are fixed to ``a=16``, ``b=16`` and ``c=32``.
+
+The implementation of the kernel is rather straightforward, as we can reuse a lot of the code from the previous tasks.
+
+.. code-block:: python
+
+    @ct.kernel
+    def tile_contraction(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
+        bid = ct.bid(0)
+        
+        # Indices C: Right to left (abnm)
+        m = bid % ct.cdiv(C.shape[3], tM)
+        bid = bid // ct.cdiv(C.shape[3], tM)
+        
+        n = bid % ct.cdiv(C.shape[2], tN)
+        bid = bid // ct.cdiv(C.shape[2], tN)
+        
+        b = bid % C.shape[1]
+        bid = bid // C.shape[1]
+        
+        a = bid % C.shape[0]
+        
+        acc = ct.zeros((tN, tM), dtype=torch.float32)
+        
+        for c in range(A.shape[1]):
+            for k in range(ct.cdiv(A.shape[2], tK)):
+                tile_A = ct.load(A, index=(a, c, k, m), shape=(1, 1, tK, tM), padding_mode=ct.PaddingMode.ZERO)
+                tile_B = ct.load(B, index=(b, c, n, k), shape=(1, 1, tN, tK), padding_mode=ct.PaddingMode.ZERO)
+                
+                # Reshape due to rank mismatch
+                r_tile_A = ct.reshape(tile_A, (tK, tM))
+                r_tile_B = ct.reshape(tile_B, (tN, tK))
+                
+                acc = ct.mma(r_tile_B, r_tile_A, acc)
+                
+        o_acc = ct.reshape(acc.astype(C.dtype), (1, 1, tN, tM))
+        ct.store(C, index=(a, b, n, m), tile=o_acc)
+        return
+
+b) Performing the sweep
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
