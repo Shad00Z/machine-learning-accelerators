@@ -525,5 +525,6 @@ Here, we achieved the following results:
     :alt: Throughput Plot for the sweep over K
 
 For the most part, the FLOPs increase linearly with the size of the ``k`` dimension,
-however we have frequent spikes in performance. These spikes occur at ``k=24``, ``k=40``, ``k=48``, ``k=56``, ``k=64``, and so on in increments of 8..
-*TODO: why?*
+however we have frequent spikes in performance.
+The first spike is at ``k=24`` and then we can observe spikes at increments of 8 (``k=32``, ``k=40``, ``k=48``, etc.).
+*Aber warum nur bei diesen Werten??*
