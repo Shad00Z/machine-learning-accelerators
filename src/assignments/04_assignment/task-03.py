@@ -1,5 +1,6 @@
 import csv
 import cuda.tile as ct
+import math
 import matplotlib.pyplot as plt
 import random
 import torch
@@ -67,6 +68,7 @@ def size_sweep(m, n, k):
     if n == 0:
         Ns = []
         compute = []
+        tNs = []
     
         for l_n in range(17, 129):
             print(f"Iteration: {l_n}")
@@ -90,6 +92,7 @@ def size_sweep(m, n, k):
             
             Ns.append(l_n)
             compute.append(tflops)
+            tNs.append(bench_tN)
             
         plt.figure(figsize=(7, 4))
         plt.plot(Ns, compute, marker="o")
@@ -102,12 +105,13 @@ def size_sweep(m, n, k):
 
         with open("task3_n_throughput.csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["N", "TFLOPS"])
-            writer.writerows(zip(Ns, compute))
+            writer.writerow(["N", "TFLOPS", "tN"])
+            writer.writerows(zip(Ns, compute, tNs))
     
     elif k == 0:
         Ks = []
         compute = []
+        tKs = []
         
         for l_k in range(17, 129):
             print(f"Iteration: {l_k}")
@@ -131,6 +135,7 @@ def size_sweep(m, n, k):
             
             Ks.append(l_k)
             compute.append(tflops)
+            tKs.append(bench_tK)
         
         plt.figure(figsize=(7, 4))
         plt.plot(Ks, compute, marker="o")
@@ -143,8 +148,8 @@ def size_sweep(m, n, k):
 
         with open("task3_k_throughput.csv", "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["K", "TFLOPS"])
-            writer.writerows(zip(Ks, compute))
+            writer.writerow(["K", "TFLOPS", "tK"])
+            writer.writerows(zip(Ks, compute, tKs))
     
     
 

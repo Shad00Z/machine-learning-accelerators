@@ -507,7 +507,7 @@ so the tile count returns to 2.
 However, the performance does not immediately return to the level before the drop.
 At ``n=66`` for example, ``tN=64`` and the two tiles together span 128 elements, but only 66 of these are real data.
 The GPU does more actual work per block than at ``n=64`` with ``tN=32``, but the counted FLOPS are nearly the same.
-As a result, ``n=66`` achieves 13.67 TFLOPS while ``n=64`` achieved 15.14 TFLOPS, and performance only recovers to that level around ``n=74``.
+As a result, ``n=66`` achieves 13.56 TFLOPS while ``n=64`` achieved 14.99 TFLOPS, and performance only recovers to that level around ``n=75``.
 From there, the TFLOPS continue growing linearly.
 
 Benchmark 2
@@ -527,4 +527,10 @@ Here, we achieved the following results:
 For the most part, the FLOPs increase linearly with the size of the ``k`` dimension,
 however we have frequent spikes in performance.
 The first spike is at ``k=24`` and then we can observe spikes at increments of 8 (``k=32``, ``k=40``, ``k=48``, etc.).
-*Aber warum nur bei diesen Werten??*
+
+We suspect the primary reason for these spikes to be, that there are some alignment requirements for the ``A`` and ``B`` matrices regarding the new :ref:` <https://docs.nvidia.com/cutlass/4.2.1/media/docs/cpp/blackwell_functionality.html#layouts-tensor-alignment-requirements-to-target-tcgen05-mma-instructions>` instructions on Blackwell GPUs.
+For example, considering that ``A`` and ``B`` are of type ``FP16`` the alignment of ``A`` and ``B`` are 8 elements (or multiple of 8). 
+Therefore, if ``k`` is a multiple of 8 all tiles are fully aligned.
+
+In the case that ``k`` is not a multiple of 8, cuTile's compiler pads zeros until the next valid hardware ``k`` granularity / selected tile size. 
+This causes the hardware to hardware to perform MMA operations on these zero-padded elements, wasting compute cycles and thereby reduing the throughput.
