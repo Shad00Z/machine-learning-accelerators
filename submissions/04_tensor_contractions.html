@@ -1,0 +1,791 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tensor Contractions on GPUs &mdash; Machine Learning Accelerators  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Matrix Multiplication with cuTile" href="03_matmul_cutile.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Machine Learning Accelerators
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Tensor Contractions on GPUs</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#task-1-tiled-contraction-kernel-variants">Task 1: Tiled Contraction Kernel Variants</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-dimension-classification">a) Dimension Classification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-cutile-kernel-sequentialize-over-k-and-l">b) cuTile Kernel: Sequentialize over <code class="docutils literal notranslate"><span class="pre">k</span></code> and <code class="docutils literal notranslate"><span class="pre">l</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c-cutile-kernel-sequentialize-over-k-l-and-b">c) cuTile Kernel: Sequentialize over <code class="docutils literal notranslate"><span class="pre">k</span></code>, <code class="docutils literal notranslate"><span class="pre">l</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#d-cutile-kernel-gemm-dimensions-xyzl">d) cuTile Kernel: GEMM Dimensions <code class="docutils literal notranslate"><span class="pre">xyzl</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#e-cutile-kernel-3d-gemm-kernel-using-exyz">e) cuTile Kernel: 3D GEMM Kernel using <code class="docutils literal notranslate"><span class="pre">exyz</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-2-fused-vs-separate-elementwise-multiplication">Task 2: Fused vs. Separate Elementwise Multiplication</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-implementing-the-fused-kernel">a) Implementing the Fused Kernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-implementing-the-separate-elementwise-multiplication-kernel">b) Implementing the Separate Elementwise Multiplication Kernel</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-3-gemm-dimension-size-sweep">Task 3: GEMM Dimension Size Sweep</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-implementing-the-contraction-kernel">a) Implementing the contraction kernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-performing-the-sweep">b) Performing the sweep</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#benchmark-1">Benchmark 1</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#benchmark-2">Benchmark 2</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Machine Learning Accelerators</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Tensor Contractions on GPUs</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/submissions/04_tensor_contractions.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tensor-contractions-on-gpus">
+<h1>Tensor Contractions on GPUs<a class="headerlink" href="#tensor-contractions-on-gpus" title="Link to this heading"></a></h1>
+<section id="task-1-tiled-contraction-kernel-variants">
+<h2>Task 1: Tiled Contraction Kernel Variants<a class="headerlink" href="#task-1-tiled-contraction-kernel-variants" title="Link to this heading"></a></h2>
+<section id="a-dimension-classification">
+<h3>a) Dimension Classification<a class="headerlink" href="#a-dimension-classification" title="Link to this heading"></a></h3>
+<p>The dimensions for the einsum string <code class="docutils literal notranslate"><span class="pre">eabklxy,</span> <span class="pre">ecklyz</span> <span class="pre">-&gt;</span> <span class="pre">eabcxz</span></code> are classified as follows:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">M</span></code>: <code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, <code class="docutils literal notranslate"><span class="pre">x</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">N</span></code>: <code class="docutils literal notranslate"><span class="pre">c</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">K</span></code>: <code class="docutils literal notranslate"><span class="pre">k</span></code>, <code class="docutils literal notranslate"><span class="pre">l</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">C</span></code>: <code class="docutils literal notranslate"><span class="pre">e</span></code></p></li>
+</ul>
+</section>
+<section id="b-cutile-kernel-sequentialize-over-k-and-l">
+<span id="task-1b"></span><h3>b) cuTile Kernel: Sequentialize over <code class="docutils literal notranslate"><span class="pre">k</span></code> and <code class="docutils literal notranslate"><span class="pre">l</span></code><a class="headerlink" href="#b-cutile-kernel-sequentialize-over-k-and-l" title="Link to this heading"></a></h3>
+<p>We create three tensors <code class="docutils literal notranslate"><span class="pre">A</span></code>, <code class="docutils literal notranslate"><span class="pre">B</span></code>, and <code class="docutils literal notranslate"><span class="pre">C</span></code> with random dimension sizes and values.
+For that we use a <code class="docutils literal notranslate"><span class="pre">tensor_initialization()</span></code> function that creates these tensors for us:</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text"><cite>Function to initialize three random tensors</cite></span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">tensor_initialization</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="linenos"> 2</span>    <span class="c1"># Initialize random tensors</span>
+<span class="linenos"> 3</span>    <span class="n">a</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 4</span>    <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 5</span>    <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 6</span>    <span class="n">e</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 7</span>    <span class="n">k</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 8</span>    <span class="n">l</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 9</span>    <span class="n">x</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">10</span>    <span class="n">y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">11</span>    <span class="n">z</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">12</span>    
+<span class="linenos">13</span>    <span class="n">size_A</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
+<span class="linenos">14</span>    <span class="n">size_B</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">15</span>    <span class="n">size_C</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">16</span>    
+<span class="linenos">17</span>    <span class="k">while</span> <span class="p">(</span><span class="n">size_A</span> <span class="o">+</span> <span class="n">size_B</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">size_C</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">&gt;</span> <span class="mi">34</span> <span class="o">*</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">3</span><span class="p">:</span>
+<span class="linenos">18</span>        <span class="n">a</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+<span class="linenos">19</span>        <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+<span class="linenos">20</span>        <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+<span class="linenos">21</span>        <span class="n">e</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+<span class="linenos">22</span>        <span class="n">k</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+<span class="linenos">23</span>        <span class="n">l</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">l</span><span class="p">)</span>
+<span class="linenos">24</span>        <span class="n">x</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+<span class="linenos">25</span>        <span class="n">y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="linenos">26</span>        <span class="n">z</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span>
+<span class="linenos">27</span>        
+<span class="linenos">28</span>        <span class="n">size_A</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
+<span class="linenos">29</span>        <span class="n">size_B</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">30</span>        <span class="n">size_C</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">31</span>    
+<span class="linenos">32</span>    <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">33</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">34</span>    <span class="n">C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">35</span>    
+<span class="linenos">36</span>    <span class="k">return</span> <span class="p">[</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>Inside this function we have a check that prevents us to create three tensors that exceed the memory limit of <code class="docutils literal notranslate"><span class="pre">32</span> <span class="pre">GiB</span></code>.
+If our tensors exceed the limit, we simply generate a new random dimension size based on the current value.
+As this procedure is wrapped inside a <code class="docutils literal notranslate"><span class="pre">while</span></code>-loop we guarantee to be within the memory limit.</p>
+<p>The actual task was solved by creating a <code class="docutils literal notranslate"><span class="pre">1D</span></code>-grid over the whole <code class="docutils literal notranslate"><span class="pre">C</span></code> tensor.</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text"><cite>Grid creation and kernel launch</cite></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="k">def</span> <span class="nf">launch_tile_contraction_kl</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">):</span>
+<span class="linenos">2</span>    <span class="c1"># eabcxz</span>
+<span class="linenos">3</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">4</span>
+<span class="linenos">5</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">6</span>              <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">7</span>              <span class="n">tile_contraction_kl</span><span class="p">,</span>
+<span class="linenos">8</span>              <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<p>Based on this grid it was then possible to retrieve the block IDs of the respective dimensions involved in the computation.</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<span id="b-bid"></span><div class="code-block-caption"><span class="caption-text"><cite>Block ID computation</cite></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="c1"># Indices C: Right to left (eabcxz)</span>
+<span class="linenos"> 2</span>    <span class="n">z</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 3</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 4</span>    
+<span class="linenos"> 5</span>    <span class="n">x</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 6</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 7</span>    
+<span class="linenos"> 8</span>    <span class="n">c</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+<span class="linenos"> 9</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+<span class="linenos">10</span>    
+<span class="linenos">11</span>    <span class="n">b</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="linenos">12</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="linenos">13</span>    
+<span class="linenos">14</span>    <span class="n">a</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos">15</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos">16</span>    
+<span class="linenos">17</span>    <span class="n">e</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>The block ID compuation follows a simple principle.
+As the fast dimension is the rightmost dimension in the einsum string, we start with index <code class="docutils literal notranslate"><span class="pre">z</span></code> and compute the block ID of <code class="docutils literal notranslate"><span class="pre">z</span></code> with the retrieved <code class="docutils literal notranslate"><span class="pre">bid</span> <span class="pre">=</span> <span class="pre">ct.bid(0)</span></code>.
+After computing the index, we reduce <code class="docutils literal notranslate"><span class="pre">bid</span></code> by the number of tiles we have for dimension <code class="docutils literal notranslate"><span class="pre">z</span></code>.</p>
+<p>This concludes one iteration.
+We repeat this for every single index, going from left to right:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">z</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">x</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">c</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">b</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">a</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">e</span></code></p></li>
+</ol>
+<p>After retrieving these indices we set up our <strong>GEMM</strong>:</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text"><cite>GEMM computation</cite></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]):</span>
+<span class="linenos"> 2</span>        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">]):</span>
+<span class="linenos"> 3</span>            <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
+<span class="linenos"> 4</span>                <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 5</span>                <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>    <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 6</span>                
+<span class="linenos"> 7</span>                <span class="c1"># Reshape due to rank mismatch</span>
+<span class="linenos"> 8</span>                <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+<span class="linenos"> 9</span>                <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">10</span>                
+<span class="linenos">11</span>                <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_A</span><span class="p">,</span> <span class="n">r_tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+<span class="linenos">12</span>            
+<span class="linenos">13</span>    <span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">14</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+<span class="linenos">15</span>    <span class="k">return</span>
+</pre></div>
+</div>
+</div>
+<p>Due to the reason that the ranks of tensor <code class="docutils literal notranslate"><span class="pre">A</span></code> and tensor <code class="docutils literal notranslate"><span class="pre">B</span></code> (and <code class="docutils literal notranslate"><span class="pre">C</span></code>) where not matching we decided to create an accumulation matrix <code class="docutils literal notranslate"><span class="pre">acc</span></code> of the shape <code class="docutils literal notranslate"><span class="pre">(tM,</span> <span class="pre">tN)</span></code>.
+The next thing we did was to set up the sequential <code class="docutils literal notranslate"><span class="pre">K</span></code>-type loops over <code class="docutils literal notranslate"><span class="pre">k</span></code>, <code class="docutils literal notranslate"><span class="pre">l</span></code>, and <code class="docutils literal notranslate"><span class="pre">y</span></code>, while <code class="docutils literal notranslate"><span class="pre">y</span></code> is only needed for the case that <span class="math notranslate nohighlight">\(tK &lt; y\)</span>.
+As we had to create the accumulation with a new shape, we were forced to also reshape the loaded tiles from tensor <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code>.</p>
+<p>After going through all of the loops sequentially we then reshape our accumulated tensor back to the original shape, in order to store the result in our <code class="docutils literal notranslate"><span class="pre">C</span></code> tensor.</p>
+</section>
+<section id="c-cutile-kernel-sequentialize-over-k-l-and-b">
+<h3>c) cuTile Kernel: Sequentialize over <code class="docutils literal notranslate"><span class="pre">k</span></code>, <code class="docutils literal notranslate"><span class="pre">l</span></code> and <code class="docutils literal notranslate"><span class="pre">b</span></code><a class="headerlink" href="#c-cutile-kernel-sequentialize-over-k-l-and-b" title="Link to this heading"></a></h3>
+<p>To additionally sequentialize the we first changed the grid by extracting the <code class="docutils literal notranslate"><span class="pre">b</span></code> dimension from the calculation.</p>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text"><cite>Grid creation and kernel launch</cite></span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="k">def</span> <span class="nf">launch_tile_contraction_klb</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">):</span>
+<span class="linenos">2</span>    <span class="c1"># eacxz</span>
+<span class="linenos">3</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">4</span>
+<span class="linenos">5</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">6</span>              <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">7</span>              <span class="n">tile_contraction_klb</span><span class="p">,</span>
+<span class="linenos">8</span>              <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<p>Reducing the grid dimension also means that we need to change the index calculation, as we don’t need to calculate the <code class="docutils literal notranslate"><span class="pre">b</span></code> block ID any more.</p>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text"><cite>Block ID computation</cite></span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="c1"># Indices C: Right to left (eabcxz)</span>
+<span class="linenos"> 2</span>    <span class="n">z</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 3</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 4</span>
+<span class="linenos"> 5</span>    <span class="n">x</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 6</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 7</span>
+<span class="linenos"> 8</span>    <span class="n">c</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+<span class="linenos"> 9</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+<span class="linenos">10</span>
+<span class="linenos">11</span>    <span class="n">a</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos">12</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos">13</span>
+<span class="linenos">14</span>    <span class="n">e</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>In regards to the computation we add a new loop for the <code class="docutils literal notranslate"><span class="pre">b</span></code> dimension and also move the creation of the <code class="docutils literal notranslate"><span class="pre">acc</span></code> tile inside that loop.</p>
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text"><cite>GEMM computation</cite></span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]):</span>
+<span class="linenos"> 2</span>        <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="linenos"> 3</span>
+<span class="linenos"> 4</span>        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]):</span>
+<span class="linenos"> 5</span>            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">]):</span>
+<span class="linenos"> 6</span>                <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
+<span class="linenos"> 7</span>                    <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 8</span>                    <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>    <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 9</span>
+<span class="linenos">10</span>                    <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+<span class="linenos">11</span>                    <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">12</span>
+<span class="linenos">13</span>                    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_A</span><span class="p">,</span> <span class="n">r_tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+<span class="linenos">14</span>
+<span class="linenos">15</span>        <span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">16</span>        <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>To find one dimension configuration where the kernel from <a class="reference internal" href="#task-1b"><span class="std std-ref">Task 1b)</span></a> performed better, we did not need to experiment too much.
+One possible configuration is <code class="docutils literal notranslate"><span class="pre">(e=8,</span> <span class="pre">a=8,</span> <span class="pre">b=16,</span> <span class="pre">c=8,</span> <span class="pre">k=8,</span> <span class="pre">l=16,</span> <span class="pre">x=16,</span> <span class="pre">y=16,</span> <span class="pre">z=16)</span></code>.</p>
+<p>On the other hand to find a kernel where the implementation of Task 1c) was better, was harder.
+Our approach was too equally distribute the workload by sharing the output over the 48 streaming multiprocessors.
+Further, we made sure that the <code class="docutils literal notranslate"><span class="pre">b</span></code> dimension is odd.
+Finally we found a dimension configuration where the kernel from Task 1c) was slightly better: <code class="docutils literal notranslate"><span class="pre">(e=16,</span> <span class="pre">a=8,</span> <span class="pre">b=5,</span> <span class="pre">c=6,</span> <span class="pre">k=8,</span> <span class="pre">l=8,</span> <span class="pre">x=8,</span> <span class="pre">y=8,</span> <span class="pre">z=8)</span></code>.</p>
+<div class="highlight-text notranslate" id="c-bench"><div class="highlight"><pre><span></span>[expected 1b &gt; 1c &gt; 1d]
+  total memory: 0.07421875GiB
+  grid: 1b=32768 blocks, 1c=2048 blocks, 1d=32768 blocks
+  tile: tM=8, tN=8, tK=8
+  1b=46.091ms  1c=47.734ms  1d=213.975ms
+  Ranking: 1b &gt; 1c &gt; 1d
+[expected 1c &gt; 1b]
+  total memory: 0.00653076171875GiB
+  grid: 1b=15360 blocks, 1c=3072 blocks, 1d=15360 blocks
+  tile: tM=4, tN=4, tK=4
+  1b=5.898ms  1c=5.863ms  1d=8.908ms
+  Ranking: 1c &gt; 1b &gt; 1d
+</pre></div>
+</div>
+</section>
+<section id="d-cutile-kernel-gemm-dimensions-xyzl">
+<h3>d) cuTile Kernel: GEMM Dimensions <code class="docutils literal notranslate"><span class="pre">xyzl</span></code><a class="headerlink" href="#d-cutile-kernel-gemm-dimensions-xyzl" title="Link to this heading"></a></h3>
+<p>In order for us to use the dimensions <code class="docutils literal notranslate"><span class="pre">xyzl</span></code> as GEMM dimensions, we switch back to the grid from <a class="reference internal" href="#task-1b"><span class="std std-ref">Task 1b)</span></a>.
+Further, we prepare the tensors <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code>.</p>
+<p>For tensor <code class="docutils literal notranslate"><span class="pre">A</span></code> we perform a permutation to change the dimensionality to <code class="docutils literal notranslate"><span class="pre">eabklxy</span> <span class="pre">-&gt;</span> <span class="pre">eabkxly</span></code> and then we reshape the tensor accordingly.
+On the other hand, tensor <code class="docutils literal notranslate"><span class="pre">B</span></code> can be directly reshaped.</p>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text"><cite>Permute and reshape for A and B</cite></span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="c1"># eabklxy -&gt; eabkxly</span>
+<span class="linenos"> 2</span>    <span class="n">p_A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="linenos"> 3</span>    <span class="c1"># Reshape A</span>
+<span class="linenos"> 4</span>    <span class="n">r_A</span> <span class="o">=</span> <span class="n">p_A</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>                <span class="c1"># e</span>
+<span class="linenos"> 5</span>                      <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>                <span class="c1"># a</span>
+<span class="linenos"> 6</span>                      <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>                <span class="c1"># b</span>
+<span class="linenos"> 7</span>                      <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>                <span class="c1"># k</span>
+<span class="linenos"> 8</span>                      <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span>                <span class="c1"># x</span>
+<span class="linenos"> 9</span>                      <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">*</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">6</span><span class="p">])</span>   <span class="c1"># l * y</span>
+<span class="linenos">10</span>    
+<span class="linenos">11</span>    <span class="c1"># Reshape B</span>
+<span class="linenos">12</span>    <span class="n">r_B</span> <span class="o">=</span> <span class="n">B</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>                <span class="c1"># e</span>
+<span class="linenos">13</span>                    <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>                <span class="c1"># c</span>
+<span class="linenos">14</span>                    <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>                <span class="c1"># k</span>
+<span class="linenos">15</span>                    <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>   <span class="c1"># l * y</span>
+<span class="linenos">16</span>                    <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>                <span class="c1"># z</span>
+<span class="linenos">17</span>
+<span class="linenos">18</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">19</span>              <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">20</span>              <span class="n">tile_contraction_xyzl</span><span class="p">,</span>
+<span class="linenos">21</span>              <span class="p">(</span><span class="n">r_A</span><span class="p">,</span> <span class="n">r_B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<p>We also switch back to the <a class="reference internal" href="#b-bid"><span class="std std-ref">block ID computation</span></a> from Task 1b).
+What changes is the way our kernel computes, as we combine the <code class="docutils literal notranslate"><span class="pre">l</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> dimension to <code class="docutils literal notranslate"><span class="pre">ly</span></code>.
+By combining them we essentially compute a <code class="docutils literal notranslate"><span class="pre">xyzl</span></code> GEMM.</p>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text"><cite>xyzl GEMM</cite></span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="linenos"> 2</span>    
+<span class="linenos"> 3</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]):</span>
+<span class="linenos"> 4</span>        <span class="k">for</span> <span class="n">ly</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">]):</span>
+<span class="linenos"> 5</span>            <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">ly</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 6</span>            <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">ly</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>    <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 7</span>            
+<span class="linenos"> 8</span>            <span class="c1"># Reshape due to rank mismatch</span>
+<span class="linenos"> 9</span>            <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+<span class="linenos">10</span>            <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">11</span>            
+<span class="linenos">12</span>            <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_A</span><span class="p">,</span> <span class="n">r_tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+<span class="linenos">13</span>            
+<span class="linenos">14</span>    <span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">15</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Similarly to <cite>Task 1c) &lt;1c_bench&gt;</cite> we could use the same dimension configuration to outperform the kernel from Task 1d) with the kernel from Task 1b).</p>
+<p>To find a dimension configuration where the kernel from Task 1d) outperforms the kernel from Task 1b) we reduced the size of the kernel <code class="docutils literal notranslate"><span class="pre">xyzl</span></code> compared to the remaining dimensions.
+The idea was to make the workload big enough for the kernel from Task 1d) to be equally utilized as the kernel from Task 1b), while performing less kernel calls.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[expected 1b &gt; 1c &gt; 1d]
+  total memory: 0.07421875GiB
+  grid: 1b=32768 blocks, 1c=2048 blocks, 1d=32768 blocks
+  tile: tM=8, tN=8, tK=8
+  1b=46.091ms  1c=47.734ms  1d=213.975ms
+  Ranking: 1b &gt; 1c &gt; 1d
+[expected 1d &gt; 1b]
+  total memory: 0.009567663073539734GiB
+  grid: 1b=151200 blocks, 1c=15120 blocks, 1d=151200 blocks
+  tile: tM=2, tN=2, tK=2
+  1b=28.395ms  1c=28.570ms  1d=25.887ms
+  Ranking: 1d &gt; 1b &gt; 1c
+</pre></div>
+</div>
+</section>
+<section id="e-cutile-kernel-3d-gemm-kernel-using-exyz">
+<h3>e) cuTile Kernel: 3D GEMM Kernel using <code class="docutils literal notranslate"><span class="pre">exyz</span></code><a class="headerlink" href="#e-cutile-kernel-3d-gemm-kernel-using-exyz" title="Link to this heading"></a></h3>
+<p>Creating a 3D <code class="docutils literal notranslate"><span class="pre">exyz</span></code> GEMM kernel we first permuted our tensors by moving the <code class="docutils literal notranslate"><span class="pre">e</span></code> dimension closer to the right:</p>
+<div class="literal-block-wrapper docutils container" id="id10">
+<div class="code-block-caption"><span class="caption-text"><cite>Tensor permutations</cite></span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="n">p_A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="linenos">2</span>    
+<span class="linenos">3</span>    <span class="c1"># B: ecklyz -&gt; ckleyz</span>
+<span class="linenos">4</span>    <span class="n">p_B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="linenos">5</span>    
+<span class="linenos">6</span>    <span class="c1"># C: eabcxz -&gt; abcexz</span>
+<span class="linenos">7</span>    <span class="n">p_C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<p>Secondly, we introduced a new tile size called <code class="docutils literal notranslate"><span class="pre">tC</span></code> which is used for tiling the <code class="docutils literal notranslate"><span class="pre">e</span></code> dimension.
+Therefore, our grid changed as well.</p>
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text"><cite>Grid computation and kernel launch</cite></span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="c1"># abcexz</span>
+<span class="linenos">2</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">p_C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">p_C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">p_C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">p_C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">tC</span><span class="p">)</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">p_C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">p_C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">3</span>    
+<span class="linenos">4</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">5</span>              <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">6</span>              <span class="n">tile_contraction_exyz</span><span class="p">,</span>
+<span class="linenos">7</span>              <span class="p">(</span><span class="n">p_A</span><span class="p">,</span> <span class="n">p_B</span><span class="p">,</span> <span class="n">p_C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tC</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+<p>Inside the kernel we adjust the block ID calculation slightly, because of the positioning of dimension <code class="docutils literal notranslate"><span class="pre">e</span></code> and the new tile shape <code class="docutils literal notranslate"><span class="pre">tC</span></code>.</p>
+<div class="literal-block-wrapper docutils container" id="id12">
+<div class="code-block-caption"><span class="caption-text"><cite>Block ID computation</cite></span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="c1"># Indices C: Right to left (abcexz)</span>
+<span class="linenos"> 2</span>    <span class="n">z</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 3</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 4</span>    
+<span class="linenos"> 5</span>    <span class="n">x</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 6</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 7</span>    
+<span class="linenos"> 8</span>    <span class="n">e</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">tC</span><span class="p">)</span>
+<span class="linenos"> 9</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">tC</span><span class="p">)</span>
+<span class="linenos">10</span>    
+<span class="linenos">11</span>    <span class="n">c</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="linenos">12</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="linenos">13</span>    
+<span class="linenos">14</span>    <span class="n">b</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos">15</span>    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="linenos">16</span>    
+<span class="linenos">17</span>    <span class="n">a</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+<p>To perform a correct 3D GEMM we also change the indices and shapes for the tiles of <code class="docutils literal notranslate"><span class="pre">A</span></code>, <code class="docutils literal notranslate"><span class="pre">B</span></code>, <code class="docutils literal notranslate"><span class="pre">acc</span></code> and <code class="docutils literal notranslate"><span class="pre">C</span></code>.</p>
+<div class="literal-block-wrapper docutils container" id="id13">
+<div class="code-block-caption"><span class="caption-text"><cite>exyz GEMM</cite></span><a class="headerlink" href="#id13" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tC</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="linenos"> 2</span>    
+<span class="linenos"> 3</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]):</span>
+<span class="linenos"> 4</span>        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]):</span>
+<span class="linenos"> 5</span>            <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
+<span class="linenos"> 6</span>                <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tC</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 7</span>                <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tC</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>    <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 8</span>                
+<span class="linenos"> 9</span>                <span class="c1"># Reshape due to rank mismatch</span>
+<span class="linenos">10</span>                <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tC</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+<span class="linenos">11</span>                <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tC</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">12</span>                
+<span class="linenos">13</span>                <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_A</span><span class="p">,</span> <span class="n">r_tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+<span class="linenos">14</span>            
+<span class="linenos">15</span>    <span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tC</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">16</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The last thing is to bring the output matrix <code class="docutils literal notranslate"><span class="pre">C</span></code> back into its normal shape.</p>
+<div class="literal-block-wrapper docutils container" id="id14">
+<div class="code-block-caption"><span class="caption-text"><cite>Restore shape of C</cite></span><a class="headerlink" href="#id14" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>    <span class="c1"># Permute C again: abcexz -&gt; eabcxz and copy back in-place</span>
+<span class="linenos">2</span>    <span class="n">C</span><span class="o">.</span><span class="n">copy_</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="n">p_C</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="task-2-fused-vs-separate-elementwise-multiplication">
+<h2>Task 2: Fused vs. Separate Elementwise Multiplication<a class="headerlink" href="#task-2-fused-vs-separate-elementwise-multiplication" title="Link to this heading"></a></h2>
+<section id="a-implementing-the-fused-kernel">
+<h3>a) Implementing the Fused Kernel<a class="headerlink" href="#a-implementing-the-fused-kernel" title="Link to this heading"></a></h3>
+<p>As a starting point, we used the kernel from Task 1b) and added another input tensor <code class="docutils literal notranslate"><span class="pre">D</span></code> to both the kernel and the kernel launch functions.
+After the loops for the contraction, we load a tile from tensor <code class="docutils literal notranslate"><span class="pre">D</span></code> and perform the elementwise multiplication with the tile from <code class="docutils literal notranslate"><span class="pre">C</span></code> before storing the result back to global memory.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]):</span>
+    <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
+            <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+            <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span>    <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span>    <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+
+            <span class="c1"># Reshape due to rank mismatch</span>
+            <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+            <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+
+            <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_A</span><span class="p">,</span> <span class="n">r_tile_B</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+
+<span class="c1"># Fused elementwise multiplication with D</span>
+<span class="n">tile_D</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">D</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="n">r_tile_D</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_D</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="n">acc</span> <span class="o">=</span> <span class="n">acc</span> <span class="o">*</span> <span class="n">r_tile_D</span>
+
+<span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+<span class="k">return</span>
+</pre></div>
+</div>
+</section>
+<section id="b-implementing-the-separate-elementwise-multiplication-kernel">
+<h3>b) Implementing the Separate Elementwise Multiplication Kernel<a class="headerlink" href="#b-implementing-the-separate-elementwise-multiplication-kernel" title="Link to this heading"></a></h3>
+<p>This kernel is rather simple, as we only have two input tensors, <code class="docutils literal notranslate"><span class="pre">C</span></code> and <code class="docutils literal notranslate"><span class="pre">D</span></code>.
+These even share the same dimensions, so we can directly load tiles from both tensors, perform the elementwise multiplication and store the result back to global memory.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="k">def</span> <span class="nf">elem_mult_kernel</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">tM</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tN</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+    <span class="c1"># eabcxz, eabcxz -&gt; eabcxz</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">z</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+
+    <span class="n">c</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+
+    <span class="n">b</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+    <span class="n">a</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">e</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">tile_C</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+    <span class="n">tile_D</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">D</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+
+    <span class="n">r_tile_C</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_C</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+    <span class="n">r_tile_D</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_D</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="n">r_tile_C</span> <span class="o">*</span> <span class="n">r_tile_D</span>
+
+    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">)))</span>
+    <span class="k">return</span>
+</pre></div>
+</div>
+<p>The launch function for this kernel is no different than the one for the fused kernel, as we can use the same grid configuration.
+As for the contraction, we use the same kernel as in Task 1b).</p>
+<p>For the benchmark, we use the following dimension configuration: <code class="docutils literal notranslate"><span class="pre">e=4,</span> <span class="pre">a=4,</span> <span class="pre">b=4,</span> <span class="pre">c=8,</span> <span class="pre">k=8,</span> <span class="pre">l=8,</span> <span class="pre">x=64,</span> <span class="pre">y=32,</span> <span class="pre">z=128</span></code>.
+The reason for this is that we were supposed to match the FLOP count of a <code class="docutils literal notranslate"><span class="pre">2048</span> <span class="pre">x</span> <span class="pre">2048</span></code> matrix multiplication, which is <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">2048^3</span> <span class="pre">=</span> <span class="pre">17,179,869,184</span></code> FLOPs.
+For the chosen dimension configuration, we get the same result: <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">*</span> <span class="pre">(4*4*4*8*64*128)</span> <span class="pre">*</span> <span class="pre">(8*8*32)</span> <span class="pre">=</span> <span class="pre">17,179,869,184</span></code> FLOPs.</p>
+<p>We then run the benchmark:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Benchmark</span>
+<span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">1000</span>
+<span class="n">t_fused</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span>
+    <span class="k">lambda</span><span class="p">:</span> <span class="n">launch_fused_elem_mult_kernel</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span>
+    <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">rep</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">no_fusion</span><span class="p">():</span>
+    <span class="n">launch_tile_contraction_kl</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">)</span>
+    <span class="n">launch_elem_mult_kernel</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">)</span>
+
+<span class="n">t_no_fusion</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span><span class="n">no_fusion</span><span class="p">,</span> <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">rep</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>and get the following results:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Benchmark:
+    Fused   : 7.447 ms
+    Separate: 7.582 ms
+    Speedup : 1.02x
+</pre></div>
+</div>
+<p>The speedup is rather small and negligible,
+which is not surprising given the fact that the speedup from fusion comes from avoiding a global memory round-trip for C
+(the contraction result is kept in registers and multiplied before being written).
+If we look at the size of the output tensor C, we see that it has <code class="docutils literal notranslate"><span class="pre">e*a*b*c*x*z</span> <span class="pre">=</span> <span class="pre">4*4*4*8*64*128</span> <span class="pre">=</span> <span class="pre">4.194.304</span></code> elements,
+which is <code class="docutils literal notranslate"><span class="pre">4.194.304</span> <span class="pre">*</span> <span class="pre">4</span> <span class="pre">bytes</span> <span class="pre">=</span> <span class="pre">16</span> <span class="pre">MiB</span></code>.
+The total traffic of reading and writing C is then around <code class="docutils literal notranslate"><span class="pre">32</span> <span class="pre">MiB</span></code>, which is very small compared to the bandwidth of the GPU.</p>
+</section>
+</section>
+<section id="task-3-gemm-dimension-size-sweep">
+<h2>Task 3: GEMM Dimension Size Sweep<a class="headerlink" href="#task-3-gemm-dimension-size-sweep" title="Link to this heading"></a></h2>
+<section id="a-implementing-the-contraction-kernel">
+<h3>a) Implementing the contraction kernel<a class="headerlink" href="#a-implementing-the-contraction-kernel" title="Link to this heading"></a></h3>
+<p>For this task, we were supposed to implement a contraction kernel that computes <code class="docutils literal notranslate"><span class="pre">ackm,</span> <span class="pre">bcnk</span> <span class="pre">-&gt;</span> <span class="pre">abnm</span></code> with arbitrary dimension sizes of <code class="docutils literal notranslate"><span class="pre">m</span></code>, <code class="docutils literal notranslate"><span class="pre">n</span></code> and <code class="docutils literal notranslate"><span class="pre">k</span></code>.
+The other dimensions are fixed to <code class="docutils literal notranslate"><span class="pre">a=16</span></code>, <code class="docutils literal notranslate"><span class="pre">b=16</span></code> and <code class="docutils literal notranslate"><span class="pre">c=32</span></code>.</p>
+<p>The implementation of the kernel is rather straightforward, as we can reuse a lot of the code from the previous tasks.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="k">def</span> <span class="nf">tile_contraction</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">tM</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tN</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">tK</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Indices C: Right to left (abnm)</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">tM</span><span class="p">)</span>
+
+    <span class="n">n</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">tN</span><span class="p">)</span>
+
+    <span class="n">b</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">a</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tN</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
+            <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+            <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+
+            <span class="c1"># Reshape due to rank mismatch</span>
+            <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tM</span><span class="p">))</span>
+            <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+
+            <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_B</span><span class="p">,</span> <span class="n">r_tile_A</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+
+    <span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tM</span><span class="p">))</span>
+    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+    <span class="k">return</span>
+</pre></div>
+</div>
+</section>
+<section id="b-performing-the-sweep">
+<h3>b) Performing the sweep<a class="headerlink" href="#b-performing-the-sweep" title="Link to this heading"></a></h3>
+<p>Both benchmarks use the same function, where the dimension to be swept over is set to zero.
+In each iteration of the sweep, we create new random tensors with the current dimension size and launch the kernel to benchmark it.
+The benchmark uses a warmup time of 100 ms and a repetition time of 1000 ms.
+After the benchmark, we compute the achieved TFLOPS and store it for plotting.
+The plot is then created with Matplotlib, where we plot the achieved TFLOPS against the swept dimension size.
+Lastly, we also save the results in a CSV file for further analysis.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">size_sweep</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+    <span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">1000</span>
+
+    <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">Ns</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">compute</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">l_n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span> <span class="mi">129</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Iteration: </span><span class="si">{</span><span class="n">l_n</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">bench_A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+            <span class="n">bench_B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">l_n</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+            <span class="n">bench_C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">l_n</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Initialize tile sizes</span>
+            <span class="n">bench_tM</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">bench_A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">bench_tN</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">bench_B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">bench_tK</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">bench_B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+
+            <span class="n">bench_ms</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span>
+                <span class="k">lambda</span><span class="p">:</span> <span class="n">launch_contraction_kernel</span><span class="p">(</span><span class="n">bench_A</span><span class="p">,</span> <span class="n">bench_B</span><span class="p">,</span> <span class="n">bench_C</span><span class="p">,</span> <span class="n">bench_tM</span><span class="p">,</span> <span class="n">bench_tN</span><span class="p">,</span> <span class="n">bench_tK</span><span class="p">),</span>
+                <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span>
+                <span class="n">rep</span><span class="o">=</span><span class="n">rep</span>
+            <span class="p">)</span>
+
+            <span class="n">flops</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">l_n</span> <span class="o">*</span> <span class="n">m</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span>
+            <span class="n">tflops</span> <span class="o">=</span> <span class="p">(</span><span class="n">flops</span> <span class="o">/</span> <span class="mf">1e12</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">bench_ms</span> <span class="o">/</span> <span class="mf">1e3</span><span class="p">)</span>
+
+            <span class="n">Ns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">l_n</span><span class="p">)</span>
+            <span class="n">compute</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tflops</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">compute</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Contraction vs N&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;N&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;TFLOPS&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;task3_n_throughput.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">160</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;task3_n_throughput.csv&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="s2">&quot;N&quot;</span><span class="p">,</span> <span class="s2">&quot;TFLOPS&quot;</span><span class="p">])</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">writerows</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">compute</span><span class="p">))</span>
+
+    <span class="k">elif</span> <span class="n">k</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">Ks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">compute</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">l_k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">17</span><span class="p">,</span> <span class="mi">129</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Iteration: </span><span class="si">{</span><span class="n">l_k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">bench_A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">a</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">l_k</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+            <span class="n">bench_B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">l_k</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+            <span class="n">bench_C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Initialize tile sizes</span>
+            <span class="n">bench_tM</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">bench_A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">bench_tN</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">bench_B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+            <span class="n">bench_tK</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">bench_B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
+
+            <span class="n">bench_ms</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span>
+                <span class="k">lambda</span><span class="p">:</span> <span class="n">launch_contraction_kernel</span><span class="p">(</span><span class="n">bench_A</span><span class="p">,</span> <span class="n">bench_B</span><span class="p">,</span> <span class="n">bench_C</span><span class="p">,</span> <span class="n">bench_tM</span><span class="p">,</span> <span class="n">bench_tN</span><span class="p">,</span> <span class="n">bench_tK</span><span class="p">),</span>
+                <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span>
+                <span class="n">rep</span><span class="o">=</span><span class="n">rep</span>
+            <span class="p">)</span>
+
+            <span class="n">flops</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">n</span> <span class="o">*</span> <span class="n">m</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">l_k</span>
+            <span class="n">tflops</span> <span class="o">=</span> <span class="p">(</span><span class="n">flops</span> <span class="o">/</span> <span class="mf">1e12</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">bench_ms</span> <span class="o">/</span> <span class="mf">1e3</span><span class="p">)</span>
+
+            <span class="n">Ks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">l_k</span><span class="p">)</span>
+            <span class="n">compute</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tflops</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">Ks</span><span class="p">,</span> <span class="n">compute</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Contraction vs K&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;K&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;TFLOPS&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;task3_k_throughput.png&quot;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">160</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;task3_k_throughput.csv&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="s2">&quot;K&quot;</span><span class="p">,</span> <span class="s2">&quot;TFLOPS&quot;</span><span class="p">])</span>
+            <span class="n">writer</span><span class="o">.</span><span class="n">writerows</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">Ks</span><span class="p">,</span> <span class="n">compute</span><span class="p">))</span>
+</pre></div>
+</div>
+<section id="benchmark-1">
+<h4>Benchmark 1<a class="headerlink" href="#benchmark-1" title="Link to this heading"></a></h4>
+<p>For the first benchmark, we swept over the <code class="docutils literal notranslate"><span class="pre">n</span></code> dimension, while keeping the other dimensions fixed to <code class="docutils literal notranslate"><span class="pre">m=64</span></code> and <code class="docutils literal notranslate"><span class="pre">k=64</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">size_sweep</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here, we achieved the following results:</p>
+<img alt="Throughput Plot for the sweep over N" src="../_images/task3_n_throughput.png" />
+<p>Within each constant <code class="docutils literal notranslate"><span class="pre">tN</span></code> segment the achieved TFLOPS grows roughly linearly with <code class="docutils literal notranslate"><span class="pre">n</span></code>.
+The GPU runtime stays approximately constant across a segment because the tile count and tile size are fixed,
+while the counted FLOPs scale proportionally with <code class="docutils literal notranslate"><span class="pre">n</span></code>.</p>
+<p>Three drops are visible at <code class="docutils literal notranslate"><span class="pre">n=17</span></code>, <code class="docutils literal notranslate"><span class="pre">n=33</span></code>, and <code class="docutils literal notranslate"><span class="pre">n=65</span></code>.
+At each of these points <code class="docutils literal notranslate"><span class="pre">cdiv(n,</span> <span class="pre">tN)</span></code> jumps from 2 to 3 tiles:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">n=17</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=8</span></code>: 3 tiles, last tile contains only 1 of 8 elements.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n=33</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=16</span></code>: 3 tiles, last tile contains only 1 of 16 elements.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">n=65</span></code>, <code class="docutils literal notranslate"><span class="pre">tN=32</span></code>: 3 tiles, last tile contains only 1 of 32 elements.</p></li>
+</ul>
+<p>The kernel executes a nearly empty third tile for every output block,
+performing MMA over mostly zero padded data while the FLOPS numerator only counts the real elements.</p>
+<p>At <code class="docutils literal notranslate"><span class="pre">n=18</span></code>, <code class="docutils literal notranslate"><span class="pre">n=34</span></code>, and <code class="docutils literal notranslate"><span class="pre">n=66</span></code>, <code class="docutils literal notranslate"><span class="pre">tN</span></code> doubles because <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">//</span> <span class="pre">2</span></code> crosses a power of two boundary (8 to 9, 16 to 17, and 32 to 33 respectively),
+so the tile count returns to 2.
+However, the performance does not immediately return to the level before the drop.
+At <code class="docutils literal notranslate"><span class="pre">n=66</span></code> for example, <code class="docutils literal notranslate"><span class="pre">tN=64</span></code> and the two tiles together span 128 elements, but only 66 of these are real data.
+The GPU does more actual work per block than at <code class="docutils literal notranslate"><span class="pre">n=64</span></code> with <code class="docutils literal notranslate"><span class="pre">tN=32</span></code>, but the counted FLOPS are nearly the same.
+As a result, <code class="docutils literal notranslate"><span class="pre">n=66</span></code> achieves 13.56 TFLOPS while <code class="docutils literal notranslate"><span class="pre">n=64</span></code> achieved 14.99 TFLOPS, and performance only recovers to that level around <code class="docutils literal notranslate"><span class="pre">n=75</span></code>.
+From there, the TFLOPS continue growing linearly.</p>
+</section>
+<section id="benchmark-2">
+<h4>Benchmark 2<a class="headerlink" href="#benchmark-2" title="Link to this heading"></a></h4>
+<p>For the second benchmark, we swept over the <code class="docutils literal notranslate"><span class="pre">k</span></code> dimension, while keeping the other dimensions fixed to <code class="docutils literal notranslate"><span class="pre">m=64</span></code> and <code class="docutils literal notranslate"><span class="pre">n=64</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">size_sweep</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here, we achieved the following results:</p>
+<img alt="Throughput Plot for the sweep over K" src="../_images/task3_k_throughput.png" />
+<p>For the most part, the FLOPs increase linearly with the size of the <code class="docutils literal notranslate"><span class="pre">k</span></code> dimension,
+however we have frequent spikes in performance.
+The first spike is at <code class="docutils literal notranslate"><span class="pre">k=24</span></code> and then we can observe spikes at increments of 8 (<code class="docutils literal notranslate"><span class="pre">k=32</span></code>, <code class="docutils literal notranslate"><span class="pre">k=40</span></code>, <code class="docutils literal notranslate"><span class="pre">k=48</span></code>, etc.).</p>
+<p>We suspect the primary reason for these spikes to be, that there are some alignment requirements for the <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> matrices regarding the new <a class="reference external" href="https://docs.nvidia.com/cutlass/4.2.1/media/docs/cpp/blackwell_functionality.html#layouts-tensor-alignment-requirements-to-target-tcgen05-mma-instructions">tcgen05.mma</a> instructions on Blackwell GPUs.
+For example, considering that <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> are of type <code class="docutils literal notranslate"><span class="pre">FP16</span></code> the alignment of <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> are 8 elements (or multiple of 8).
+Therefore, if <code class="docutils literal notranslate"><span class="pre">k</span></code> is a multiple of 8 all tiles are fully aligned.</p>
+<p>In the case that <code class="docutils literal notranslate"><span class="pre">k</span></code> is not a multiple of 8, cuTile’s compiler pads zeros until the next valid hardware <code class="docutils literal notranslate"><span class="pre">k</span></code> granularity / selected tile size.
+This causes the hardware to hardware to perform MMA operations on these zero-padded elements, wasting compute cycles and thereby reduing the throughput.</p>
+</section>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="03_matmul_cutile.html" class="btn btn-neutral float-left" title="Matrix Multiplication with cuTile" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Lucas Obitz, Luca-Philipp Grumbach.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
