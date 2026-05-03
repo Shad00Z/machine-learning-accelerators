@@ -528,7 +528,7 @@ For the most part, the FLOPs increase linearly with the size of the ``k`` dimens
 however we have frequent spikes in performance.
 The first spike is at ``k=24`` and then we can observe spikes at increments of 8 (``k=32``, ``k=40``, ``k=48``, etc.).
 
-We suspect the primary reason for these spikes to be, that there are some alignment requirements for the ``A`` and ``B`` matrices regarding the new :ref:` <https://docs.nvidia.com/cutlass/4.2.1/media/docs/cpp/blackwell_functionality.html#layouts-tensor-alignment-requirements-to-target-tcgen05-mma-instructions>` instructions on Blackwell GPUs.
+We suspect the primary reason for these spikes to be, that there are some alignment requirements for the ``A`` and ``B`` matrices regarding the new `tcgen05.mma <https://docs.nvidia.com/cutlass/4.2.1/media/docs/cpp/blackwell_functionality.html#layouts-tensor-alignment-requirements-to-target-tcgen05-mma-instructions>`_ instructions on Blackwell GPUs.
 For example, considering that ``A`` and ``B`` are of type ``FP16`` the alignment of ``A`` and ``B`` are 8 elements (or multiple of 8). 
 Therefore, if ``k`` is a multiple of 8 all tiles are fully aligned.
 
