@@ -229,6 +229,7 @@ As a starting point, we used the kernel from Task 1b) and added another input te
 After the loops for the contraction, we load a tile from tensor ``D`` and perform the elementwise multiplication with the tile from ``C`` before storing the result back to global memory.
 
 .. code-block:: python
+    :linenos:
 
     for k in range(A.shape[3]):
         for l in range(A.shape[4]):
@@ -258,6 +259,7 @@ This kernel is rather simple, as we only have two input tensors, ``C`` and ``D``
 These even share the same dimensions, so we can directly load tiles from both tensors, perform the elementwise multiplication and store the result back to global memory.
 
 .. code-block:: python
+    :linenos:
 
     @ct.kernel
     def elem_mult_kernel(C, D, tM: ConstInt, tN: ConstInt):
@@ -302,6 +304,7 @@ For the chosen dimension configuration, we get the same result: ``2 * (4*4*4*8*6
 We then run the benchmark:
 
 .. code-block:: python
+    :linenos:
 
     # Benchmark
     warmup, rep = 100, 1000
@@ -343,6 +346,7 @@ The other dimensions are fixed to ``a=16``, ``b=16`` and ``c=32``.
 The implementation of the kernel is rather straightforward, as we can reuse a lot of the code from the previous tasks.
 
 .. code-block:: python
+    :linenos:
 
     @ct.kernel
     def tile_contraction(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
@@ -388,6 +392,7 @@ The plot is then created with Matplotlib, where we plot the achieved TFLOPS agai
 Lastly, we also save the results in a CSV file for further analysis.
 
 .. code-block:: python
+    :linenos:
 
     def size_sweep(m, n, k):
         warmup, rep = 100, 1000
@@ -480,6 +485,7 @@ Benchmark 1
 For the first benchmark, we swept over the ``n`` dimension, while keeping the other dimensions fixed to ``m=64`` and ``k=64``:
 
 .. code-block:: python
+    :linenos:
 
     size_sweep(64, 0, 64)
 
@@ -516,6 +522,7 @@ Benchmark 2
 For the second benchmark, we swept over the ``k`` dimension, while keeping the other dimensions fixed to ``m=64`` and ``n=64``:
 
 .. code-block:: python
+    :linenos:
 
     size_sweep(64, 64, 0)
 
