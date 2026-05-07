@@ -16,15 +16,15 @@ class DimType(enum.Enum):
 
 class ExecType(enum.Enum):
     """Controls how a dimension is executed."""
-    SEQ = "SEQ"   # sequential outer loop
-    PAR = "PAR"   # parallel (mapped to block-IDs)
-    PRIM = "PRIM"  # used by the primitive operation
+    SEQ = "SEQ"     # sequential outer loop
+    PAR = "PAR"     # parallel (mapped to block-IDs)
+    PRIM = "PRIM"   # used by the primitive operation
 
 
 class PrimType(enum.Enum):
     """Main (B)GEMM primitive."""
-    GEMM = "GEMM"  # general matrix multiply
-    BGEMM = "BGEMM"  # batched general matrix multiply
+    GEMM = "GEMM"   # general matrix multiply
+    BGEMM = "BGEMM" # batched general matrix multiply
 
 
 class LastType(enum.Enum):
