@@ -306,3 +306,38 @@ if __name__ == "__main__":
     opt2 = Optimizer(cfg2)
     opt2.make_executable()
     print(cfg2)
+
+    ###################
+    # Example 2       #
+    ###################
+    print("=== split_dim ===")
+    cfg3 = generate_config("cmk,cnk->cmn", [(4, 4096, 4096), (4, 4096, 4096)])
+    print(f"Original config:")
+    print(f" dim_sizes  = {cfg3.dim_sizes}")
+    print(f" dim_types  = {[d.value for d in cfg3.dim_types]}")
+    print(f" strides[0] = {cfg3.strides[0]}")
+    print()
+    
+    opt = Optimizer(cfg3)
+    # Split m (dim 1, size 4096) into 16 x 256
+    opt.split_dim(1, 16, 256)
+    print(f"After split_dim(1, 16, 256):")
+    print(f"  dim_sizes  = {cfg3.dim_sizes}")
+    print(f"  dim_types  = {[d.value for d in cfg3.dim_types]}")
+    print(f"  strides[0] = {cfg3.strides[0]}")
+    print()
+
+    print("=== fuse_dims ===")
+    # Fuse the two m dims back (indices 1 and 2 after split)
+    opt.fuse_dims(1, 2)
+    print(f"After fuse_dims(1, 2):")
+    print(f"  dim_sizes  = {cfg3.dim_sizes}")
+    print(f"  dim_types  = {[d.value for d in cfg3.dim_types]}")
+    print(f"  strides[0] = {cfg3.strides[0]}")
+    print()
+
+    print("=== make_executable ===")
+    cfg4 = generate_config("cmk,cnk->cmn", [(4, 4096, 4096), (4, 4096, 4096)])
+    opt4 = Optimizer(cfg4)
+    opt4.make_executable()
+    print(cfg4)
