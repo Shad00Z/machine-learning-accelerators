@@ -29,6 +29,8 @@ For debugging purposes we also added a python ``__repr__`` function, which helps
     :lines: 88-102
     :caption: `__repr__ function`
 
+.. _task:
+
 Task 2: Generating a Basic Config
 ---------------------------------
 
@@ -214,7 +216,6 @@ We verify the new execution types with the :ref:`verify <verification>` function
 
 .. _verification:
 
-TODO: Check dimension order
 A tensor: K rightmost
 B tensor: N rightmost
 C tensor: M rightmost
@@ -250,3 +251,99 @@ We also check their continuity in memory.
     :lines: 250-271
     :caption: `Verify: Tensor PRIM dimensions`
 
+Task 4: L2-Optimized Batched Contraction
+----------------------------------------
+
+a) Initial Config
+^^^^^^^^^^^^^^^^^
+
+For the batched matrix multiplication ``cmk, ckn -> cmn`` our ``generate_config`` function from :ref:`Task 2 <task_2>` produces the following config:
+
+.. code-block:: text
+
+    Config(
+        data_type  = DataType.FLOAT16
+        prim_main  = PrimType.GEMM
+        prim_last  = LastType.NONE
+        prim_first = FirstType.ZERO
+        dim_types  = ['C', 'M', 'K', 'N']
+        exec_types = ['SEQ', 'SEQ', 'SEQ', 'SEQ']
+        dim_sizes  = [4, 4096, 4096, 4096]
+        strides[0] = [16777216, 4096, 1, 0]
+        strides[1] = [16777216, 0, 4096, 1]
+        strides[2] = [16777216, 4096, 0, 1]
+    )
+
+b) Optimized Config
+^^^^^^^^^^^^^^^^^^^
+
+To optimize the initial config object we made two transformations. 
+
+First, we split the ``N`` dimension into ``n1=4`` and ``n2=1024``
+Second, we split the ``M`` dimension into ``m1=4`` and ``m2=1024``
+
+.. code-block:: text
+
+    Config(
+        data_type  = DataType.FLOAT16
+        prim_main  = PrimType.GEMM
+        prim_last  = LastType.NONE
+        prim_first = FirstType.ZERO
+        dim_types  = ['C', 'M', 'N', 'M', 'K', 'N']
+        exec_types = ['PAR', 'PAR', 'PAR', 'PRIM', 'PRIM', 'PRIM']
+        dim_sizes  = [4, 4, 4, 1024, 4096, 1024]
+        strides[0] = [16777216, 4194304, 0, 4096, 1, 0]
+        strides[1] = [16777216, 0, 1024, 0, 4096, 1]
+        strides[2] = [16777216, 4194304, 1024, 4096, 0, 1]
+    )
+
+We decided to go with ``n2=m2=1024`` because with these dimensions we use the L2 cache optimally. 
+After this dimension splitting we have ``4194304 bytes`` left in out L2 cache. 
+With a bigger dimension size we would not be able to keep the whole computation within the L2 cache.
+
+c) Optimized Kernel
+^^^^^^^^^^^^^^^^^^^
+
+The kernel that executes this optimized config object for the initial batched matrix multiplication ``cmk, ckn -> cmn`` consists of two things:
+
+1. a launch function,
+2. the kernel itself.
+
+The launch kernel creates the grid according to the output tensor ``c * m1 * n1 * m2 * n2`` and forwards all the data to the kernel:
+
+.. literalinclude:: ../../../src/assignments/05_assignment/task-04.py
+    :language: py
+    :linenos:
+    :lines: 98-110
+    :caption: `Launch function`
+
+The kernel itself calculates the block IDs according to the shape of the output tensor. 
+
+.. literalinclude:: ../../../src/assignments/05_assignment/task-04.py
+    :language: py
+    :linenos:
+    :lines: 66-80
+    :caption: `BID calculation`
+
+Then we load the tiles and calculate our batched matrix multiplication.
+
+.. literalinclude:: ../../../src/assignments/05_assignment/task-04.py
+    :language: py
+    :linenos:
+    :lines: 83-94
+    :caption: `Batched Matrix Multiplication`
+
+The last thing we do is to compare the correctnes of our kernel against ``torch.allclose``. 
+
+d) TFLOP Benchmarking
+^^^^^^^^^^^^^^^^^^^^^
+
+We compare the implementation of our "optimized" batched matrix multiplication with a simple batched matrix multiplication kernel on the original tensors. 
+
+As the number of ``TFLOPs`` highly depends on the tiles sizes we created several benchmarks comparing the different tiles sizes. 
+
+# Insert PNGs
+
+Comparing these results it is obvious that the optimized kernel achieves a significantly higher number of ``TFLOPs`` than the baseline kernel.
+At the peak (tile sizes ``tM=128, tN=64, tK=128``), the optimized kernel achieves ``60.7 TFLOPs`` while the baseline kernel only achieves ``28.1 TFLOPs``. 
+This shows the importance of well thought out memory usage. 
