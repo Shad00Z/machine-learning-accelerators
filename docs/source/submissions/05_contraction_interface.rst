@@ -108,7 +108,7 @@ a) Split Dimensions
 
 For the ``split_dim`` function we follow a number of steps to guarantee that the dimension split is performed correctly.
 
-First we verify that the dimension that is supposed to be split is a valid dimension of our configuration and that :math:`outer_size * inner_size` equals the original size.
+First we verify that the dimension that is supposed to be split is a valid dimension of our configuration and that :math:`outer\_size * inner\_size` equals the original size.
 
 .. literalinclude:: ../../../src/assignments/05_assignment/optimizer.py
     :language: py
