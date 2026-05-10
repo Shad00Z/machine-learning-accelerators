@@ -79,7 +79,7 @@ def optimized_config_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt, m
     
     c  = bid
 
-    # Flat tile indices — one multiply + add per dimension, ConstInt-folded
+    # combine L2 group and tile within L2 group to get global tile index
     m_tile = m2 * ct.cdiv(m_in_size, tM) + m1
     n_tile = n2 * ct.cdiv(n_in_size, tN) + n1
 
