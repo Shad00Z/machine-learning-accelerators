@@ -15,6 +15,10 @@ ConstInt = ct.Constant[int]
 # Task 4 - L2-Optimized Batched Contraction
 # ---------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------
+# Task 4d - Reference kernel
+# -----------------------------------------------------------------------
+
 @ct.kernel
 def reference_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
     bid = ct.bid(0)
@@ -53,6 +57,9 @@ def launch_reference_config_kernel(A, B, C, tM, tN, tK):
               (A, B, C, tM, tN, tK))
     return
 
+# -----------------------------------------------------------------------
+# Task 4c - Kernel on optimized config object
+# -----------------------------------------------------------------------
 
 @ct.kernel
 def optimized_config_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
@@ -90,10 +97,9 @@ def optimized_config_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
 
 
 def launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg: Config):
-    
     d1_grid = 1
     
-    # Step 2: Calculate the grid from cfg
+    # Step 1: Calculate the grid from cfg
     for dim, dim_type, exec_type, stride in zip(cfg.dim_sizes, cfg.dim_types, cfg.exec_types, cfg.strides[2]):
         if stride == 0:
             continue
@@ -108,7 +114,7 @@ def launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg: Config):
          
     grid = (d1_grid, 1, 1)
     
-    # Step 3: infer new shapes for tensors from cfg
+    # Step 2: infer new shapes for tensors from cfg
     res_A = res_B = res_C = None
     
     def _infer_tensor_shapes(strides: List[int], dim_sizes: List[int]) -> Tuple[int, ...]:
@@ -130,8 +136,7 @@ def launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg: Config):
         shape = tuple(dim_sizes[idx] for idx, _ in sorted_dims)
         return shape
     
-    # Step 5: Reshape the tensors according to the config object
-    C_original_shape = C.shape
+    # Step 3: Reshape the tensors according to the config object
     for i, stride_list in enumerate(cfg.strides):
         shape = _infer_tensor_shapes(stride_list, cfg.dim_sizes)
         
@@ -147,10 +152,11 @@ def launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg: Config):
               grid,
               optimized_config_kernel,
               (res_A, res_B, res_C, tM, tN, tK))
-    
-    C.copy_(res_C.reshape(C_original_shape))
     return
 
+# -----------------------------------------------------------------------
+# Task 4c - Kernel on optimized config object (lean)
+# -----------------------------------------------------------------------
 
 @ct.kernel
 def optimal_config_kernel(A, B, C,
@@ -209,6 +215,9 @@ def launch_optimal_config_kernel(A, B, C, tM, tN, tK, m_prim_size=1024, n_prim_s
               (A, B, C, tM, tN, tK, m_prim_size, n_prim_size))
     return
 
+# -----------------------------------------------------------------------
+# Task 4d - Benchmarking & Heatmap
+# -----------------------------------------------------------------------
 
 def benchmarking(launch_fn, out_file, c, m, n, k):
     tile_sizes = list(itertools.product([16, 32, 64, 128], repeat=3))
@@ -267,6 +276,9 @@ def heatmap(tK, in_file, out_file):
     plt.savefig(file_name, dpi=160)
     print(f"Saved heatmap to {file_name}")
     
+# -----------------------------------------------------------------------
+# Task 4 - Shared Code
+# -----------------------------------------------------------------------
 
 if __name__ == "__main__":
     from config import generate_config
@@ -321,6 +333,7 @@ if __name__ == "__main__":
     # Step 1: Calculate tile sizes
     for dim_size, dim_type, exec_type in zip(cfg.dim_sizes, cfg.dim_types, cfg.exec_types):
         if exec_type == ExecType.PRIM:
+            # Reduce tile size
             tile = next_power_of_two(dim_size // 16)
             
             if dim_type == DimType.M:
@@ -329,14 +342,13 @@ if __name__ == "__main__":
                 tN = tile
             else:
                 tK = tile
-    launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg)
     
     C_torch = torch.einsum('cmk,ckn->cmn', A.float(), B.float())
 
+    launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg)
     assert torch.allclose(C, C_torch.to(torch.float32), rtol=1e-2), "Task 4c failed!"
     print("Kernel 4c passed!")
     
-    # d) benchmarking
     C = torch.zeros_like(C)
     launch_optimal_config_kernel(A, B, C, tM, tN, tK)
     assert torch.allclose(C, C_torch.to(torch.float32), rtol=1e-2), "Lean kernel failed!"
@@ -344,10 +356,10 @@ if __name__ == "__main__":
     
     C = torch.zeros_like(C)
     launch_reference_config_kernel(A, B, C, tM, tN, tK)
-    
     assert torch.allclose(C, C_torch.to(torch.float32), rtol=1e-2), "Task 4c reference failed!"
     print("Kernel 4c reference passed!")
     
+    # d) benchmarking
     path = "src/assignments/05_assignment/resources-05"
     benchmarking(
         lambda tM, tN, tK: launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg),
