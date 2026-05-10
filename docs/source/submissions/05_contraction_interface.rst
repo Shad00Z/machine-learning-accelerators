@@ -29,7 +29,7 @@ For debugging purposes we also added a python ``__repr__`` function, which helps
     :lines: 88-102
     :caption: `__repr__ function`
 
-.. _task:
+.. _task_2:
 
 Task 2: Generating a Basic Config
 ---------------------------------
@@ -342,7 +342,36 @@ We compare the implementation of our "optimized" batched matrix multiplication w
 
 As the number of ``TFLOPs`` highly depends on the tiles sizes we created several benchmarks comparing the different tiles sizes. 
 
-# Insert PNGs
+.. list-table::
+    :widths: 50 50
+    :header-rows: 1
+    
+    * - Optimized Kernel 
+      - Baseline Kernel
+
+    * - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=16_heatmap.png
+           :width: 100%
+
+      - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=16_heatmap_ref.png
+           :width: 100%
+
+    * - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=32_heatmap.png
+           :width: 100%
+
+      - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=32_heatmap_ref.png
+           :width: 100%
+
+    * - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=64_heatmap.png
+           :width: 100%
+
+      - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=64_heatmap_ref.png
+           :width: 100%
+
+    * - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=128_heatmap.png
+           :width: 100%
+
+      - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=128_heatmap_ref.png
+           :width: 100%
 
 Comparing these results it is obvious that the optimized kernel achieves a significantly higher number of ``TFLOPs`` than the baseline kernel.
 At the peak (tile sizes ``tM=128, tN=64, tK=128``), the optimized kernel achieves ``60.7 TFLOPs`` while the baseline kernel only achieves ``28.1 TFLOPs``. 
