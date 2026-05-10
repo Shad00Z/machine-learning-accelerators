@@ -298,13 +298,13 @@ Second, we split the ``M`` dimension into ``m1=4`` and ``m2=1024``
     )
 
 We decided to go with ``n2=m2=1024`` because with these dimensions we use the L2 cache optimally. 
-After this dimension splitting we have ``4194304 bytes`` left in out L2 cache. 
+After this dimension splitting we have ``4194304 bytes`` left in the L2 cache. 
 With a bigger dimension size we would not be able to keep the whole computation within the L2 cache.
 
 c) Optimized Kernel
 ^^^^^^^^^^^^^^^^^^^
 
-The kernel that executes this optimized config object for the initial batched matrix multiplication ``cmk, ckn -> cmn`` consists of two things:
+The kernel that executes this optimized config object for the initial batched matrix multiplication ``cmk, ckn -> cmn`` consists of two parts:
 
 1. a launch function,
 2. the kernel itself.
@@ -338,9 +338,9 @@ The last thing we do is to compare the correctnes of our kernel against ``torch.
 d) TFLOP Benchmarking
 ^^^^^^^^^^^^^^^^^^^^^
 
-We compare the implementation of our "optimized" batched matrix multiplication with a simple batched matrix multiplication kernel on the original tensors. 
+We compare the implementation of our optimized batched matrix multiplication with a simple batched matrix multiplication kernel on the original tensors. 
 
-As the number of ``TFLOPs`` highly depends on the tiles sizes we created several benchmarks comparing the different tiles sizes. 
+As the number of ``TFLOPs`` highly depends on the tile sizes, we created several benchmarks comparing different sizes. 
 
 .. list-table::
     :widths: 50 50
@@ -373,6 +373,6 @@ As the number of ``TFLOPs`` highly depends on the tiles sizes we created several
       - .. image:: ../../../src/assignments/05_assignment/resources-05/task4_k=128_heatmap_ref.png
            :width: 100%
 
-Comparing these results it is obvious that the optimized kernel achieves a significantly higher number of ``TFLOPs`` than the baseline kernel.
+Comparing these results, it is obvious that the optimized kernel achieves a significantly higher number of ``TFLOPs`` than the baseline kernel.
 At the peak (tile sizes ``tM=128, tN=64, tK=128``), the optimized kernel achieves ``60.7 TFLOPs`` while the baseline kernel only achieves ``28.1 TFLOPs``. 
 This shows the importance of well thought out memory usage. 
