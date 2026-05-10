@@ -61,11 +61,11 @@ def optimized_config_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
     n1 = bid % ct.cdiv(C.shape[4], tN)
     bid = bid // ct.cdiv(C.shape[4], tN)
     
-    n2 = bid % C.shape[3]
-    bid = bid // C.shape[3]
-    
     m1 = bid % ct.cdiv(C.shape[2], tM)
     bid = bid // ct.cdiv(C.shape[2], tM)
+    
+    n2 = bid % C.shape[3]
+    bid = bid // C.shape[3]
     
     m2 = bid % C.shape[1]
     bid = bid // C.shape[1]
@@ -152,45 +152,85 @@ def launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg: Config):
     return
 
 
-def benchmarking(A, B, C, out_file):
-    tile_sizes = list(itertools.product([16, 32, 64, 128], repeat=3))
+@ct.kernel
+def optimal_config_kernel(A, B, C,
+                tM: ConstInt, tN: ConstInt, tK: ConstInt,
+                m_in_size: ConstInt, n_in_size: ConstInt):
+    """2D super-tile kernel on original 3D tensors — no reshape required.
+
+    BID ordering (innermost → outermost): n_in, m_in, n_out, m_out, c.
+    For a fixed (c, m_out, n_out) super-tile all m_in × n_in blocks are
+    consecutive, so B[c, :, n_out-group] stays hot in L2 across all m_in tiles
+    and A[c, m_out-group, :] stays hot across all n_in tiles.
+    """
+    bid = ct.bid(0)
+
+    n1 = bid % ct.cdiv(n_in_size, tN)
+    bid = bid // ct.cdiv(n_in_size, tN)   # tile within n_in group
     
-    # Benchmarking Setup
+    m1 = bid % ct.cdiv(m_in_size, tM)
+    bid = bid // ct.cdiv(m_in_size, tM)   # tile within m_in group
+    
+    n2 = bid % ct.cdiv(C.shape[2], n_in_size)
+    bid = bid // ct.cdiv(C.shape[2], n_in_size)  # n L2 group
+    
+    m2 = bid % ct.cdiv(C.shape[1], m_in_size)
+    bid = bid // ct.cdiv(C.shape[1], m_in_size)  # m L2 group
+    
+    c  = bid
+
+    # Flat tile indices — one multiply + add per dimension, ConstInt-folded
+    m_tile = m2 * ct.cdiv(m_in_size, tM) + m1
+    n_tile = n2 * ct.cdiv(n_in_size, tN) + n1
+
+    acc = ct.zeros((tM, tN), dtype=torch.float32)
+
+    for k in range(ct.cdiv(A.shape[2], tK)):
+        tile_A = ct.load(A, index=(c, m_tile, k), shape=(1, tM, tK), padding_mode=ct.PaddingMode.ZERO)
+        tile_B = ct.load(B, index=(c, k, n_tile), shape=(1, tK, tN), padding_mode=ct.PaddingMode.ZERO)
+        
+        acc = ct.mma(ct.reshape(tile_A, (tM, tK)),
+                     ct.reshape(tile_B, (tK, tN)),
+                     acc)
+
+    ct.store(C, index=(c, m_tile, n_tile), tile=ct.reshape(acc.astype(C.dtype), (1, tM, tN)))
+    return
+
+
+def launch_optimal_config_kernel(A, B, C, tM, tN, tK, m_prim_size=1024, n_prim_size=1024):
+    m_prim_tiles = ct.cdiv(m_prim_size, tM)
+    n_prim_tiles = ct.cdiv(n_prim_size, tN)
+    m_par_count  = ct.cdiv(C.shape[1], m_prim_size)
+    n_par_count  = ct.cdiv(C.shape[2], n_prim_size)
+
+    grid = (C.shape[0] * m_par_count * n_par_count * m_prim_tiles * n_prim_tiles, 1, 1)
+
+    ct.launch(torch.cuda.current_stream(), grid, optimal_config_kernel,
+              (A, B, C, tM, tN, tK, m_prim_size, n_prim_size))
+    return
+
+
+def benchmarking(launch_fn, out_file, c, m, n, k):
+    tile_sizes = list(itertools.product([16, 32, 64, 128], repeat=3))
+
     records = []
     warmup = 200
-    rep = 2000
-    
+    rep    = 2000
+
     for tM, tN, tK in tile_sizes:
-        C = torch.zeros_like(C)
-        
-        if out_file == "task4_optimizer.csv":
-            time_ms = triton.testing.do_bench(
-                lambda: launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg), 
-                warmup=warmup, 
-                rep=rep
-            )
-        else: 
-            time_ms = triton.testing.do_bench(
-                lambda: launch_reference_config_kernel(A, B, C, tM, tN, tK), 
-                warmup=warmup, 
-                rep=rep
-            )
-    
-        flops = 2 * C.shape[0] * C.shape[1] * C.shape[2] * A.shape[2]
-        tflops = (flops / 1e12) / (time_ms / 1e3)
-    
-        print(f"c=4, m=n=k=4096, tm={tM}, tn={tN}, tk={tK}: {tflops:.2f} TFLOPS")
-        
-        records.append({
-            "dim_size": 4096,
-            "tM": tM,
-            "tN": tN,
-            "tK": tK,
-            "tflops": tflops
-        })
-        
-    df = pd.DataFrame(records)
-    df.to_csv(out_file, index=False)
+        # bind loop variables explicitly so the lambda captures values, not names
+        time_ms = triton.testing.do_bench(
+            lambda tM=tM, tN=tN, tK=tK: launch_fn(tM, tN, tK),
+            warmup=warmup,
+            rep=rep,
+        )
+
+        tflops = (2 * c * m * n * k / 1e12) / (time_ms / 1e3)
+        print(f"c={c}, m=n=k={m}, tm={tM}, tn={tN}, tk={tK}: {tflops:.2f} TFLOPS")
+
+        records.append({"dim_size": m, "tM": tM, "tN": tN, "tK": tK, "tflops": tflops})
+
+    pd.DataFrame(records).to_csv(out_file, index=False)
     
 
 def heatmap(tK, in_file, out_file):
@@ -245,7 +285,7 @@ if __name__ == "__main__":
     #    4 4096 4096 4096
     opt = Optimizer(cfg)
     
-    # L2 Size: 24MiB = 24 * 1024**3
+    # L2 Size: 24MiB = 24 * 1024**2
     l2_size = 24 * 1024**2
     print(f"L2 Cache Size: {l2_size}\n")
     
@@ -298,14 +338,33 @@ if __name__ == "__main__":
     
     # d) benchmarking
     C = torch.zeros_like(C)
+    launch_optimal_config_kernel(A, B, C, tM, tN, tK)
+    assert torch.allclose(C, C_torch.to(torch.float32), rtol=1e-2), "Lean kernel failed!"
+    print("Lean kernel passed!")
+    
+    C = torch.zeros_like(C)
     launch_reference_config_kernel(A, B, C, tM, tN, tK)
     
     assert torch.allclose(C, C_torch.to(torch.float32), rtol=1e-2), "Task 4c reference failed!"
     print("Kernel 4c reference passed!")
-    benchmarking(A, B, C, f"src/assignments/05_assignment/resources-05/task4_optimizer.csv")
-    # benchmarking(A, B, C, f"task4_reference.csv")
-    for k in [16, 32, 64, 128]:
-        heatmap(k, "src/assignments/05_assignment/resources-05/task4_optimizer.csv", 
-                f"src/assignments/05_assignment/resources-05/task4_k={k}_heatmap.png")
-        heatmap(k, "src/assignments/05_assignment/resources-05/task4_reference.csv", 
-                f"src/assignments/05_assignment/resources-05/task4_k={k}_heatmap_ref.png")
+    
+    path = "src/assignments/05_assignment/resources-05"
+    benchmarking(
+        lambda tM, tN, tK: launch_optimized_config_kernel(A, B, C, tM, tN, tK, cfg),
+        f"{path}/task4_optimizer.csv", c, m, n, k
+    )
+    benchmarking(
+        lambda tM, tN, tK: launch_reference_config_kernel(A, B, C, tM, tN, tK),
+        f"{path}/task4_reference.csv", c, m, n, k
+    )
+    benchmarking(
+        lambda tM, tN, tK: launch_optimal_config_kernel(A, B, C, tM, tN, tK),
+        f"{path}/task4_lean.csv", c, m, n, k
+    )
+    for tK in [16, 32, 64, 128]:
+        heatmap(tK, f"{path}/task4_optimizer.csv", 
+                f"{path}/task4_k={tK}_heatmap.png")
+        heatmap(tK, f"{path}/task4_reference.csv", 
+                f"{path}/task4_k={tK}_heatmap_ref.png")
+        heatmap(tK, f"{path}/task4_lean.csv",
+                f"{path}/task4_k={tK}_heatmap_lean.png")
