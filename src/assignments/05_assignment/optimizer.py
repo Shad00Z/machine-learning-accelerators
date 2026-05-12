@@ -80,18 +80,30 @@ class Optimizer:
         size_a = cfg.dim_sizes[dim_id_a]
         size_b = cfg.dim_sizes[dim_id_b]
 
-        # Step 1: check if the dims are contiguous in memory
+        # Step 1: check if the dims are contiguous in memory and have consistent relative order
+        a_is_outer_dim = 0
+        b_is_outer_dim = 0
         for tensor_id, strides in enumerate(cfg.strides):
             stride_a = strides[dim_id_a]
             stride_b = strides[dim_id_b]
             if stride_a == 0 or stride_b == 0:
                 continue  # at least one dim is not in this tensor, so no contiguity requirement
-            if not (stride_a == stride_b * size_b or stride_b == stride_a * size_a):
+            if stride_a == stride_b * size_b:
+                a_is_outer_dim += 1
+            elif stride_b == stride_a * size_a:
+                b_is_outer_dim += 1
+            else:
                 raise ValueError(
                     f"Dimensions {dim_id_a} (stride={stride_a}, size={size_a}) and "
                     f"{dim_id_b} (stride={stride_b}, size={size_b}) are not "
                     f"memory-contiguous in tensor {tensor_id}."
                 )
+        if a_is_outer_dim > 0 and b_is_outer_dim > 0:
+            raise ValueError(
+                f"Dimensions {dim_id_a} and {dim_id_b} have inconsistent relative order "
+                f"across tensors: some tensors have {dim_id_a} as outer, others have "
+                f"{dim_id_b} as outer."
+            )
 
         # Step 2: update strides
         for strides in cfg.strides:
