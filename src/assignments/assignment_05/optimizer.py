@@ -1,4 +1,4 @@
-from config import Config, DimType, ExecType
+from .config import Config, DimType, ExecType
 
 
 class Optimizer:
@@ -285,7 +285,7 @@ class Optimizer:
         return True  # passed all checks
 
 if __name__ == "__main__":
-    from config import generate_config
+    from .config import generate_config
 
     print("=== split_dim ===")
     cfg = generate_config("cmk,ckn->cmn", [(4, 4096, 4096), (4, 4096, 4096)])

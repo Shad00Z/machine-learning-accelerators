@@ -5,9 +5,9 @@ import pandas as pd
 import torch
 import triton
 
-from config import Config, ExecType, DimType
+from .config import Config, ExecType, DimType
 from typing import List, Tuple
-from utils import next_power_of_two
+from .utils import next_power_of_two
 
 ConstInt = ct.Constant[int]
 
@@ -175,8 +175,8 @@ def heatmap(tK, in_file, out_file):
 # -----------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from config import generate_config
-    from optimizer import Optimizer
+    from .config import generate_config
+    from .optimizer import Optimizer
     
     c = 4
     m, n, k = 4096, 4096, 4096
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     print("Kernel 4c reference passed!")
     
     # d) benchmarking
-    path = "src/assignments/05_assignment/resources-05"
+    path = "src/assignments/assignment_05/resources-05"
     benchmarking(
         lambda tM, tN, tK: launch_optimized_config_kernel(A, B, C, tM, tN, tK, m2, n2),
         f"{path}/task4_optimizer.csv", c, m, n, k
