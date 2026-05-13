@@ -3,6 +3,8 @@ import torch
 import opt_einsum # unused but required for torch.einsum memory optimization
 import matplotlib.pyplot as plt
 
+from src.assignments.assignment_05.config import Config, generate_config
+
 def plot_tensor(
     tensor,
     path='tensor_plot.png',
@@ -32,19 +34,27 @@ def plot_tensor(
     plt.tight_layout()
     plt.savefig(path, dpi=300)
     plt.close()
+    
+# -----------------------------------------------------------------------
+# Tasks - Shared Code
+# -----------------------------------------------------------------------
 
-if __name__ == "__main__":
+def main():
     # Load last two intermediate tensors from disk
     print("Loading intermediate tensors from disk...")
-    path = './src/assignments/06_assignment'
+    path = './src/assignments/assignment_06'
     data = np.load(f'{path}/data/lf_tr_64_intermediate.npz')
+    
+    # Task 1
+    
+    # FP32
     tensor_acspx_fp32 = torch.tensor(data['tensor_acspx'], device='cuda:0', dtype=torch.float32)
     tensor_bspy_fp32 = torch.tensor(data['tensor_bspy'], device='cuda:0', dtype=torch.float32)
+    tensor_abcyx_fp32 = torch.einsum("acspx,bspy->abcyx", tensor_acspx_fp32, tensor_bspy_fp32).to(device='cpu')
     
+    # FP16
     tensor_acspx_fp16 = torch.tensor(data['tensor_acspx'], device='cuda:0', dtype=torch.float16)
     tensor_bspy_fp16 = torch.tensor(data['tensor_bspy'], device='cuda:0', dtype=torch.float16)
-
-    tensor_abcyx_fp32 = torch.einsum("acspx,bspy->abcyx", tensor_acspx_fp32, tensor_bspy_fp32).to(device='cpu')
     tensor_abcyx_fp16 = torch.einsum("acspx,bspy->abcyx", tensor_acspx_fp16, tensor_bspy_fp16).to(device='cpu')
 
     plot_tensor(
@@ -58,5 +68,15 @@ if __name__ == "__main__":
         path=f'{path}/results/torch_16.png',
         title='Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP16'
     )
+    
+    # Task 2
+    
+    cfg = generate_config("acspx,bspy->abcyx", [tensor_acspx_fp16.shape, tensor_bspy_fp16.shape])
+    print("Task 2a:")
+    print(cfg)
 
     print( "Finished." )
+
+
+if __name__ == "__main__":
+    main()

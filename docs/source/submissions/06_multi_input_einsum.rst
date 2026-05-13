@@ -59,14 +59,52 @@ The visualization that is produced is a bulldozer.
     * - FP32 Bulldozer 
       - FP16 Bulldozer
 
-    * - .. image:: ../../../src/assignments/06_assignment/results/torch_32.png
+    * - .. image:: ../../../src/assignments/assignment_06/results/torch_32.png
            :width: 100%
 
-      - .. image:: ../../../src/assignments/06_assignment/results/torch_16.png
+      - .. image:: ../../../src/assignments/assignment_06/results/torch_16.png
            :width: 100%
 
 Both results show the bulldozer clearly.
 There are only minimal differences in the sharpness of the pictures.
 Therefore, we will use the ``torch.float16`` tensors for the following tasks.
 
+Task 2: Generating a Basic Config
+---------------------------------
 
+.. code-block:: bash
+    :caption: Execution from machine-learning-compilers directory
+
+    python3 -m src.assignments.assignment_06.main
+
+
+
+a) Generate an initial config
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To use the ``generate_config`` function we first import the respective function from the :ref:`config <config>` file from assignment 5. 
+We provide the ``generate_config`` function the entire einsum string ``acspx,bspy->abcyx`` and take the shape of the ``FP16`` input tensors.
+
+.. code-block:: python 
+
+    cfg = generate_config("acspx,bspy->abcyx", [tensor_acspx_fp16.shape, tensor_bspy_fp16.shape])
+
+b) Resulting config
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The resulting config for the einsum string looks as follows:
+
+.. code-block:: text
+
+    Config(
+      data_type  = DataType.FLOAT16
+      prim_main  = PrimType.GEMM
+      prim_last  = LastType.NONE
+      prim_first = FirstType.ZERO
+      dim_types  = ['M', 'M', 'K', 'K', 'M', 'N', 'N']
+      exec_types = ['SEQ', 'SEQ', 'SEQ', 'SEQ', 'SEQ', 'SEQ', 'SEQ']
+      dim_sizes  = [4, 3, 64, 64, 1536, 4, 1152]
+      strides[0] = [18874368, 6291456, 98304, 1536, 1, 0, 0]
+      strides[1] = [0, 0, 73728, 1152, 0, 4718592, 1]
+      strides[2] = [21233664, 1769472, 0, 0, 1, 5308416, 1536]
+    )

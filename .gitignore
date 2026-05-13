@@ -3,4 +3,4 @@ docs/build
 .venv/
 .idea/
 __pycache__
-src/assignments/06_assignment/data
+src/assignments/assignment_06/data
