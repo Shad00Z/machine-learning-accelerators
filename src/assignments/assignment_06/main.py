@@ -249,13 +249,13 @@ def main():
     cutile_result = triton.testing.do_bench(
         lambda: launch_multi_input_kernel(tensor_acspx_fp16.reshape(shape_A), tensor_bspy_fp16.reshape(shape_B), cutile_tensor_abcyx_fp32.reshape(shape_C)),
         warmup=warmup, rep=rep)
-    cutile_tflops = 2 * tensor_acspx_fp16.numel() * tensor_bspy_fp16.shape[2] / (cutile_result / 1000) / 1e12
+    cutile_tflops = 2 * cutile_tensor_abcyx_fp32.numel() * shape_A[2] * shape_A[3] / (cutile_result / 1000) / 1e12
     
     # Benchmark - PyTorch
     torch_result = triton.testing.do_bench(
         lambda: torch.einsum("acspx,bspy->abcyx", tensor_acspx_fp16, tensor_bspy_fp16),
         warmup=warmup, rep=rep)
-    torch_tflops = 2 * tensor_acspx_fp16.numel() * tensor_bspy_fp16.shape[2] / (torch_result / 1000) / 1e12
+    torch_tflops = 2 * tensor_abcyx_fp32.numel() * shape_A[2] * shape_A[3] / (torch_result / 1000) / 1e12
     
     print(f"cuTile Kernel Average Time: {cutile_result:.2f} ms")
     print(f"PyTorch Average Time: {torch_result:.2f} ms")
