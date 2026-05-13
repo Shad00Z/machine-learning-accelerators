@@ -64,3 +64,9 @@ The visualization that is produced is a bulldozer.
 
       - .. image:: ../../../src/assignments/06_assignment/results/torch_16.png
            :width: 100%
+
+Both results show the bulldozer clearly.
+There are only minimal differences in the sharpness of the pictures.
+Therefore, we will use the ``torch.float16`` tensors for the following tasks.
+
+
