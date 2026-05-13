@@ -77,8 +77,6 @@ Task 2: Generating a Basic Config
 
     python3 -m src.assignments.assignment_06.main
 
-
-
 a) Generate an initial config
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

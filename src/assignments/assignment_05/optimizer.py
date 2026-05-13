@@ -283,6 +283,31 @@ class Optimizer:
                 )
 
         return True  # passed all checks
+    
+    # -----------------------------------------------------------------------
+    # Ass-6: Task 3 - SEQ dims
+    # -----------------------------------------------------------------------
+    
+    def assign_seq_dims(self, dim_ids: list[int]):
+        """
+        Demote specific PAR dims to SEQ and re-permute to maintain
+        PAR > SEQ > PRIM ordering. Call after make_executable.
+        """
+        cfg = self.config
+        for i in dim_ids:
+            if cfg.exec_types[i] != ExecType.PAR:
+                raise ValueError(
+                    f"dim {i} has exec_type {cfg.exec_types[i]}, expected PAR"
+                )
+            if cfg.dim_types[i] == DimType.K:
+                raise ValueError(f"K dim {i} cannot be demoted to SEQ this way")
+            cfg.exec_types[i] = ExecType.SEQ
+
+        par_ids  = [i for i, e in enumerate(cfg.exec_types) if e == ExecType.PAR]
+        seq_ids  = [i for i, e in enumerate(cfg.exec_types) if e == ExecType.SEQ]
+        prim_ids = [i for i, e in enumerate(cfg.exec_types) if e == ExecType.PRIM]
+        self.permute_dims(par_ids + seq_ids + prim_ids)
+        self.verify()
 
 if __name__ == "__main__":
     from .config import generate_config
