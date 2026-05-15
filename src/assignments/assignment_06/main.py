@@ -45,47 +45,58 @@ def plot_tensor(
 # -----------------------------------------------------------------------
 
 @ct.kernel
-def multi_input_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
+def multi_input_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt, GROUP_M: ConstInt):
     
     bid = ct.bid(0)
-    
-    m2_par = bid % C.shape[6]
-    bid = bid // C.shape[6]
-    
-    n_par = bid % C.shape[1]
-    bid = bid // C.shape[1]
-    
-    m1_par = bid % C.shape[0]
 
-    for m1_seq in range(C.shape[5]):
-        for m2_seq in range(C.shape[2]):
-            for n_seq in range(C.shape[3]):
-                acc = ct.zeros((tM, tN), dtype=torch.float32)
-                
-                for k_seq in range(A.shape[2]):
-                    tile_A = ct.load(A, index=(m1_par, m2_seq, k_seq, 0, m1_seq, m2_par, 0), shape=(1, 1, 1, tK, 1, 1, tM), padding_mode=ct.PaddingMode.ZERO)
-                    tile_B = ct.load(B, index=(n_par, k_seq, 0, n_seq, 0), shape=(1, 1, tK, 1, tN), padding_mode=ct.PaddingMode.ZERO)
-                    
-                    # Reshape due to rank mismatch
-                    r_tile_A = ct.reshape(tile_A, (tK, tM))
-                    r_tile_A = ct.transpose(r_tile_A)
-                    r_tile_B = ct.reshape(tile_B, (tK, tN))
-                    
-                    acc = ct.mma(r_tile_A, r_tile_B, acc)
-            
-                o_acc = ct.reshape(ct.transpose(acc).astype(C.dtype), (1, 1, 1, 1, tN, 1, 1, tM))
-                ct.store(C, index=(m1_par, n_par, m2_seq, n_seq, 0, m1_seq, m2_par, 0), tile=o_acc)
+    # L2 swizzle on (x_o, y_o) ---------------------------------------------
+    num_x_o = C.shape[5]   # 12
+    num_y_o = C.shape[3]   #  9
+    plane   = num_x_o * num_y_o
+
+    mn_bid       = bid % plane
+    bid          = bid // plane
+    num_in_group = GROUP_M * num_y_o
+    group_id     = mn_bid // num_in_group
+    first_x_o    = group_id * GROUP_M
+    grp          = min(num_x_o - first_x_o, GROUP_M)
+    x_o_par      = first_x_o + (mn_bid % grp)
+    y_o_par      = (mn_bid % num_in_group) // grp
+
+    c_par = bid % C.shape[2]
+    bid   = bid // C.shape[2]
+    
+    b_par = bid % C.shape[1]
+    bid   = bid // C.shape[1]
+    
+    a_par = bid % C.shape[0]
+
+    acc = ct.zeros((tM, tN), dtype=torch.float32)
+    
+    for k_seq in range(A.shape[2]):
+        tile_A = ct.load(A, index=(a_par, c_par, k_seq, 0, x_o_par, 0), shape=(1, 1, 1, tK, 1, tM), padding_mode=ct.PaddingMode.ZERO)
+        tile_B = ct.load(B, index=(b_par, k_seq, y_o_par, 0, 0), shape=(1, 1, 1, tN, tK), padding_mode=ct.PaddingMode.ZERO)
+        
+        # Reshape due to rank mismatch
+        r_tile_A = ct.reshape(tile_A, (tK, tM))
+        r_tile_B = ct.reshape(tile_B, (tN, tK))
+        
+        acc = ct.mma(r_tile_B, r_tile_A, acc)
+
+    o_acc = ct.reshape(acc.astype(C.dtype), (1, 1, 1, 1, tN, 1, tM))
+    ct.store(C, index=(a_par, b_par, c_par, y_o_par, 0,x_o_par, 0), tile=o_acc)
     return
 
 
 def launch_multi_input_kernel(A, B, C):
 
-    grid = (C.shape[0] * C.shape[1] * C.shape[6], 1, 1)
+    grid = (C.shape[0] * C.shape[1] * C.shape[2] * C.shape[3] * C.shape[5], 1, 1)
+    B_perm = B.permute(0, 1, 3, 4, 2)
 
     ct.launch(torch.cuda.current_stream(),
               grid,
               multi_input_kernel,
-              (A, B, C, C.shape[7], C.shape[4], A.shape[3]))
+              (A, B_perm, C, C.shape[6], C.shape[4], A.shape[3], 9))
     return
     
 # -----------------------------------------------------------------------
@@ -194,9 +205,6 @@ def main():
     print("Task 3 - Optimized Config:")
     opt = Optimizer(cfg)
     
-    l2_size = 24 * 1024**2
-    print(f"L2 Cache Size: {l2_size}\n")
-    
     # Step 1: Find PRIM dimensions
     # M = 128, N = 128, K = 64
     
@@ -207,36 +215,12 @@ def main():
     opt.split_dim(4, m1, m2)
     opt.make_executable()
     
-    # Step 2: L2 Cache Size
-    # Split: M = 12 into 3 * 4
-    opt.split_dim(2, 3, 4)
-    
-    # Fuse:  M = 3 and M = 3
-    # opt.fuse_dims(1, 2)
-    opt.make_executable()
-    
-    a_tile = (9 * m2) * (64 * 64) * 2
-    b_tile = (64 * 64) * (n2 * 9) * 2
-    c_tile = (9 * m2) * (n2 * 9) * 4
-    
-    total_bytes = a_tile + b_tile + c_tile
-    diff = l2_size - total_bytes
-    assert diff > 0, f"Tile size exceeds L2 cache size by {-diff} bytes"
-    print(f"Diff: {diff}")
-    
-    # Select SEQ dims for m1_l2, m2_l2 and n_l2
-    opt.assign_seq_dims([1, 2, 5])
-    print(cfg)
-    
-    print("Kernel mapping")
-    print_kernel_mapping(cfg)
-    
     # Task 4
     shape_A = get_tensor_shape(cfg, t_idx=0)
     shape_B = get_tensor_shape(cfg, t_idx=1)
     shape_C = get_tensor_shape(cfg, t_idx=2)
     
-    print_config_information(cfg)
+    # print_config_information(cfg)
     
     cutile_tensor_abcyx_fp32 = torch.zeros_like(tensor_abcyx_fp32, device='cuda:0')
     launch_multi_input_kernel(tensor_acspx_fp16.reshape(shape_A), tensor_bspy_fp16.reshape(shape_B), cutile_tensor_abcyx_fp32.reshape(shape_C))
