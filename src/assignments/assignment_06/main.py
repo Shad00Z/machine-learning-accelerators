@@ -48,33 +48,34 @@ def plot_tensor(
 def multi_input_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt, GROUP_M: ConstInt):
     
     bid = ct.bid(0)
-
-    # L2 swizzle on (x_o, y_o) ---------------------------------------------
-    num_x_o = C.shape[5]   # 12
-    num_y_o = C.shape[3]   #  9
-    plane   = num_x_o * num_y_o
-
-    mn_bid       = bid % plane
-    bid          = bid // plane
-    num_in_group = GROUP_M * num_y_o
-    group_id     = mn_bid // num_in_group
-    first_x_o    = group_id * GROUP_M
-    grp          = min(num_x_o - first_x_o, GROUP_M)
-    x_o_par      = first_x_o + (mn_bid % grp)
-    y_o_par      = (mn_bid % num_in_group) // grp
+    
+    x_o_par = bid % C.shape[4]
+    bid = bid // C.shape[4]
+    
+    y_o_par = bid % C.shape[3]
+    bid = bid //  C.shape[3]
 
     c_par = bid % C.shape[2]
     bid   = bid // C.shape[2]
     
-    b_par = bid % C.shape[1]
-    bid   = bid // C.shape[1]
-    
-    a_par = bid % C.shape[0]
+    # L2 swizzle (n_outer, m_outer)
+    num_n_o = C.shape[1]   # 4
+    num_m_o = C.shape[0]   # 4
+    plane   = num_n_o * num_m_o
+
+    mn_bid       = bid % plane
+    bid          = bid // plane
+    num_in_group = GROUP_M * num_m_o
+    group_id     = mn_bid // num_in_group
+    first_x_o    = group_id * GROUP_M
+    grp          = min(num_n_o - first_x_o, GROUP_M)
+    b_par        = first_x_o + (mn_bid % grp)
+    a_par        = (mn_bid % num_in_group) // grp
 
     acc = ct.zeros((tM, tN), dtype=torch.float32)
     
     for k_seq in range(A.shape[2]):
-        tile_A = ct.load(A, index=(a_par, c_par, k_seq, 0, x_o_par, 0), shape=(1, 1, 1, tK, 1, tM), padding_mode=ct.PaddingMode.ZERO)
+        tile_A = ct.load(A, index=(a_par, c_par, k_seq, x_o_par, 0, 0), shape=(1, 1, 1, 1, tK, tM), padding_mode=ct.PaddingMode.ZERO)
         tile_B = ct.load(B, index=(b_par, k_seq, y_o_par, 0, 0), shape=(1, 1, 1, tN, tK), padding_mode=ct.PaddingMode.ZERO)
         
         # Reshape due to rank mismatch
@@ -83,40 +84,24 @@ def multi_input_kernel(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt, GROUP_
         
         acc = ct.mma(r_tile_B, r_tile_A, acc)
 
-    o_acc = ct.reshape(acc.astype(C.dtype), (1, 1, 1, 1, tN, 1, tM))
-    ct.store(C, index=(a_par, b_par, c_par, y_o_par, 0,x_o_par, 0), tile=o_acc)
+    o_acc = ct.reshape(acc.astype(C.dtype), (1, 1, 1, 1, 1, tN, tM))
+    ct.store(C, index=(a_par, b_par, c_par, y_o_par, x_o_par, 0, 0), tile=o_acc)
     return
 
 
 def launch_multi_input_kernel(A, B, C):
 
-    grid = (C.shape[0] * C.shape[1] * C.shape[2] * C.shape[3] * C.shape[5], 1, 1)
-    B_perm = B.permute(0, 1, 3, 4, 2)
+    grid = (C.shape[0] * C.shape[1] * C.shape[2] * C.shape[3] * C.shape[4], 1, 1)
 
     ct.launch(torch.cuda.current_stream(),
               grid,
               multi_input_kernel,
-              (A, B_perm, C, C.shape[6], C.shape[4], A.shape[3], 9))
+              (A, B, C, C.shape[6], C.shape[5], A.shape[4], 8))
     return
     
 # -----------------------------------------------------------------------
 # Tasks - Shared Code
 # -----------------------------------------------------------------------
-
-def print_kernel_mapping(cfg):
-    """Prints exactly which tensor position maps to which role."""
-    tensor_names = ["A", "B", "C"]
-    for t_idx, name in enumerate(tensor_names):
-        t_strides = cfg.strides[t_idx]
-        dims = [(i, cfg.dim_sizes[i], cfg.dim_types[i].value,
-                 cfg.exec_types[i].value, t_strides[i])
-                for i in range(len(cfg.dim_sizes)) if t_strides[i] != 0]
-        dims.sort(key=lambda x: -x[4])
-        print(f"{name}: shape={[d[1] for d in dims]}")
-        for pos, (i, sz, dt, et, st) in enumerate(dims):
-            print(f"  [{name}[{pos}]] cfg_dim={i}  size={sz}  type={dt}  exec={et}  stride={st}")
-        print()
-        
 
 def print_config_information(cfg):
     tensor_names = ["A (input 0)", "B (input 1)", "C (output)"]
@@ -170,7 +155,9 @@ def main():
     path = './src/assignments/assignment_06'
     data = np.load(f'{path}/data/lf_tr_64_intermediate.npz')
     
-    # Task 1
+    # -----------------------------------------------------------------------
+    # Task 1 
+    # -----------------------------------------------------------------------
     
     # FP32
     tensor_acspx_fp32 = torch.tensor(data['tensor_acspx'], device='cuda:0', dtype=torch.float32)
@@ -182,24 +169,29 @@ def main():
     tensor_bspy_fp16 = torch.tensor(data['tensor_bspy'], device='cuda:0', dtype=torch.float16)
     tensor_abcyx_fp16 = torch.einsum("acspx,bspy->abcyx", tensor_acspx_fp16, tensor_bspy_fp16).to(device='cpu')
 
-    # plot_tensor(
-    #     tensor_abcyx_fp32,
-    #     path=f'{path}/results/torch_32.png',
-    #     title='Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP32'
-    # )
+    plot_tensor(
+        tensor_abcyx_fp32,
+        path=f'{path}/results/torch_32.png',
+        title='Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP32'
+    )
     
-    # plot_tensor(
-    #     tensor_abcyx_fp16,
-    #     path=f'{path}/results/torch_16.png',
-    #     title='Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP16'
-    # )
+    plot_tensor(
+        tensor_abcyx_fp16,
+        path=f'{path}/results/torch_16.png',
+        title='Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP16'
+    )
     
-    # Task 2
+    # -----------------------------------------------------------------------
+    # Task 2 
+    # -----------------------------------------------------------------------
+    
     print("Task 2 - Initial Config:")
     cfg = generate_config("acspx,bspy->abcyx", [tensor_acspx_fp16.shape, tensor_bspy_fp16.shape])
     print(cfg)
     
-    # Task 3
+    # -----------------------------------------------------------------------
+    # Task 3 
+    # -----------------------------------------------------------------------
     #   M   M    K   K     M    N      N
     #   4   3   64  64  1536    4   1152
     print("Task 3 - Optimized Config:")
@@ -214,24 +206,45 @@ def main():
     m1, m2 = 12, 128
     opt.split_dim(4, m1, m2)
     opt.make_executable()
+    print(cfg)
     
-    # Task 4
+    print("------- Config information -------")
+    print_config_information(cfg)
+    
+    # -----------------------------------------------------------------------
+    # Task 4 
+    # -----------------------------------------------------------------------
+    
+    ref = torch.einsum("acspx,bspy->abcyx", tensor_acspx_fp32, tensor_bspy_fp32).to(device='cuda:0')
+    
     shape_A = get_tensor_shape(cfg, t_idx=0)
     shape_B = get_tensor_shape(cfg, t_idx=1)
     shape_C = get_tensor_shape(cfg, t_idx=2)
     
-    # print_config_information(cfg)
-    
     cutile_tensor_abcyx_fp32 = torch.zeros_like(tensor_abcyx_fp32, device='cuda:0')
-    launch_multi_input_kernel(tensor_acspx_fp16.reshape(shape_A), tensor_bspy_fp16.reshape(shape_B), cutile_tensor_abcyx_fp32.reshape(shape_C))
-    assert torch.allclose(tensor_abcyx_fp32.to(device='cuda:0').to(torch.float32), cutile_tensor_abcyx_fp32, atol=1e-2), "Task 4b failed"
+    
+    # Reshape for better strides and PRIM dim positions
+    res_A = tensor_acspx_fp16.reshape(shape_A)
+    per_res_A = res_A.permute(0, 1, 2, 4, 3, 5).contiguous()
+    res_B = tensor_bspy_fp16.reshape(shape_B)
+    per_res_B = res_B.permute(0, 1, 3, 4, 2).contiguous()
+    res_C = cutile_tensor_abcyx_fp32.reshape(shape_C)
+    per_res_C = res_C.permute(0, 1, 2, 3, 5, 4, 6).contiguous()
+
+    launch_multi_input_kernel(per_res_A, per_res_B, per_res_C)
+
+    # Restore shape for comparison
+    result_C = per_res_C.permute(0, 1, 2, 3, 5, 4, 6).contiguous()
+    res_result_C = result_C.reshape(cutile_tensor_abcyx_fp32.shape)
+
+    assert torch.allclose(ref, res_result_C, atol=1e-2), "Task 4b failed"
     print("Kernel 4b passed!")
 
     # Benchmark - cuTile
     cutile_tensor_abcyx_fp32 = torch.zeros_like(tensor_abcyx_fp32, device='cuda:0')
     warmup, rep = 200, 2000
     cutile_result = triton.testing.do_bench(
-        lambda: launch_multi_input_kernel(tensor_acspx_fp16.reshape(shape_A), tensor_bspy_fp16.reshape(shape_B), cutile_tensor_abcyx_fp32.reshape(shape_C)),
+        lambda: launch_multi_input_kernel(per_res_A, per_res_B, per_res_C),
         warmup=warmup, rep=rep)
     cutile_tflops = 2 * cutile_tensor_abcyx_fp32.numel() * shape_A[2] * shape_A[3] / (cutile_result / 1000) / 1e12
     

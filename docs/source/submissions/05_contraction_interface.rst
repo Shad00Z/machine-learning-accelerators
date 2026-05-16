@@ -102,6 +102,8 @@ We start with the rightmost index for a tensor and assign the value 1.
 To calculate the strides we go from the rightmost to the leftmost index for each tensor.
 Afterwards we multiply the size of the respective tensor (e.g. the rightmost) with the current stride and thereby receive the stride for next dimension index.
 
+.. _optimizer:
+
 Task 3: Optimizer Class
 -----------------------
 

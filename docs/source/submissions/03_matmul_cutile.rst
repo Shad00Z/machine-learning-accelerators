@@ -116,6 +116,7 @@ For the ``2048`` x ``2048`` matrices the distinction between the results are mor
 
 If we cross-reference these results the tile shape that performs best on average is ``(128, 64, 128)``, ranking 5th, 2nd and 2nd in all three measurements. 
 
+.. _cache_swizzle:
 
 Task 4: L2 Cache Optimization via Block Swizzling
 -------------------------------------------------
