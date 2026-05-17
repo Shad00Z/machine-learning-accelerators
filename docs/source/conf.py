@@ -14,7 +14,8 @@ author = 'Lucas Obitz, Luca-Philipp Grumbach'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx_rtd_theme'
+    'sphinx_rtd_theme',
+    'sphinx_copybutton'
 ]
 
 templates_path = ['_templates']

@@ -1,0 +1,212 @@
+==PROF== Connected to process 834829 (/usr/bin/python3.12)
+==PROF== Profiling "multi_input_kernel": 0%....50%....100% - 21 passes
+Loading intermediate tensors from disk...
+Task 2 - Initial Config:
+Config(
+  data_type  = DataType.FLOAT16
+  prim_main  = PrimType.GEMM
+  prim_last  = LastType.NONE
+  prim_first = FirstType.ZERO
+  dim_types  = ['M', 'M', 'K', 'K', 'M', 'N', 'N']
+  exec_types = ['SEQ', 'SEQ', 'SEQ', 'SEQ', 'SEQ', 'SEQ', 'SEQ']
+  dim_sizes  = [4, 3, 64, 64, 1536, 4, 1152]
+  strides[0] = [18874368, 6291456, 98304, 1536, 1, 0, 0]
+  strides[1] = [0, 0, 73728, 1152, 0, 4718592, 1]
+  strides[2] = [21233664, 1769472, 0, 0, 1, 5308416, 1536]
+)
+Task 3 - Optimized Config:
+Config(
+  data_type  = DataType.FLOAT16
+  prim_main  = PrimType.GEMM
+  prim_last  = LastType.NONE
+  prim_first = FirstType.ZERO
+  dim_types  = ['M', 'M', 'M', 'N', 'N', 'K', 'K', 'M', 'N']
+  exec_types = ['PAR', 'PAR', 'PAR', 'PAR', 'PAR', 'SEQ', 'PRIM', 'PRIM', 'PRIM']
+  dim_sizes  = [4, 3, 12, 4, 9, 64, 64, 128, 128]
+  strides[0] = [18874368, 6291456, 128, 0, 0, 98304, 1536, 1, 0]
+  strides[1] = [0, 0, 0, 4718592, 128, 73728, 1152, 0, 1]
+  strides[2] = [21233664, 1769472, 128, 5308416, 196608, 0, 0, 1, 1536]
+)
+------- Config information -------
+A (input 0):
+  shape      = [4, 3, 64, 64, 12, 128]
+  total elems= 75,497,472
+  size bytes = 150,994,944
+  dims:
+    dim[0]: size=   4  type=M  exec=PAR   stride=18874368
+    dim[1]: size=   3  type=M  exec=PAR   stride=6291456
+    dim[5]: size=  64  type=K  exec=SEQ   stride=98304
+    dim[6]: size=  64  type=K  exec=PRIM  stride=1536
+    dim[2]: size=  12  type=M  exec=PAR   stride=128
+    dim[7]: size= 128  type=M  exec=PRIM  stride=1
+
+B (input 1):
+  shape      = [4, 64, 64, 9, 128]
+  total elems= 18,874,368
+  size bytes = 37,748,736
+  dims:
+    dim[3]: size=   4  type=N  exec=PAR   stride=4718592
+    dim[5]: size=  64  type=K  exec=SEQ   stride=73728
+    dim[6]: size=  64  type=K  exec=PRIM  stride=1152
+    dim[4]: size=   9  type=N  exec=PAR   stride=128
+    dim[8]: size= 128  type=N  exec=PRIM  stride=1
+
+C (output):
+  shape      = [4, 4, 3, 9, 128, 12, 128]
+  total elems= 84,934,656
+  size bytes = 169,869,312
+  dims:
+    dim[0]: size=   4  type=M  exec=PAR   stride=21233664
+    dim[3]: size=   4  type=N  exec=PAR   stride=5308416
+    dim[1]: size=   3  type=M  exec=PAR   stride=1769472
+    dim[4]: size=   9  type=N  exec=PAR   stride=196608
+    dim[8]: size= 128  type=N  exec=PRIM  stride=1536
+    dim[2]: size=  12  type=M  exec=PAR   stride=128
+    dim[7]: size= 128  type=M  exec=PRIM  stride=1
+
+Kernel 4b passed!
+==PROF== Disconnected from process 834829
+[834829] python3.12@127.0.0.1
+  multi_input_kernel (5184, 1, 1)x(384, 1, 1), Context 1, Stream 7, Device 0, CC 12.1
+    Section: Tile Statistics
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Size (Chosen by Compiler)                      384
+    Cluster Size                                           0
+    Launch Execution Model                       Tile (Tile)
+    #Thread Blocks Launched                            5,184
+    #Tile Blocks Specified                             5,184
+    Blocks as Clusters                                     0
+    ------------------------------- ----------- ------------
+
+    INF   One thread block is mapped to execute one tile block instructions.                                            
+
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- -------------
+    Metric Name             Metric Unit  Metric Value
+    ----------------------- ----------- -------------
+    SM Frequency                    Ghz          2.41
+    Elapsed Cycles                cycle    35,631,056
+    Memory Throughput                 %         56.76
+    Duration                         ms         14.79
+    L1/TEX Cache Throughput           %         28.38
+    L2 Cache Throughput               %         56.76
+    SM Active Cycles              cycle 37,717,130.62
+    Compute (SM) Throughput           %         39.73
+    ----------------------- ----------- -------------
+
+    OPT   This workload exhibits low compute throughput and memory bandwidth utilization relative to the peak           
+          performance of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak           
+          typically indicate latency issues. Look at Scheduler Statistics and Warp State Statistics for potential       
+          reasons.                                                                                                      
+
+    Section: GPU Speed Of Light Roofline Chart (Overview)
+    INF   The ratio of peak float (FP32) to double (FP64) performance on this device is 64:1. The workload achieved 0%  
+          of this device's FP32 peak performance and 0% of its FP64 peak performance. See the Profiling Guide           
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline) for more details on roofline      
+          analysis.                                                                                                     
+
+    Section: Compute Workload Analysis
+    -------------------- ----------- ------------
+    Metric Name          Metric Unit Metric Value
+    -------------------- ----------- ------------
+    Executed Ipc Active   inst/cycle         0.82
+    Executed Ipc Elapsed  inst/cycle         0.86
+    Issue Slots Busy               %        21.69
+    Issued Ipc Active     inst/cycle         0.82
+    SM Busy                        %        39.73
+    -------------------- ----------- ------------
+
+    Section: Memory Workload Analysis
+    --------------------------------------- ----------- ------------
+    Metric Name                             Metric Unit Metric Value
+    --------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                        79,287,803
+    Local Memory Spilling Request Overhead            %          100
+    L2 Sector Promotion Misses                        %            0
+    Shared Memory Spilling Requests                                0
+    Shared Memory Spilling Request Overhead           %            0
+    Mem Busy                                          %        56.76
+    Max Bandwidth                                     %        48.34
+    L1/TEX Hit Rate                                   %        21.34
+    L2 Persisting Size                            Mbyte         4.72
+    L2 Compression Success Rate                       %            0
+    L2 Compression Ratio                                           0
+    L2 Compression Input Sectors                 sector            0
+    L2 Hit Rate                                       %        90.69
+    Mem Pipes Busy                                    %        26.34
+    --------------------------------------- ----------- ------------
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   384
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  5,184
+    Preferred Cluster Size                                         0
+    Registers Per Thread             register/thread             168
+    Shared Memory Configuration Size           Kbyte          102.40
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block           98.40
+    # SMs                                         SM              48
+    Stack Size                                                 1,024
+    Threads                                   thread       1,990,656
+    # TPCs                                                        24
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                 108
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           24
+    Block Limit SM                        block           24
+    Block Limit Registers                 block            1
+    Block Limit Shared Mem                block            1
+    Block Limit Warps                     block            4
+    Theoretical Active Warps per SM        warp           12
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        17.38
+    Achieved Active Warps Per SM           warp         8.34
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 3.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 12. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers, and the required amount of shared memory.                                                          
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- -------------
+    Metric Name                Metric Unit  Metric Value
+    -------------------------- ----------- -------------
+    Average L1 Active Cycles         cycle 37,717,130.62
+    Total L1 Elapsed Cycles          cycle 1,710,065,520
+    Average L2 Active Cycles         cycle 33,495,274.06
+    Total L2 Elapsed Cycles          cycle   512,979,552
+    Average SM Active Cycles         cycle 37,717,130.62
+    Total SM Elapsed Cycles          cycle 1,710,065,520
+    Average SMSP Active Cycles       cycle 38,053,075.61
+    Total SMSP Elapsed Cycles        cycle 6,840,262,080
+    -------------------------- ----------- -------------
+
+    Section: Source Counters
+    ------------------------- ----------- ------------
+    Metric Name               Metric Unit Metric Value
+    ------------------------- ----------- ------------
+    Branch Instructions Ratio           %         0.02
+    Branch Instructions              inst   24,095,744
+    Branch Efficiency                   %        99.97
+    Avg. Divergent Branches      branches           27
+    ------------------------- ----------- ------------
+
