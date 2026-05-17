@@ -9,6 +9,7 @@
   <title>Matrix Multiplication with cuTile &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -16,6 +17,8 @@
       <script src="../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
       <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -61,6 +64,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
 </ul>
 
         </div>
@@ -215,7 +219,7 @@ For the <code class="docutils literal notranslate"><span class="pre">256</span><
 <p>If we cross-reference these results the tile shape that performs best on average is <code class="docutils literal notranslate"><span class="pre">(128,</span> <span class="pre">64,</span> <span class="pre">128)</span></code>, ranking 5th, 2nd and 2nd in all three measurements.</p>
 </section>
 <section id="task-4-l2-cache-optimization-via-block-swizzling">
-<h2>Task 4: L2 Cache Optimization via Block Swizzling<a class="headerlink" href="#task-4-l2-cache-optimization-via-block-swizzling" title="Link to this heading"></a></h2>
+<span id="cache-swizzle"></span><h2>Task 4: L2 Cache Optimization via Block Swizzling<a class="headerlink" href="#task-4-l2-cache-optimization-via-block-swizzling" title="Link to this heading"></a></h2>
 <section id="a">
 <h3>a)<a class="headerlink" href="#a" title="Link to this heading"></a></h3>
 <p>The important part for this task was to recalculate the block IDs for <code class="docutils literal notranslate"><span class="pre">m</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code>:</p>

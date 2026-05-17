@@ -1,0 +1,521 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Input Einsum Contraction &mdash; Machine Learning Accelerators  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Contraction Interface and L2 Optimization" href="05_contraction_interface.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Machine Learning Accelerators
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Multi-Input Einsum Contraction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#task-1-pytorch-reference-contraction">Task 1: PyTorch Reference Contraction</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-classification">a) Classification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-einsum-contraction-tensor-abcyx">b) Einsum contraction <code class="docutils literal notranslate"><span class="pre">tensor_abcyx</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c-visualize-fp16-and-fp32-results">c) Visualize <code class="docutils literal notranslate"><span class="pre">FP16</span></code> and <code class="docutils literal notranslate"><span class="pre">FP32</span></code> Results</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-2-generating-a-basic-config">Task 2: Generating a Basic Config</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-generate-an-initial-config">a) Generate an initial config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-resulting-config">b) Resulting config</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-3-optimized-config">Task 3: Optimized Config</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-apply-optimizations">a) Apply Optimizations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-resulting-optimizer-config">b) Resulting optimizer Config</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-4-cutile-kernel">Task 4: cuTile Kernel</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-contraction">a) Contraction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-verification">b) Verification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c-benchmarking">c) Benchmarking</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#optional-task-further-optimizing-the-cutile-kernel">Optional Task: Further Optimizing the cuTile Kernel</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#approach-sole-splitting">1) Approach: Sole Splitting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#approach-splitting-fusing">2) Approach: Splitting + Fusing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#approach-changed-memory-layout-splitting">3) Approach: Changed Memory Layout + Splitting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#approach-splitting-permuting">4) Approach: Splitting + Permuting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-approaches">5) Other Approaches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#approach-final">6) Approach: Final</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Machine Learning Accelerators</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Multi-Input Einsum Contraction</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/submissions/06_multi_input_einsum.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="multi-input-einsum-contraction">
+<h1>Multi-Input Einsum Contraction<a class="headerlink" href="#multi-input-einsum-contraction" title="Link to this heading"></a></h1>
+<section id="task-1-pytorch-reference-contraction">
+<h2>Task 1: PyTorch Reference Contraction<a class="headerlink" href="#task-1-pytorch-reference-contraction" title="Link to this heading"></a></h2>
+<section id="a-classification">
+<h3>a) Classification<a class="headerlink" href="#a-classification" title="Link to this heading"></a></h3>
+<p>The tensor indices can be classified as:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">M</span></code>: <code class="docutils literal notranslate"><span class="pre">a,</span> <span class="pre">c,</span> <span class="pre">x</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">N</span></code>: <code class="docutils literal notranslate"><span class="pre">b,</span> <span class="pre">y</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">K</span></code>: <code class="docutils literal notranslate"><span class="pre">s,</span> <span class="pre">p</span></code></p></li>
+</ul>
+</section>
+<section id="b-einsum-contraction-tensor-abcyx">
+<h3>b) Einsum contraction <code class="docutils literal notranslate"><span class="pre">tensor_abcyx</span></code><a class="headerlink" href="#b-einsum-contraction-tensor-abcyx" title="Link to this heading"></a></h3>
+<p>The einsum expression can be written as: <code class="docutils literal notranslate"><span class="pre">acspx,bspy-&gt;abcyx</span></code>.</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">Einsum contraction</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tensor_acspx_fp32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;tensor_acspx&#39;</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="n">tensor_bspy_fp32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;tensor_bspy&#39;</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+<span class="n">tensor_acspx_fp16</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;tensor_acspx&#39;</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
+<span class="n">tensor_bspy_fp16</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;tensor_bspy&#39;</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
+
+<span class="n">tensor_abcyx_fp32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;acspx,bspy-&gt;abcyx&quot;</span><span class="p">,</span> <span class="n">tensor_acspx_fp32</span><span class="p">,</span> <span class="n">tensor_bspy_fp32</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
+<span class="n">tensor_abcyx_fp16</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;acspx,bspy-&gt;abcyx&quot;</span><span class="p">,</span> <span class="n">tensor_acspx_fp16</span><span class="p">,</span> <span class="n">tensor_bspy_fp16</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</section>
+<section id="c-visualize-fp16-and-fp32-results">
+<h3>c) Visualize <code class="docutils literal notranslate"><span class="pre">FP16</span></code> and <code class="docutils literal notranslate"><span class="pre">FP32</span></code> Results<a class="headerlink" href="#c-visualize-fp16-and-fp32-results" title="Link to this heading"></a></h3>
+<p>The two calculated results for the einsum expression are simply passed to the <code class="docutils literal notranslate"><span class="pre">plot_tensor()</span></code> function.</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Creating visualizations</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">plot_tensor</span><span class="p">(</span>
+    <span class="n">tensor_abcyx_fp32</span><span class="p">,</span>
+    <span class="n">path</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s1">/results/torch_32.png&#39;</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP32&#39;</span>
+<span class="p">)</span>
+
+<span class="n">plot_tensor</span><span class="p">(</span>
+    <span class="n">tensor_abcyx_fp16</span><span class="p">,</span>
+    <span class="n">path</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s1">/results/torch_16.png&#39;</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Lightfield Tensorring Decomposition - All Ranks: 64 - PyTorch - FP16&#39;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>The visualization that is produced is a bulldozer.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 50.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>FP32 Bulldozer</p></th>
+<th class="head"><p>FP16 Bulldozer</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><a class="reference internal image-reference" href="../_images/torch_32.png"><img alt="../_images/torch_32.png" src="../_images/torch_32.png" style="width: 100%;" />
+</a>
+</td>
+<td><a class="reference internal image-reference" href="../_images/torch_16.png"><img alt="../_images/torch_16.png" src="../_images/torch_16.png" style="width: 100%;" />
+</a>
+</td>
+</tr>
+</tbody>
+</table>
+<p>Both results show the bulldozer clearly.
+There are only minimal differences in the sharpness of the pictures.
+Therefore, we will use the <code class="docutils literal notranslate"><span class="pre">torch.float16</span></code> tensors for the following tasks.</p>
+</section>
+</section>
+<section id="task-2-generating-a-basic-config">
+<h2>Task 2: Generating a Basic Config<a class="headerlink" href="#task-2-generating-a-basic-config" title="Link to this heading"></a></h2>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">Execution from machine-learning-accelerators directory</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>src.assignments.assignment_06.main
+</pre></div>
+</div>
+</div>
+<section id="a-generate-an-initial-config">
+<h3>a) Generate an initial config<a class="headerlink" href="#a-generate-an-initial-config" title="Link to this heading"></a></h3>
+<p>To use the <code class="docutils literal notranslate"><span class="pre">generate_config</span></code> function we first import the respective function from the <a class="reference internal" href="05_contraction_interface.html#config"><span class="std std-ref">config</span></a> file from assignment 5.
+We provide the <code class="docutils literal notranslate"><span class="pre">generate_config</span></code> function the entire einsum string <code class="docutils literal notranslate"><span class="pre">acspx,bspy-&gt;abcyx</span></code> and take the shape of the <code class="docutils literal notranslate"><span class="pre">FP16</span></code> input tensors.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">cfg</span> <span class="o">=</span> <span class="n">generate_config</span><span class="p">(</span><span class="s2">&quot;acspx,bspy-&gt;abcyx&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">tensor_acspx_fp16</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">tensor_bspy_fp16</span><span class="o">.</span><span class="n">shape</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="b-resulting-config">
+<h3>b) Resulting config<a class="headerlink" href="#b-resulting-config" title="Link to this heading"></a></h3>
+<p>The resulting config for the einsum string looks as follows:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Config(
+  data_type  = DataType.FLOAT16
+  prim_main  = PrimType.GEMM
+  prim_last  = LastType.NONE
+  prim_first = FirstType.ZERO
+  dim_types  = [&#39;M&#39;, &#39;M&#39;, &#39;K&#39;, &#39;K&#39;, &#39;M&#39;, &#39;N&#39;, &#39;N&#39;]
+  exec_types = [&#39;SEQ&#39;, &#39;SEQ&#39;, &#39;SEQ&#39;, &#39;SEQ&#39;, &#39;SEQ&#39;, &#39;SEQ&#39;, &#39;SEQ&#39;]
+  dim_sizes  = [4, 3, 64, 64, 1536, 4, 1152]
+  strides[0] = [18874368, 6291456, 98304, 1536, 1, 0, 0]
+  strides[1] = [0, 0, 73728, 1152, 0, 4718592, 1]
+  strides[2] = [21233664, 1769472, 0, 0, 1, 5308416, 1536]
+)
+</pre></div>
+</div>
+</section>
+</section>
+<section id="task-3-optimized-config">
+<h2>Task 3: Optimized Config<a class="headerlink" href="#task-3-optimized-config" title="Link to this heading"></a></h2>
+<section id="a-apply-optimizations">
+<h3>a) Apply Optimizations<a class="headerlink" href="#a-apply-optimizations" title="Link to this heading"></a></h3>
+<p>To apply the optimizations to the config object, we pass it to the <a class="reference internal" href="05_contraction_interface.html#optimizer"><span class="std std-ref">Optimizer</span></a> class.
+Afterwards we split the <code class="docutils literal notranslate"><span class="pre">M=1536</span></code> and the <code class="docutils literal notranslate"><span class="pre">N=1152</span></code> dimensions into a <code class="docutils literal notranslate"><span class="pre">PRIM</span></code> and a <code class="docutils literal notranslate"><span class="pre">PAR</span></code> dimension.
+The last step is to make the configuration executable.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">opt</span> <span class="o">=</span> <span class="n">Optimizer</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
+
+<span class="n">n1</span><span class="p">,</span> <span class="n">n2</span> <span class="o">=</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">128</span>
+<span class="n">opt</span><span class="o">.</span><span class="n">split_dim</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="n">n1</span><span class="p">,</span> <span class="n">n2</span><span class="p">)</span>
+
+<span class="n">m1</span><span class="p">,</span> <span class="n">m2</span> <span class="o">=</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">128</span>
+<span class="n">opt</span><span class="o">.</span><span class="n">split_dim</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">)</span>
+<span class="n">opt</span><span class="o">.</span><span class="n">make_executable</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="b-resulting-optimizer-config">
+<h3>b) Resulting optimizer Config<a class="headerlink" href="#b-resulting-optimizer-config" title="Link to this heading"></a></h3>
+<p>The resulting optimized config for the einsum string looks as follows:</p>
+<div class="highlight-text notranslate" id="opt-config"><div class="highlight"><pre><span></span>Config(
+  data_type  = DataType.FLOAT16
+  prim_main  = PrimType.GEMM
+  prim_last  = LastType.NONE
+  prim_first = FirstType.ZERO
+  dim_types  = [&#39;M&#39;, &#39;M&#39;, &#39;M&#39;, &#39;N&#39;, &#39;N&#39;, &#39;K&#39;, &#39;K&#39;, &#39;M&#39;, &#39;N&#39;]
+  exec_types = [&#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;SEQ&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;]
+  dim_sizes  = [4, 3, 12, 4, 9, 64, 64, 128, 128]
+  strides[0] = [18874368, 6291456, 128, 0, 0, 98304, 1536, 1, 0]
+  strides[1] = [0, 0, 0, 4718592, 128, 73728, 1152, 0, 1]
+  strides[2] = [21233664, 1769472, 128, 5308416, 196608, 0, 0, 1, 1536]
+)
+</pre></div>
+</div>
+</section>
+</section>
+<section id="task-4-cutile-kernel">
+<span id="task-4"></span><h2>Task 4: cuTile Kernel<a class="headerlink" href="#task-4-cutile-kernel" title="Link to this heading"></a></h2>
+<section id="a-contraction">
+<h3>a) Contraction<a class="headerlink" href="#a-contraction" title="Link to this heading"></a></h3>
+<p>Before we implement the cuTile kernel itself we first prepare the original tensors.
+For that we apply the shape from the config object to the respective tensors.
+To achieve a better kernel execution we permute all three tensors, so that the <code class="docutils literal notranslate"><span class="pre">PRIM</span></code> shapes of them are to the right of the tensors.
+This also allows us to use the tensors <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> directly for the computations, without the need for transposing a tile inside the cuTile kernel.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">shape_A</span> <span class="o">=</span> <span class="n">get_tensor_shape</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">t_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">shape_B</span> <span class="o">=</span> <span class="n">get_tensor_shape</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">t_idx</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">shape_C</span> <span class="o">=</span> <span class="n">get_tensor_shape</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">t_idx</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="n">cutile_tensor_abcyx_fp32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">tensor_abcyx_fp32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">)</span>
+
+<span class="n">res_A</span> <span class="o">=</span> <span class="n">tensor_acspx_fp16</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape_A</span><span class="p">)</span>
+<span class="n">per_res_A</span> <span class="o">=</span> <span class="n">res_A</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="n">res_B</span> <span class="o">=</span> <span class="n">tensor_bspy_fp16</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape_B</span><span class="p">)</span>
+<span class="n">per_res_B</span> <span class="o">=</span> <span class="n">res_B</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="n">res_C</span> <span class="o">=</span> <span class="n">cutile_tensor_abcyx_fp32</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape_C</span><span class="p">)</span>
+<span class="n">per_res_C</span> <span class="o">=</span> <span class="n">res_C</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+<span class="n">launch_multi_input_kernel</span><span class="p">(</span><span class="n">per_res_A</span><span class="p">,</span> <span class="n">per_res_B</span><span class="p">,</span> <span class="n">per_res_C</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The kernel itself needs a <code class="docutils literal notranslate"><span class="pre">grid</span></code> which uses all of the <code class="docutils literal notranslate"><span class="pre">PAR</span></code> dims from the <a class="reference internal" href="#opt-config"><span class="std std-ref">optimized config object</span></a>.
+Further, we pass the <code class="docutils literal notranslate"><span class="pre">PRIM</span></code> dimensions as the tile sizes for the kernel.
+The last parameter we pass to the kernel is the <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> for swizzeling.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+          <span class="n">grid</span><span class="p">,</span>
+          <span class="n">multi_input_kernel</span><span class="p">,</span>
+          <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="mi">8</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Inside the cuTile kernel we first compute the id’s for the respective parallel dimensions.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bid</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">x_o_par</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+<span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+
+<span class="n">y_o_par</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+<span class="n">bid</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span>  <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+
+<span class="n">c_par</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+<span class="n">bid</span>   <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+<span class="c1"># L2 swizzle (n_outer, m_outer)</span>
+<span class="n">num_n_o</span> <span class="o">=</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>   <span class="c1"># 4</span>
+<span class="n">num_m_o</span> <span class="o">=</span> <span class="n">C</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>   <span class="c1"># 4</span>
+<span class="n">plane</span>   <span class="o">=</span> <span class="n">num_n_o</span> <span class="o">*</span> <span class="n">num_m_o</span>
+
+<span class="n">mn_bid</span>       <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">plane</span>
+<span class="n">bid</span>          <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">plane</span>
+<span class="n">num_in_group</span> <span class="o">=</span> <span class="n">GROUP_M</span> <span class="o">*</span> <span class="n">num_m_o</span>
+<span class="n">group_id</span>     <span class="o">=</span> <span class="n">mn_bid</span> <span class="o">//</span> <span class="n">num_in_group</span>
+<span class="n">first_x_o</span>    <span class="o">=</span> <span class="n">group_id</span> <span class="o">*</span> <span class="n">GROUP_M</span>
+<span class="n">grp</span>          <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">num_n_o</span> <span class="o">-</span> <span class="n">first_x_o</span><span class="p">,</span> <span class="n">GROUP_M</span><span class="p">)</span>
+<span class="n">b_par</span>        <span class="o">=</span> <span class="n">first_x_o</span> <span class="o">+</span> <span class="p">(</span><span class="n">mn_bid</span> <span class="o">%</span> <span class="n">grp</span><span class="p">)</span>
+<span class="n">a_par</span>        <span class="o">=</span> <span class="p">(</span><span class="n">mn_bid</span> <span class="o">%</span> <span class="n">num_in_group</span><span class="p">)</span> <span class="o">//</span> <span class="n">grp</span>
+</pre></div>
+</div>
+<p>The contraction itself is similar to the kernels of the preceeding assignments.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">k_seq</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]):</span>
+    <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">a_par</span><span class="p">,</span> <span class="n">c_par</span><span class="p">,</span> <span class="n">k_seq</span><span class="p">,</span> <span class="n">x_o_par</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+    <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">b_par</span><span class="p">,</span> <span class="n">k_seq</span><span class="p">,</span> <span class="n">y_o_par</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+
+    <span class="c1"># Reshape due to rank mismatch</span>
+    <span class="n">r_tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tM</span><span class="p">))</span>
+    <span class="n">r_tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tN</span><span class="p">,</span> <span class="n">tK</span><span class="p">))</span>
+
+    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">r_tile_B</span><span class="p">,</span> <span class="n">r_tile_A</span><span class="p">,</span> <span class="n">acc</span><span class="p">)</span>
+
+<span class="n">o_acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tN</span><span class="p">,</span> <span class="n">tM</span><span class="p">))</span>
+<span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">a_par</span><span class="p">,</span> <span class="n">b_par</span><span class="p">,</span> <span class="n">c_par</span><span class="p">,</span> <span class="n">y_o_par</span><span class="p">,</span> <span class="n">x_o_par</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">o_acc</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="b-verification">
+<h3>b) Verification<a class="headerlink" href="#b-verification" title="Link to this heading"></a></h3>
+<p>To verify the correctness of our kernel we first need to bring the output tensor <code class="docutils literal notranslate"><span class="pre">C</span></code> back into the original shape.
+Afterwards we compare with the refernce <code class="docutils literal notranslate"><span class="pre">torch.einsum</span></code> computation.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">result_C</span> <span class="o">=</span> <span class="n">per_res_C</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="n">res_result_C</span> <span class="o">=</span> <span class="n">result_C</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">cutile_tensor_abcyx_fp32</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">ref</span><span class="p">,</span> <span class="n">res_result_C</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">),</span> <span class="s2">&quot;Task 4b failed&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Kernel 4b passed!&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="c-benchmarking">
+<h3>c) Benchmarking<a class="headerlink" href="#c-benchmarking" title="Link to this heading"></a></h3>
+<p>At last we compare the performance of both our kernel and the reference <code class="docutils literal notranslate"><span class="pre">torch.einsum</span></code> computation using <code class="docutils literal notranslate"><span class="pre">triton.tesing_do_bench</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Benchmark - cuTile</span>
+<span class="n">cutile_tensor_abcyx_fp32</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">tensor_abcyx_fp32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda:0&#39;</span><span class="p">)</span>
+<span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span> <span class="mi">2000</span>
+<span class="n">cutile_result</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span>
+    <span class="k">lambda</span><span class="p">:</span> <span class="n">launch_multi_input_kernel</span><span class="p">(</span><span class="n">per_res_A</span><span class="p">,</span> <span class="n">per_res_B</span><span class="p">,</span> <span class="n">per_res_C</span><span class="p">),</span>
+    <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">rep</span><span class="p">)</span>
+<span class="n">cutile_tflops</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">cutile_tensor_abcyx_fp32</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">shape_A</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">shape_A</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">cutile_result</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1e12</span>
+
+<span class="c1"># Benchmark - PyTorch</span>
+<span class="n">torch_result</span> <span class="o">=</span> <span class="n">triton</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">do_bench</span><span class="p">(</span>
+    <span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;acspx,bspy-&gt;abcyx&quot;</span><span class="p">,</span> <span class="n">tensor_acspx_fp16</span><span class="p">,</span> <span class="n">tensor_bspy_fp16</span><span class="p">),</span>
+    <span class="n">warmup</span><span class="o">=</span><span class="n">warmup</span><span class="p">,</span> <span class="n">rep</span><span class="o">=</span><span class="n">rep</span><span class="p">)</span>
+<span class="n">torch_tflops</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">tensor_abcyx_fp32</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">shape_A</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">shape_A</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">torch_result</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1e12</span>
+</pre></div>
+</div>
+<p>When comparing the results, we can see a significant difference to the reference computation.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>cuTile Kernel Average Time: 14.32 ms
+PyTorch Average Time: 11.37 ms
+cuTile Kernel TFLOPS: 48.60 TFLOPS
+PyTorch TFLOPS: 61.21 TFLOPS
+</pre></div>
+</div>
+</section>
+</section>
+<section id="optional-task-further-optimizing-the-cutile-kernel">
+<h2>Optional Task: Further Optimizing the cuTile Kernel<a class="headerlink" href="#optional-task-further-optimizing-the-cutile-kernel" title="Link to this heading"></a></h2>
+<p>The version we presented in <a class="reference internal" href="#task-4"><span class="std std-ref">Task 4</span></a> already is the highest performance we could achieve.</p>
+<section id="approach-sole-splitting">
+<h3>1) Approach: Sole Splitting<a class="headerlink" href="#approach-sole-splitting" title="Link to this heading"></a></h3>
+<p>Our first approach was to simply split the large <code class="docutils literal notranslate"><span class="pre">M=1536</span></code> and <code class="docutils literal notranslate"><span class="pre">N=1152</span></code> dimension.
+As we made no further optimizations we transposed the <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">C</span></code> dimension within the kernel.
+That resulted in the following performance:</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">Approach 1 Performance</span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>cuTile Kernel Average Time: 18.19 ms
+cuTile Kernel TFLOPS: 38.25 TFLOPS
+</pre></div>
+</div>
+</div>
+</section>
+<section id="approach-splitting-fusing">
+<h3>2) Approach: Splitting + Fusing<a class="headerlink" href="#approach-splitting-fusing" title="Link to this heading"></a></h3>
+<p>The second approach enhanced the first approach by additionally fusing the parallel <code class="docutils literal notranslate"><span class="pre">N</span></code>, <code class="docutils literal notranslate"><span class="pre">M</span></code> and <code class="docutils literal notranslate"><span class="pre">K</span></code> dimensions.
+That meant our config object would shrink to:</p>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text">Compact config object</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Config(
+  data_type  = DataType.FLOAT16
+  prim_main  = PrimType.GEMM
+  prim_last  = LastType.NONE
+  prim_first = FirstType.ZERO
+  dim_types  = [&#39;M&#39;, &#39;N&#39;, &#39;M&#39;, &#39;K&#39;, &#39;N&#39;]
+  exec_types = [&#39;PAR&#39;, &#39;PAR&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;]
+  dim_sizes  = [36, 9, 512, 4096, 512]
+  strides[0] = [2097152, 0, 4096, 1, 0]
+  strides[1] = [0, 512, 0, 4608, 1]
+  strides[2] = [2359296, 512, 4608, 0, 1]
+)
+</pre></div>
+</div>
+</div>
+<p>After adjusting the kernel accordingly, we measured the new performance.
+However, the performance dropped:</p>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Approach 2 Performance</span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>cuTile Kernel Average Time: 18.89 ms
+cuTile Kernel TFLOPS: 36.84 TFLOPS
+</pre></div>
+</div>
+</div>
+</section>
+<section id="approach-changed-memory-layout-splitting">
+<h3>3) Approach: Changed Memory Layout + Splitting<a class="headerlink" href="#approach-changed-memory-layout-splitting" title="Link to this heading"></a></h3>
+<p>As the second approach showed that fusing was not too beneficial, we moved away from that approach and tried to permute the initial tensors.</p>
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text">Permuted einsum string</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">spacx</span> <span class="o">=</span> <span class="n">tensor_acspx_fp16</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+<span class="n">bsyp</span> <span class="o">=</span> <span class="n">tensor_bspy_fp16</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+<span class="n">cfg2</span> <span class="o">=</span> <span class="n">generate_config</span><span class="p">(</span><span class="s2">&quot;spacx,bsyp-&gt;abcyx&quot;</span><span class="p">,</span> <span class="p">[</span><span class="n">spacx</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">bsyp</span><span class="o">.</span><span class="n">shape</span><span class="p">])</span>
+</pre></div>
+</div>
+</div>
+<p>We hoped to get a more beneficial memory layout and the performance proved us right, as we achieved a slight improvement.
+With this approach we could save some time as we did not have to transpose inside the kernel.</p>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text">Approach 3 Performance</span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>cuTile Kernel Average Time: 17.21 ms
+cuTile Kernel TFLOPS: 40.44 TFLOPS
+</pre></div>
+</div>
+</div>
+</section>
+<section id="approach-splitting-permuting">
+<h3>4) Approach: Splitting + Permuting<a class="headerlink" href="#approach-splitting-permuting" title="Link to this heading"></a></h3>
+<p>The third approach showed us that permuting the tensor (and thereby changing the strides and the memory layout) could yield some benefits.
+Therefore, we tried to first optimize our original einsum string config and then permute only the <code class="docutils literal notranslate"><span class="pre">B</span></code> tensor.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">res_B</span> <span class="o">=</span> <span class="n">tensor_bspy_fp16</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape_B</span><span class="p">)</span>
+<span class="n">per_res_B</span> <span class="o">=</span> <span class="n">res_B</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This approach yielded another small imrpovement.</p>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">Approach 4 Performance</span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>cuTile Kernel Average Time: 16.66 ms
+cuTile Kernel TFLOPS: 41.76 TFLOPS
+</pre></div>
+</div>
+</div>
+</section>
+<section id="other-approaches">
+<h3>5) Other Approaches<a class="headerlink" href="#other-approaches" title="Link to this heading"></a></h3>
+<p>Beside all of these approaches we also tried to increase the size of the operations inside the kernel by manually setting small <code class="docutils literal notranslate"><span class="pre">M</span></code> and <code class="docutils literal notranslate"><span class="pre">N</span></code> dimensions to the execution type <code class="docutils literal notranslate"><span class="pre">SEQ</span></code>.
+Our idea was to get a good L2 cache reuse by increasing the amount of work done by a kernel.
+However, this approach significantly drained the performance.</p>
+<p>Further, we tried different permutations but couldn’t gain any significant improvements.</p>
+</section>
+<section id="approach-final">
+<h3>6) Approach: Final<a class="headerlink" href="#approach-final" title="Link to this heading"></a></h3>
+<p>Our final approach was to combine the “improvements” that we had made across the different approaches and also come back to the <a class="reference internal" href="03_matmul_cutile.html#cache-swizzle"><span class="std std-ref">swizzeling logic</span></a>.
+That meant:</p>
+<ul class="simple">
+<li><p>Splitting (Optimizations)</p></li>
+<li><p>Permuting</p></li>
+<li><p>Swizzeling</p></li>
+</ul>
+<p>And indeed we got about <code class="docutils literal notranslate"><span class="pre">7</span> <span class="pre">TFLOPs</span></code> more then from our best approach before.
+However, as the difference to the <code class="docutils literal notranslate"><span class="pre">torch.einsum</span></code> implementations we were kind of at a loss.</p>
+<p>Therefore, we profiled our final cuTile kernel by running:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ncu<span class="w"> </span>--set<span class="w"> </span>detailed<span class="w"> </span>--kernel-name<span class="w"> </span>regex:multi_input_kernel<span class="w"> </span>python3<span class="w"> </span>-m<span class="w"> </span>src.assignments.assignment_06.main<span class="w"> </span>&gt;&gt;<span class="w"> </span>ncu_logs_opt.txt
+</pre></div>
+</div>
+<p>However, when trying to improve our kernel based on the information from the profiler we couldn’t achieve a higher performance.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="05_contraction_interface.html" class="btn btn-neutral float-left" title="Contraction Interface and L2 Optimization" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Lucas Obitz, Luca-Philipp Grumbach.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

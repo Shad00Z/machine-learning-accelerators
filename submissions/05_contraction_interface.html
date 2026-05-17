@@ -9,6 +9,7 @@
   <title>Contraction Interface and L2 Optimization &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -16,10 +17,13 @@
       <script src="../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
       <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Multi-Input Einsum Contraction" href="06_multi_input_einsum.html" />
     <link rel="prev" title="Tensor Contractions on GPUs" href="04_tensor_contractions.html" /> 
 </head>
 
@@ -68,6 +72,7 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
 </ul>
 
         </div>
@@ -97,7 +102,7 @@
   <section id="contraction-interface-and-l2-optimization">
 <h1>Contraction Interface and L2 Optimization<a class="headerlink" href="#contraction-interface-and-l2-optimization" title="Link to this heading"></a></h1>
 <section id="task-1-config-class">
-<h2>Task 1: Config Class<a class="headerlink" href="#task-1-config-class" title="Link to this heading"></a></h2>
+<span id="config"></span><h2>Task 1: Config Class<a class="headerlink" href="#task-1-config-class" title="Link to this heading"></a></h2>
 <p>For our Config object we first defined enumeration types using <code class="docutils literal notranslate"><span class="pre">enum.Enum</span></code> for all of the configuration parameters.</p>
 <div class="literal-block-wrapper docutils container" id="id1">
 <div class="code-block-caption"><span class="caption-text"><cite>Configuration parameter definitions</cite></span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
@@ -314,7 +319,7 @@ To calculate the strides we go from the rightmost to the leftmost index for each
 Afterwards we multiply the size of the respective tensor (e.g. the rightmost) with the current stride and thereby receive the stride for next dimension index.</p>
 </section>
 <section id="task-3-optimizer-class">
-<h2>Task 3: Optimizer Class<a class="headerlink" href="#task-3-optimizer-class" title="Link to this heading"></a></h2>
+<span id="optimizer"></span><h2>Task 3: Optimizer Class<a class="headerlink" href="#task-3-optimizer-class" title="Link to this heading"></a></h2>
 <section id="a-split-dimensions">
 <h3>a) Split Dimensions<a class="headerlink" href="#a-split-dimensions" title="Link to this heading"></a></h3>
 <p>For the <code class="docutils literal notranslate"><span class="pre">split_dim</span></code> function we follow a number of steps to guarantee that the dimension split is performed correctly.</p>
@@ -780,6 +785,7 @@ This shows the importance of well thought out memory usage.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="04_tensor_contractions.html" class="btn btn-neutral float-left" title="Tensor Contractions on GPUs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="06_multi_input_einsum.html" class="btn btn-neutral float-right" title="Multi-Input Einsum Contraction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
