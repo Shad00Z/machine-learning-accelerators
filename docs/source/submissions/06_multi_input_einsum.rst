@@ -256,7 +256,7 @@ Afterwards we compare with the refernce ``torch.einsum`` computation.
 c) Benchmarking
 ^^^^^^^^^^^^^^^
 
-At last we compare the performance of both our kernel and the reference ``torch.einsum`` computation using ``triton.tesing_dp_bench``.
+At last we compare the performance of both our kernel and the reference ``torch.einsum`` computation using ``triton.tesing_do_bench``.
 
 .. code-block:: python 
 
