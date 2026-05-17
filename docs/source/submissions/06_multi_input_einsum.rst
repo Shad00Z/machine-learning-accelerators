@@ -73,7 +73,7 @@ Task 2: Generating a Basic Config
 ---------------------------------
 
 .. code-block:: bash
-    :caption: Execution from machine-learning-compilers directory
+    :caption: Execution from machine-learning-accelerators directory
 
     python3 -m src.assignments.assignment_06.main
 
