@@ -64,7 +64,9 @@ Task 2: Identify VLIW Slots
 
 For this task we are looking deeper into the XDNA2 VLIW instruciton word and its functional slots. 
 
-The key insight is that the mnemonic name of the instruction (``vlda``) tells us which functional unit belongs to it (is occupied).
+The key insight is that the mnemonic name of the instruction (``vlda``) gives us hints to which functional unit it belongs (occupied).
+
+.. _vliw_slots:
 
 .. list-table:: VLIW Slots
    :widths: 20 10 20 30
@@ -98,3 +100,102 @@ The key insight is that the mnemonic name of the instruction (``vlda``) tells us
      - M (XM)
      - ``nopxm``
      - No
+
+
+Task 3: Identify Instructions and Register Classes per Slot
+-----------------------------------------------------------
+
+a) Instruction Table
+^^^^^^^^^^^^^^^^^^^^
+
+As described in the previous task, to find out the slot that is occupied, we have to look at the instruction itself.
+For instructions where there is no direct indication, we thought about the most logical Slot by looking at the table with the :ref:`VLIW Slots <vliw_slots>`.
+
+.. list-table:: Instructions
+   :widths: 50 10 40
+   :header-rows: 1
+
+   * - Instruction
+     - Slot
+     - Short description
+   * - ``vlda.conv.fp32.bf16 cml0 [p0, #0]``
+     - A
+     - | ``vlda`` vector load (load unit A)
+       | ``.conv.fp32.bf16`` convert from FP32 to BF16
+       | ``cml0`` destination acc register
+       | ``[p0, #0]`` pointer register and byte offset
+   * - ``movx r6, #1``
+     - X
+     - | ``movx`` move immediate (copy)
+       | ``r6`` destination scalar register
+       | ``#1`` immediate value to load
+   * - ``vldb x1, [p1, #0]``
+     - B
+     - | ``vldb`` vector load (load unit B)
+       | ``x1`` destination vector register
+       | ``[p1, #0]`` pointer register and byte offset
+   * - ``vmov bmhl2, bmhh4``
+     - V
+     - | ``vmov`` vector move
+       | ``bmhl2`` destination acc register (lower half)
+       | ``bmhh4`` source acc register (upper half)
+   * - ``mova r0, #60``
+     - A
+     - | ``mova`` move immediate (A-Slot)
+       | ``r0`` destination scalar register
+       | ``#60`` immediate value
+   * - ``vadd.f dm0, dm0, dm1, r0``
+     - V
+     - | ``vadd.f`` vector add (floating point)
+       | ``dm0`` destination acc register
+       | ``dm0`` 1st source acc register
+       | ``dm1`` 2nd source acc register
+       | ``r0`` scalar operand
+   * - ``ret lr``
+     - X
+     - | ``ret`` return from subroutine
+       | ``lr`` link register
+   * - ``mov p1, p4``
+     - M
+     - | ``mov`` move scalar
+       | ``p1`` destination pointer register
+       | ``p4`` source pointer register
+   * - ``vst.conv.bf16.fp32 cml0, [p2, #0]``
+     - S
+     - | ``vst`` vector store
+       | ``.conv.bf16.fp32`` convert from BF16 to FP32
+       | ``cml0`` source acc register
+       | ``[p2, #0]`` pointer register and byte offset
+
+b) Register-Class Table
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. list-table:: Instructions
+   :widths: 10 40 40
+   :header-rows: 1
+
+   * - Slot
+     - Register classes (dst / src)
+     - Example registers
+   * - V
+     - vector / vector
+     - ``x``, ``y``
+   * - A
+     - accumulator / pointer
+     - ``cml0``, ``dm0``, ``dm1``, ``bmhl2``, ``bmhh4``, ``p0``
+   * - B
+     - accumulator / pointer
+     - ``cml0``, ``dm0``, ``dm1``, ``bmhl2``, ``bmhh4``, ``p0``
+   * - S
+     - pointer / accumulator
+     - ``cml0``, ``dm0``, ``dm1``, ``bmhl2``, ``bmhh4``, ``p0``
+   * - X
+     - scalar / scalar
+     - ``r0``, ``r6``
+   * - M
+     - pointer / pointer
+     - ``p0``, ``p6``
+   * - XM
+     - scalar + pointer / scalar + pointer
+     - ``r0``, ``p0``
+  
