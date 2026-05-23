@@ -215,8 +215,8 @@ Task 4: Infer Operation Latencies
 
 Based on the information given in ``build/vadd.s`` file, we can derive information regarding the latency of the ``mova`` and ``vadd.f`` instruction.
 
-.. list-table:: Instructions
-   :widths: 10 40 40
+.. list-table:: Operation Latencies
+   :widths: 10 10 40 10 10
    :header-rows: 1
 
    * - Instruction
