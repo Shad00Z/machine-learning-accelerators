@@ -28,14 +28,22 @@ def verify(kernel: str, in0: torch.Tensor, in1: torch.Tensor, out: torch.Tensor)
     out : bfloat16 torch tensor
     """
 
+    ref = 0
+
     if kernel == "vadd":
         ref = in0 + in1
-        
-        if not torch.allclose(out, ref, rtol=1e-2, atol=1e-2):
-            max_err = (out - ref).abs().max().item()
-            raise ValueError(f"[FAIL] {kernel} verification passed.")
+    elif kernel == "custom_vadd":
+        ref = in0 + in1 + in1
     else:
         raise NotImplementedError("verify() not yet implemented")
+    
+    print(f"  in0[:8]  = {in0[:8]}")
+    print(f"  in1[:8]  = {in1[:8]}")
+    print(f"  ref[:8]  = {ref[:8]}")
+    print(f"  out[:8]  = {out[:8]}")
+    
+    if not torch.allclose(out, ref, rtol=1e-2, atol=1e-2):
+        raise ValueError(f"[FAIL] {kernel} verification did not pass.")
 
 
 def run(kernel_name: str) -> None:

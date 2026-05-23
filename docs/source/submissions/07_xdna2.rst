@@ -48,16 +48,24 @@ c) Result Verification
 
 The last step is to implement the ``verify()`` function in the ``driver.py`` file.
 
+.. _vadd_verify:
+
 .. code-block:: python 
+
+    ref = 0
 
     if kernel == "vadd":
         ref = in0 + in1
-        
-        if not torch.allclose(out, ref, rtol=1e-2, atol=1e-2):
-            max_err = (out - ref).abs().max().item()
-            raise ValueError(f"[FAIL] {kernel} verification passed.")
     else:
         raise NotImplementedError("verify() not yet implemented")
+
+    print(f"  in0[:8]  = {in0[:8]}")
+    print(f"  in1[:8]  = {in1[:8]}")
+    print(f"  ref[:8]  = {ref[:8]}")
+    print(f"  out[:8]  = {out[:8]}")
+    
+    if not torch.allclose(out, ref, rtol=1e-2, atol=1e-2):
+        raise ValueError(f"[FAIL] {kernel} verification did not pass.")
 
 Task 2: Identify VLIW Slots
 ---------------------------
@@ -236,3 +244,78 @@ Based on the information given in ``build/vadd.s`` file, we can derive informati
      - 6
 
 As ``dm0 = cml0, cmh0`` we said that ``vst`` is the next instruction depending on ``vadd.f``.
+
+Task 5: BF16 Hand-Scheduled Vector-Add Assembly Kernel
+------------------------------------------------------
+
+a) Add Instructions
+^^^^^^^^^^^^^^^^^^^
+
+Based on the insights gained from the previous tasks, we are now implementing a hand-scheduled vector-add assembly kernel.
+
+For that we follow a simple schema:
+
+- load the data into registers,
+- compute the element-wise vector add,
+- store the values from the registers back into memory.
+
+And to follow the conventions, we also have to add a number of NOP cycles.
+
+.. code-block:: asm
+
+    custom_vadd:
+    // Computes C = A + B + B
+    // Calling convention: p0 = ptr_in0, p1 = ptr_in1, p2 = ptr_out
+        vlda.conv.fp32.bf16	 cml0, [p0, #0]
+        vlda.conv.fp32.bf16	 cmh0, [p0, #64]
+        vlda.conv.fp32.bf16	 cml1, [p1, #0]
+        vlda.conv.fp32.bf16	 cmh1, [p1, #64]
+        nop
+        nop
+        mova	r0, #60
+        vadd.f	dm0, dm0, dm1, r0
+        nop
+        nop
+        vadd.f	dm2, dm0, dm1, r0
+        nop
+        nop
+        ret lr
+        nop                                  // Delay Slot 5
+        nop                                  // Delay Slot 4
+        vst.conv.bf16.fp32	 cml2, [p2, #0]  // Delay Slot 3
+        vst.conv.bf16.fp32	 cmh2, [p2, #64] // Delay Slot 2
+        nop                                  // Delay Slot 1
+
+Our first experiments employed the latency information from task 4, leading to 6 NOP cycles after each ``vadd`` instruction.
+However, after making some experiments we found out that there is no need for 6 NOP cyles **between** the two ``vadd`` instructions.
+We assume that the hardware does not need to fully write back the result, but rather only needs to make the result readable for another vector unit instruction.
+
+By using this information we reduce the VLIW cycles from 22 to 19.
+Based on the knowledge that we have in regards to the XDNA instructions, we assume that this is fewest possible number of cycles. 
+
+b) Assemble Kernel
+^^^^^^^^^^^^^^^^^^
+
+After the implementation we assemble our kernel by running:
+
+.. code-block:: bash
+
+    make obj_custom_vadd
+
+Running this commands generates a ``custom_vadd.o`` in the build ``directory``.
+
+c) Result Verification
+^^^^^^^^^^^^^^^^^^^^^^
+
+Similar as for the vector-add kernel from task 1 the last step was to verify the correctness of our kernel. 
+For that we enhanced the :ref:`condition <vadd_verify>` in the ``driver.py``.
+
+.. code-block:: python
+
+    ref = 0
+
+    if ...
+    elif kernel == "custom_vadd":
+        ref = in0 + in1 + in1
+    else:
+        raise NotImplementedError("verify() not yet implemented")
