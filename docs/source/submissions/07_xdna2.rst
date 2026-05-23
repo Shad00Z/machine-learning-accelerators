@@ -170,6 +170,17 @@ For instructions where there is no direct indication, we thought about the most 
 b) Register-Class Table
 ^^^^^^^^^^^^^^^^^^^^^^^
 
+For the register table we refer to the hints given at the start of task 3.
+
+Hints:
+
+- Mnemonic prefix/suffix indicates the slot
+- Register name prefix indicates class: 
+  - ``p`` → pointer register; 
+  - ``r`` → scalar register; 
+  - ``x`` / ``y`` → vector register; 
+  - ``dm`` / ``cm`` / ``bm`` → accumulator register
+
 .. list-table:: Instructions
    :widths: 10 40 40
    :header-rows: 1
@@ -199,3 +210,29 @@ b) Register-Class Table
      - scalar + pointer / scalar + pointer
      - ``r0``, ``p0``
   
+Task 4: Infer Operation Latencies
+---------------------------------
+
+Based on the information given in ``build/vadd.s`` file, we can derive information regarding the latency of the ``mova`` and ``vadd.f`` instruction.
+
+.. list-table:: Operation Latencies
+   :widths: 10 10 40 10 10
+   :header-rows: 1
+
+   * - Instruction
+     - Output register
+     - First dependent instruction
+     - Cycles apart
+     - Latency
+   * - ``mova``
+     - ``r0``
+     - ``vadd.f dm0, dm0, dm1, r0``
+     - 1
+     - 1
+   * - ``vadd.f``
+     - ``dm0``
+     - ``vst.conv.bf16.fp32 cml0, [p2, #0]``
+     - 6
+     - 6
+
+As ``dm0 = cml0, cmh0`` we said that ``vst`` is the next instruction depending on ``vadd.f``.
