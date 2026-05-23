@@ -1,7 +1,7 @@
 Inferring the VLIW ISA of XDNA2
 ===============================
 
-This assignment starts of the second half of the lectures. 
+With this assignment, the second half of the lecture starts.
 From now on, we are working with the VLIW instruction set architecture of the XDNA2 compute tile.
 
 Task 1: Vector-Add Kernel
@@ -62,7 +62,7 @@ The last step is to implement the ``verify()`` function in the ``driver.py`` fil
 Task 2: Identify VLIW Slots
 ---------------------------
 
-For this task we are looking deeper into the XDNA2 VLIW instruciton word and its functional slots. 
+For this task we are looking deeper into the XDNA2 VLIW and its functional slots. 
 
 The key insight is that the mnemonic name of the instruction (``vlda``) gives us hints to which functional unit it belongs (occupied).
 
