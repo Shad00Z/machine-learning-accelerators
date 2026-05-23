@@ -319,3 +319,18 @@ For that we enhanced the :ref:`condition <vadd_verify>` in the ``driver.py``.
         ref = in0 + in1 + in1
     else:
         raise NotImplementedError("verify() not yet implemented")
+
+Task 6: MAC Kernel
+------------------
+
+The optional task let us copmile two given matmul kernels, where one simply adds the ``-DAIE_API_EMULATE_BFLOAT16_MMUL_WITH_BFP16`` flag to the compilation path.
+
+When comparing the generated assembly files, there is a clear difference. 
+The normal compilation generates 62 instructions, whereas the bfp16 compilation generates 22 instructions.  
+
+There are two things that change with the additional compilation flag: 
+
+- different instructions are generated: ``vmul`` instead of ``vextbcstshfl``, and 
+- careful register reuse: reuse ``cml0`` and ``cmh0`` instead of several registers ``cml0, cml1, cml2``.
+
+Looking especially at the reduced number of cycles, we can imagine that there is a performance gain of about ``3x`` possible with this flag.
