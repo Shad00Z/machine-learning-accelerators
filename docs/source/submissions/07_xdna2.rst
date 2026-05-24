@@ -335,8 +335,8 @@ Counting VLIW cycles in the function bodies of ``build/matmul_normal.s`` and ``b
    :header-rows: 1
 
    * - Mode
-     - VLIW cycles (incl. NOPs)
-     - Non-NOP operations only
+     - Total VLIW cycles
+     - Total non-NOP slot operations
    * - Normal (``matmul_normal.s``)
      - 43
      - 62
