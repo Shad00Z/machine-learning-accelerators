@@ -6,10 +6,12 @@
 custom_vadd:
 // Computes C = A + B + B
 // Calling convention: p0 = ptr_in0, p1 = ptr_in1, p2 = ptr_out
-  vlda.conv.fp32.bf16	 cml0, [p0, #0]
-  vlda.conv.fp32.bf16	 cmh0, [p0, #64]
-  vlda.conv.fp32.bf16	 cml1, [p1, #0]
-  vlda.conv.fp32.bf16	 cmh1, [p1, #64]
+// Load A: 64 elements as 2x 32-element BF16 vectors
+  vlda.conv.fp32.bf16	 cml0, [p0, #0]   // lower 32 elements of A
+  vlda.conv.fp32.bf16	 cmh0, [p0, #64]  // upper 32 elements of A -> together as dm0
+// Load B: 64 elements as 2x 32-element BF16 vectors
+  vlda.conv.fp32.bf16	 cml1, [p1, #0]   // lower 32 elements of B
+  vlda.conv.fp32.bf16	 cmh1, [p1, #64]  // upper 32 elements of B -> together as dm1
   nop
   nop
   mova	r0, #60

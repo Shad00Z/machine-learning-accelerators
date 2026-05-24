@@ -10,7 +10,7 @@ Task 1: Vector-Add Kernel
 a) Element-wise Vector Addition
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To start of the implementation on the XDNA2 architecture, we are implementing a simple vector addition kernel.
+To start off the implementation on the XDNA2 architecture, we are implementing a simple vector addition kernel.
 Most of the code is already given, so we only have to make ourselves familiar with the `aie::add <https://download.amd.com/docnav/aiengine/xilinx2025_2/aiengine_api/aie_api/doc/group__group__arithmetic.html#gafd9f3351ca16d4398e29251c6b903663>`_ instruction.
 
 We fill in the implementation gap by adding the ``aie::add`` instruction to the code:
@@ -287,11 +287,11 @@ And to follow the conventions, we also have to add a number of NOP cycles.
         nop                                  // Delay Slot 1
 
 Our first experiments employed the latency information from task 4, leading to 6 NOP cycles after each ``vadd`` instruction.
-However, after making some experiments we found out that there is no need for 6 NOP cyles **between** the two ``vadd`` instructions.
+However, after making some experiments we found out that there is no need for 6 NOP cycles **between** the two ``vadd`` instructions.
 We assume that the hardware does not need to fully write back the result, but rather only needs to make the result readable for another vector unit instruction.
 
 By using this information we reduce the VLIW cycles from 22 to 19.
-Based on the knowledge that we have in regards to the XDNA instructions, we assume that this is fewest possible number of cycles. 
+Based on the knowledge that we have in regards to the XDNA instructions, we assume that this is the fewest possible number of cycles. 
 
 b) Assemble Kernel
 ^^^^^^^^^^^^^^^^^^
@@ -302,12 +302,12 @@ After the implementation we assemble our kernel by running:
 
     make obj_custom_vadd
 
-Running this commands generates a ``custom_vadd.o`` in the build ``directory``.
+Running this command generates a ``custom_vadd.o`` in the build ``directory``.
 
 c) Result Verification
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Similar as for the vector-add kernel from task 1 the last step was to verify the correctness of our kernel. 
+As with the vector-add kernel from task 1, the last step was to verify the correctness of our kernel. 
 For that we enhanced the :ref:`condition <vadd_verify>` in the ``driver.py``.
 
 .. code-block:: python
@@ -323,14 +323,49 @@ For that we enhanced the :ref:`condition <vadd_verify>` in the ``driver.py``.
 Task 6: MAC Kernel
 ------------------
 
-The optional task let us copmile two given matmul kernels, where one simply adds the ``-DAIE_API_EMULATE_BFLOAT16_MMUL_WITH_BFP16`` flag to the compilation path.
+The optional task let us compile two given matmul kernels, where one simply adds the ``-DAIE_API_EMULATE_BFLOAT16_MMUL_WITH_BFP16`` flag to the compilation path.
 
-When comparing the generated assembly files, there is a clear difference. 
-The normal compilation generates 62 instructions, whereas the bfp16 compilation generates 22 instructions.  
+a) Instruction Count
+^^^^^^^^^^^^^^^^^^^^
 
-There are two things that change with the additional compilation flag: 
+Counting VLIW cycles in the function bodies of ``build/matmul_normal.s`` and ``build/matmul_bfp16.s``:
 
-- different instructions are generated: ``vmul`` instead of ``vextbcstshfl``, and 
-- careful register reuse: reuse ``cml0`` and ``cmh0`` instead of several registers ``cml0, cml1, cml2``.
+.. list-table::
+   :widths: 40 30 30
+   :header-rows: 1
 
-Looking especially at the reduced number of cycles, we can imagine that there is a performance gain of about ``3x`` possible with this flag.
+   * - Mode
+     - VLIW cycles (incl. NOPs)
+     - Non-NOP operations only
+   * - Normal (``matmul_normal.s``)
+     - 43
+     - 62
+   * - BFP16 (``matmul_bfp16.s``)
+     - 30
+     - 22
+
+b) What the Flag Changes
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Without the flag, the compiler has no native 8x8x8 BF16 matrix-multiply instruction and emulates it by manually decomposing the outer product:
+
+- ``vextbcstshfl.64`` shuffles and extracts sub-rows of matrix A into vector registers
+- ``vextbcst.128`` broadcasts columns of matrix B
+- 16 times ``vmac.f`` which executes one multiply-accumulate per outer-product contribution
+- Two output accumulators (``dm0``, ``dm1``) to process two output rows in parallel
+
+With ``-DAIE_API_EMULATE_BFLOAT16_MMUL_WITH_BFP16``, the compiler activates a hardware path based on BFP16, replacing the entire shuffle + 16-mac sequence with:
+
+- ``vmul.f`` (**one instruction!**) performs the full 8x8x8 multiply using BFP16 format
+- ``vconv.bfp16ebs8.fp32`` converts the BFP16 result back to FP32 accumulators
+- ``vmac.f`` which is the single final accumulate into the output
+
+Additionally, the BFP16 path reuses only ``cml0``/``cmh0`` (= ``dm0``) for the output, whereas the normal path uses ``cml0``/``cml1`` (= ``dm0`` and ``dm1``) to tile two rows simultaneously.
+
+c) Performance Implications
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The reduction from 43 to 30 VLIW cycles gives a theoretical speedup of approximately **1.4×** for a single tile invocation.
+The non-NOP operation count (62 -> 22, ~2.8x) provides an upper bound on speedup if all NOPs could be hidden through software pipelining across iterations.
+
+The trade-off is numerical precision, because BFP16 stores a block of values with a shared exponent, which is slightly less precise than standard BF16.
