@@ -7,6 +7,10 @@ Task 1: Verify Function
 Task 2: Instructions and Latencies
 ------------------------------------------
 
+To gather the latencies, we first looked at `Hello XDNA <https://tnzr.org/xdna/isa.html>`__. 
+Here, we were able to find many values in ``Table 7`` and inferred the rest from ``Listing 4``
+by counting the number of cycles between dependent instructions.
+
 .. list-table:: Instructions
    :widths: 60 20 20
    :header-rows: 1
@@ -57,8 +61,136 @@ Task 2: Instructions and Latencies
 Task 3: Register Blocking
 ------------------------------------------
 
+We keep all four ``out`` tiles (``p=2``, ``q=2``) in the accumulator registers for
+the whole ``r``-loop, to avoid repeated loads and stores of the output.
+For this we can use ``dm0`` to ``dm3``, which leaves us ``dm4`` for converting both ``in0`` and ``in1`` tiles.
+Since the conversion is not needed until the end of the ``r``-loop, we can reuse the same register for both inputs.
+
+``in0`` is loaded directly as FP32 via ``vlda.conv.fp32.bf16`` into ``dm4``
+(two half-registers ``cml4`` / ``cmh4``) and then converted to BFP16 with ``vconv.bfp16ebs8.fp32``.
+The two ``p`` tiles produce ``ex0`` (``p=0``) and ``ex2`` (``p=1``).
+
+``in1`` is in ``kn`` layout and must first be transposed to ``nk`` before conversion.
+It is loaded into vector registers ``x2`` / ``x4`` via ``vldb``, transposed with ``vshuffle``,
+element-wise multiplied by a BF16 ones vector (``x0``, ``x1``) using ``vmul.f`` into ``dm4``,
+then converted to BFP16 via ``vconv``.
+The two ``q`` tiles produce ``ex4`` (``q=0``) and ``ex6`` (``q=1``).
+
+.. list-table:: Register Blocking
+   :widths: 20 80
+   :header-rows: 1
+
+   * - Tensor
+     - Registers
+   * - ``out``
+     - | ``dm0`` (p=0, q=0), ``dm1`` (p=0, q=1)
+       | ``dm2`` (p=1, q=0), ``dm3`` (p=1, q=1)
+   * - ``in0``
+     - | ``dm4`` (FP32 temporary, shared with ``in1``)
+       | ``ex0`` (p=0, BFP16), ``ex2`` (p=1, BFP16)
+   * - ``in1``
+     - | ``x0``, ``x1`` (BF16 ones constant)
+       | ``x2``, ``x4`` (BF16 load, reused each iteration)
+       | ``dm4`` (FP32 temporary, shared with ``in0``)
+       | ``ex4`` (q=0, BFP16), ``ex6`` (q=1, BFP16)
+
 Task 4: Data Layouts and Pointer Updates
 ------------------------------------------
+
+The kernel receives three pointer registers: ``p0`` pointing to ``in0``,
+``p1`` pointing ``in1`` and ``p2`` pointing to ``out``.
+Since the ``r``-loop is fully unrolled (``r=8``, no control flow), all tile accesses use
+fixed immediate offsets from these base pointers and no pointer register updates are required.
+
+Each ``8 x 8`` BF16 tile is 128 bytes. Each half-load (``vlda.conv.fp32.bf16`` or ``vldb``) transfers
+64 bytes, so two half-loads are needed per tile.
+
+**in0 layout (prmk, BF16)**, accessed via ``p0``
+
+.. list-table::
+   :widths: 20 20 60
+   :header-rows: 1
+
+   * - Tile (p, r)
+     - Base offset (bytes)
+     - Half-load offsets
+   * - p=0, r=0
+     - 0
+     - ``[p0, #0]``, ``[p0, #64]``
+   * - p=0, r=1
+     - 128
+     - ``[p0, #128]``, ``[p0, #192]``
+   * - ...
+     - ...
+     - ...
+   * - p=0, r=7
+     - 896
+     - ``[p0, #896]``, ``[p0, #960]``
+   * - p=1, r=0
+     - 1024
+     - ``[p0, #1024]``, ``[p0, #1088]``
+   * - ...
+     - ...
+     - ...
+   * - p=1, r=7
+     - 1920
+     - ``[p0, #1920]``, ``[p0, #1984]``
+
+General formula: tile (p, r) starts at ``p * 1024 + r * 128``.
+
+**in1 layout (rqkn, BF16)**, accessed via ``p1``
+
+.. list-table::
+   :widths: 20 20 60
+   :header-rows: 1
+
+   * - Tile (r, q)
+     - Base offset (bytes)
+     - Half-load offsets
+   * - r=0, q=0
+     - 0
+     - ``[p1, #0]``, ``[p1, #64]``
+   * - r=0, q=1
+     - 128
+     - ``[p1, #128]``, ``[p1, #192]``
+   * - r=1, q=0
+     - 256
+     - ``[p1, #256]``, ``[p1, #320]``
+   * - r=1, q=1
+     - 384
+     - ``[p1, #384]``, ``[p1, #448]``
+   * - ...
+     - ...
+     - ...
+   * - r=7, q=1
+     - 1920
+     - ``[p1, #1920]``, ``[p1, #1984]``
+
+General formula: tile (r, q) starts at ``r * 256 + q * 128``.
+
+**out layout (pqmn, BF16)**, loaded and stored via ``p2``:
+
+.. list-table::
+   :widths: 20 20 60
+   :header-rows: 1
+
+   * - Tile (p, q)
+     - Base offset (bytes)
+     - Half-load / half-store offsets
+   * - p=0, q=0 -> ``dm0``
+     - 0
+     - ``[p2, #0]``, ``[p2, #64]``
+   * - p=0, q=1 -> ``dm1``
+     - 128
+     - ``[p2, #128]``, ``[p2, #192]``
+   * - p=1, q=0 -> ``dm2``
+     - 256
+     - ``[p2, #256]``, ``[p2, #320]``
+   * - p=1, q=1 -> ``dm3``
+     - 384
+     - ``[p2, #384]``, ``[p2, #448]``
+
+General formula: tile (p, q) starts at ``p * 256 + q * 128``.
 
 Task 5: Implementation
 ------------------------------------------
