@@ -68,13 +68,14 @@ Since the conversion is not needed until the end of the ``r``-loop, we can reuse
 
 ``in0`` is loaded directly as FP32 via ``vlda.conv.fp32.bf16`` into ``dm4``
 (two half-registers ``cml4`` / ``cmh4``) and then converted to BFP16 with ``vconv.bfp16ebs8.fp32``.
-The two ``p`` tiles produce ``ex0`` (``p=0``) and ``ex2`` (``p=1``).
+The two ``p`` tiles produce ``ex0`` (``p=0``) and ``ex1`` (``p=1``).
 
 ``in1`` is in ``kn`` layout and must first be transposed to ``nk`` before conversion.
-It is loaded into vector registers ``x2`` / ``x4`` via ``vldb``, transposed with ``vshuffle``,
-element-wise multiplied by a BF16 ones vector (``x0``, ``x1``) using ``vmul.f`` into ``dm4``,
+It is loaded into vector half-registers ``x2`` / ``x3`` (q=0) and ``x4`` / ``x5`` (q=1) via ``vldb``,
+transposed with four ``vshuffle`` calls (modes 53 and 52 per tile),
+element-wise multiplied by a pre-loaded BF16 ones vector (``y0``) using ``vmul.f`` into ``dm4``,
 then converted to BFP16 via ``vconv``.
-The two ``q`` tiles produce ``ex4`` (``q=0``) and ``ex6`` (``q=1``).
+The two ``q`` tiles produce ``ex2`` (``q=0``) and ``ex3`` (``q=1``).
 
 .. list-table:: Register Blocking
    :widths: 20 80
@@ -87,12 +88,13 @@ The two ``q`` tiles produce ``ex4`` (``q=0``) and ``ex6`` (``q=1``).
        | ``dm2`` (p=1, q=0), ``dm3`` (p=1, q=1)
    * - ``in0``
      - | ``dm4`` (FP32 temporary, shared with ``in1``)
-       | ``ex0`` (p=0, BFP16), ``ex2`` (p=1, BFP16)
+       | ``ex0`` (p=0, BFP16), ``ex1`` (p=1, BFP16)
    * - ``in1``
-     - | ``x0``, ``x1`` (BF16 ones constant)
-       | ``x2``, ``x4`` (BF16 load, reused each iteration)
+     - | ``y0`` (BF16 ones constant, full 1024-bit Y-register)
+       | ``x2``, ``x3`` (q=0 BF16 half-loads, reused each iteration)
+       | ``x4``, ``x5`` (q=1 BF16 half-loads, reused each iteration)
        | ``dm4`` (FP32 temporary, shared with ``in0``)
-       | ``ex4`` (q=0, BFP16), ``ex6`` (q=1, BFP16)
+       | ``ex2`` (q=0, BFP16), ``ex3`` (q=1, BFP16)
 
 Task 4: Data Layouts and Pointer Updates
 ------------------------------------------
@@ -194,6 +196,17 @@ General formula: tile (p, q) starts at ``p * 256 + q * 128``.
 
 Task 5: Implementation
 ------------------------------------------
+
+The kernel is implemented in ``src/matmul.s``.
+It fully unrolls the ``r``-loop (``r=8``) and uses only a final ``ret lr`` as the sole control-flow instruction.
+
+For each ``r``-step the kernel:
+
+1. Loads the two ``in0`` half-tiles (p=0, p=1) via ``vlda.conv.fp32.bf16`` into ``dm4`` and converts to BFP16 (``ex0``, ``ex1``).
+2. Loads the two ``in1`` half-tiles (q=0, q=1) via ``vldb`` into half-registers ``x2``/``x3`` (q=0) and ``x4``/``x5`` (q=1), transposes each from ``kn`` to ``nk`` layout with four ``vshuffle`` calls (modes 53 and 52 per tile), multiplies by a pre-loaded BF16 ones vector (``y0``) using ``vmul.f`` into ``dm4``, then converts to BFP16 via ``vconv`` (``ex2``, ``ex3``).
+3. Issues four ``vmac.f`` instructions to accumulate into ``dm0``–``dm3``.
+
+After all eight r-steps the four accumulators are written back to the output buffer as BF16 via ``vst.conv.bf16.fp32``.
 
 Task 6: Performance
 ------------------------------------------
