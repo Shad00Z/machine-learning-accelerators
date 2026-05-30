@@ -228,3 +228,6 @@ After all eight r-iterations the four accumulators are written back to the outpu
 
 Task 6: Performance
 ------------------------------------------
+
+Our kernel could be considered a "maximal" version since it uses many nops and no vliw instructions.
+We simply did not have enough time to explore optimisations and were already happy that the kernel worked correctly.
