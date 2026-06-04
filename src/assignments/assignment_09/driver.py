@@ -14,22 +14,53 @@ import pyxrt
 
 def verify(in0: torch.Tensor, in1: torch.Tensor, out: torch.Tensor) -> None:
     """
-    Verify the NPU output against a CPU reference.
-
-    Computation: out += in0 @ in1
-
-    Parameters
-    ----------
-    in0, in1 : bfloat16 torch tensors
-    out : bfloat16 torch tensor
+    Diagnostic verification to inspect NPU output patterns.
     """
-
     ref = in0 @ in1
+
+    print("\n" + "="*40)
+    print("       NPU DEBUG DIAGNOSTICS        ")
+    print("="*40)
+    
+    # 1. Check for complete silence (All Zeros)
+    is_all_zero = torch.all(out == 0).item()
+    print(f"Is output completely zeros?: {is_all_zero}")
+    
+    # 2. Check fill percentage
+    nonzero_count = torch.count_nonzero(out).item()
+    total_elements = out.numel()
+    print(f"Active elements: {nonzero_count} / {total_elements} ({nonzero_count/total_elements*100:.2f}%)")
+    
+    # 3. Value Range Comparison
+    print(f"NPU Output Range: Min = {out.min().item():.4f}, Max = {out.max().item():.4f}")
+    print(f"CPU Reference Range: Min = {ref.min().item():.4f}, Max = {ref.max().item():.4f}")
+    
+    # 4. Error Metrics
+    abs_diff = torch.abs(out - ref)
+    print(f"Max Absolute Error: {abs_diff.max().item():.4f}")
+    print(f"Mean Absolute Error: {abs_diff.mean().item():.4f}")
+    
+    # 5. Row-by-Row Spatial Analysis
+    failing_rows = []
+    for r in range(out.shape[0]):
+        if not torch.allclose(out[r], ref[r], rtol=0.5, atol=2):
+            failing_rows.append(r)
+            
+    print(f"Failing Rows: {len(failing_rows)} / {out.shape[0]}")
+    if len(failing_rows) > 0:
+        print(f"First 10 failing row indices: {failing_rows[:10]}")
+    print("="*40 + "\n")
+    
+    # nz = (out != 0)
+    # print("nonzero per row:", nz.sum(1).unique())      # 128 vs 0?  -> spatial (rows 0-63 only)
+    # print("nonzero per col:", nz.sum(0).unique())      # 64 vs 0?   -> column pattern
+    # print("first zero row:", (nz.sum(1)==0).nonzero()[0][:1])
+    
+    print("col-block max err:",
+      [abs(out[:, c:c+16] - ref[:, c:c+16]).max().item() for c in range(0, 128, 16)])
 
     if not torch.allclose(out, ref, rtol=0.5, atol=2):
         raise ValueError(f"[FAIL] verification did not pass.")
-
-    raise NotImplementedError("verify() not yet implemented")
 
 
 def run() -> None:
@@ -51,10 +82,10 @@ def run() -> None:
     bo_instr.sync(pyxrt.xclBOSyncDirection.XCL_BO_SYNC_BO_TO_DEVICE, insts.nbytes, 0)
 
     torch.manual_seed(42)
-    # TODO: adapt to M=256, N=128, K=1024
-    data_in0 = torch.randn(16, 64, dtype=torch.bfloat16)
-    data_in1 = torch.randn(64, 16, dtype=torch.bfloat16)
-    data_out = torch.zeros(16, 16, dtype=torch.bfloat16)
+    # M=256, N=128, K=1024
+    data_in0 = torch.randn( 256, 1024, dtype=torch.bfloat16)
+    data_in1 = torch.randn(1024,  128, dtype=torch.bfloat16)
+    data_out = torch.zeros( 256,  128, dtype=torch.bfloat16)
 
     # Create buffer objects with corresponding size
     bo_in0 = pyxrt.bo(device, data_in0.nbytes, pyxrt.bo.host_only, 0)
