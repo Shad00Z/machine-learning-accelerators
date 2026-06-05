@@ -2,11 +2,13 @@
 XRT Python driver for Assignment 09.
 
 Usage (from the assignment directory, after building xclbins):
-    python3 src/driver.py
+    python3 src/driver.py            # baseline matmul
+    python3 src/driver.py --perf     # optimized matmul_perf
 
 Requires: pyxrt, numpy, torch
 """
 
+import sys
 import numpy as np
 import torch
 import pyxrt
@@ -28,31 +30,31 @@ def verify(in0: torch.Tensor, in1: torch.Tensor, out: torch.Tensor) -> None:
     print("\n" + "="*40)
     print("       NPU DEBUG DIAGNOSTICS        ")
     print("="*40)
-    
+
     # 1. Check for complete silence (All Zeros)
     is_all_zero = torch.all(out == 0).item()
     print(f"Is output completely zeros?: {is_all_zero}")
-    
+
     # 2. Check fill percentage
     nonzero_count = torch.count_nonzero(out).item()
     total_elements = out.numel()
     print(f"Active elements: {nonzero_count} / {total_elements} ({nonzero_count/total_elements*100:.2f}%)")
-    
+
     # 3. Value Range Comparison
     print(f"NPU Output Range: Min = {out.min().item():.4f}, Max = {out.max().item():.4f}")
     print(f"CPU Reference Range: Min = {ref.min().item():.4f}, Max = {ref.max().item():.4f}")
-    
+
     # 4. Error Metrics
     abs_diff = torch.abs(out - ref)
     print(f"Max Absolute Error: {abs_diff.max().item():.4f}")
     print(f"Mean Absolute Error: {abs_diff.mean().item():.4f}")
-    
+
     # 5. Row-by-Row Spatial Analysis
     failing_rows = []
     for r in range(out.shape[0]):
         if not torch.allclose(out[r], ref[r], rtol=0.5, atol=2):
             failing_rows.append(r)
-            
+
     print(f"Failing Rows: {len(failing_rows)} / {out.shape[0]}")
     if len(failing_rows) > 0:
         print(f"First 10 failing row indices: {failing_rows[:10]}")
@@ -62,9 +64,10 @@ def verify(in0: torch.Tensor, in1: torch.Tensor, out: torch.Tensor) -> None:
         raise ValueError(f"[FAIL] verification did not pass.")
 
 
-def run() -> None:
-    xclbin_path = "build/final_matmul.xclbin"
-    insts_path = "build/insts_matmul.bin"
+def run(perf: bool = False) -> None:
+    suffix = "_perf" if perf else ""
+    xclbin_path = f"build/final_matmul{suffix}.xclbin"
+    insts_path = f"build/insts_matmul{suffix}.bin"
 
     insts = np.fromfile(insts_path, dtype=np.uint32)
 
@@ -129,8 +132,8 @@ def run() -> None:
 
     verify(tensor_in0, tensor_in1, tensor_out)
 
-    print("[PASS] matmul verification passed.")
+    print(f"[PASS] matmul{' (perf)' if perf else ''} verification passed.")
 
 
 if __name__ == "__main__":
-    run()
+    run(perf="--perf" in sys.argv)

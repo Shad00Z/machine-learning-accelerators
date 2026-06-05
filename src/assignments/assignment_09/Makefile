@@ -4,7 +4,9 @@ AIE_INC      := $(MLIR_AIE_DIR)/include
 PEANO_CC     = $(PEANO_INSTALL_DIR)/bin/clang++
 KERNEL_FLAGS = -O2 -std=c++20 --target=aie2p-none-unknown-elf -I $(AIE_INC)
 
-.PHONY: all obj_matmul run_matmul clean
+.PHONY: all obj_matmul run_matmul run_matmul_perf clean
+
+all: build/final_matmul.xclbin build/final_matmul_perf.xclbin
 
 # ── Object file targets ───────────────────────────────────────────────────────
 
@@ -25,10 +27,20 @@ build/final_matmul.xclbin: build/zero.o build/matmul.o matmul.mlir | build/
 	    --aie-generate-xclbin --xclbin-name=final_matmul.xclbin \
 	    ../matmul.mlir
 
+build/final_matmul_perf.xclbin: build/zero.o build/matmul.o matmul_perf.mlir | build/
+	cd build && aiecc.py --alloc-scheme=basic-sequential --no-compile-host \
+	    --no-xchesscc --no-xbridge --peano $(PEANO_INSTALL_DIR) \
+	    --aie-generate-npu-insts --npu-insts-name=insts_matmul_perf.bin \
+	    --aie-generate-xclbin --xclbin-name=final_matmul_perf.xclbin \
+	    ../matmul_perf.mlir
+
 # ── Run targets ───────────────────────────────────────────────────────────────
 
 run_matmul: build/final_matmul.xclbin
 	python3 driver.py
+
+run_matmul_perf: build/final_matmul_perf.xclbin
+	python3 driver.py --perf
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 

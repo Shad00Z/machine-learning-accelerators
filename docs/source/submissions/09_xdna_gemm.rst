@@ -347,6 +347,12 @@ The important things to notice are:
       aiex.npu.dma_wait {symbol = @in0_L3L2_0}
       aiex.npu.dma_wait {symbol = @in1_L3L2_0}
 
+.. note::
+
+    The offset calculation changes only for the ``in0`` matrix. 
+    That is, because ``%arg0`` always transfers a block of ``M``-rows (16).
+    There is no need to update the offset for ``in1`` as for each block of ``M``-rows we need the full matrix.
+
 b) Verifying Correctness
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -464,3 +470,103 @@ That is why we also enhanced ``matmul.mlir`` file accordingly:
 
 After integrating both of these changes we could run ``make run_matmul`` and everything matches.
 
+Task 4: Performance
+-------------------
+
+If we understand the task correctly, we have to ensure that every time we have to wait on a ``dma_wait`` there is also a ``dma_memcpy_nd`` operation running and thereby overlapping with the lost time from the ``dma_wait``.
+
+Therefore, our approach is to fill the engine's queue with 4 tile pairs (ids ``1-4`` and ``5-8``) without any waits.
+After this initial filling we proceed to the 'main' part. 
+Here, we wait for one pair to finish (freeing the ids), and then immediately reissue these ids for the next tile.
+And because we are only waiting for one pair, there are still 3 other transfers streaming.
+This ensures that the data pipeline is never empty.
+We finish this data movement with the final waits at the end.
+
+Our approach looks like this:
+
+.. code-block::
+    :caption: performant ``runtime_sequence``
+
+    aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>) {
+      aiex.npu.dma_memcpy_nd(%arg2[0, 0, 0, 0][16, 8, 16, 16][2048, 16, 128, 1]) {id = 0 : i64, issue_token = true, metadata = @out_L2L3_0} : memref<256x128xbf16>
+
+      // fill up: 4 tile-pairs in flight, no waits
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 16384][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 32768][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 49152][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+
+      // free one pair, issue the next — 12 tiles, ids cycle 1-4 / 5-8
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 65536][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 81920][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 98304][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 114688][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 131072][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 147456][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 163840][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 180224][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 196608][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 212992][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 229376][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 245760][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+
+      // empty out: drain the 4 still-in-flight pairs, then output
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+      aiex.npu.dma_wait {symbol = @out_L2L3_0}
+    }
+
+After some experiments we could improve the depth to 5, meaning that there are 10 input ids (``1-5`` and ``6-10``).
+This version is also implemented in the ``matmul_perf.mlir`` file. 
+
+The optimized version can be executed by running:
+
+.. code-block:: bash
+
+    make run_matmul_perf
