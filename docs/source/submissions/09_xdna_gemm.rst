@@ -484,7 +484,7 @@ We finish this data movement with the final waits at the end.
 
 Our approach looks like this:
 
-.. code-block::
+.. code-block:: none
     :caption: performant ``runtime_sequence``
 
     aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>) {
