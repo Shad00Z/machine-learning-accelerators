@@ -20,7 +20,7 @@ The ``allocation_scheme`` can either be basic-sequential or bank-aware.
 
 A tile encompasses a CoreOp, MemOp, SwitchboxOp, BufferOp and LockOp.
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.tile()``
 
     %tile33 = aie.tile(3, 3)
@@ -40,7 +40,7 @@ This operation takes a ``tile`` as an operand and can specify a number of **opti
 - ``elf_file``: specifies the name of the generated binary file
 - ``dynamic_objfifo_lowering``: specifies if the ``objectfifos`` of the cores are lowered using the dynamic runtime lowering
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.core()`` (1)
 
     %tile = aie.tile(1, 1)
@@ -51,7 +51,7 @@ This operation takes a ``tile`` as an operand and can specify a number of **opti
       aie.end
     }
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.core()`` (2)
 
     %tile = aie.tile(3, 3)
@@ -68,7 +68,7 @@ These instructions will then execute on the configuration co-processor of the AI
 
 This operation has one ``sym_name`` attribute.
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.runtime_sequence()``
 
     aie.runtime_sequence(%arg0: memref<16xi32>) {
@@ -86,17 +86,17 @@ This buffer is created between one producer and one or more consumer tile operat
 The operation takes two operands ``producerTile`` and a arbitrary number of ``consumerTiles``.
 There are also 15 attributes that can be specified for this operation. 
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.objectfifo()`` (1 to 1)
 
     aie.objectfifo @of1 (%tile12, { %tile23 }, 4 : i32) : !aie.objectfifo<memref<16xi32>>
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.objectfifo()`` (1 to 2 - broadcast)
 
     aie.objectfifo @of2 (%tile12, { %tile13, %tile23 }, 4 : i32) : !aie.objectfifo<memref<16xi32>>
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.objectfifo()`` (attributes)
 
     aie.objectfifo @of4 (%tile12 dimensionsToStream [<16, 1>, <16, 16>, <1,1>],
@@ -122,7 +122,7 @@ This can be achieved throught the attributes for this operation:
 - ``dst_offset``: offset for the destination tile
 
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.objectfifo.link()``
 
     aie.objectfifo @of1 (%t70, { %t72 }, 2) : !aie.objectfifo<memref<64xi16>>
@@ -145,7 +145,7 @@ The attributes of this operation are:
 - ``objFifo_name``: description of the fifo object
 - ``size``: amount of fifo objects / locks to acquire
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.objectfifo.acquire()`` 
 
     %subview = aie.objectfifo.acquire @of1 (Consume, 2) : !aie.objectfifosubview<memref<16xi32>>
@@ -159,7 +159,7 @@ Here again, the lock mode is chosen based on the port (producer - release for re
 
 This operation shares the same attributes as the :ref:`aie.objectfifo.acquire() <acquire>` operation.
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aie.objectfifo.release()`` 
 
     aie.objectfifo.release @of1 (Produce, 1)
@@ -177,7 +177,7 @@ There are a few specific concepts worth noting:
 
 Moreover, this operation has 4 operands and 14 attributes. 
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aiex.npu.dma_memcpy_nd()``
 
     aiex.npu.dma_memcpy_nd(0, 0, %arg2[1, 1, 0, 0][1, 1, 32, 32][1, 1, 64, 1]) {id = 0 : i64, issue_token = true, metadata = @out0} : memref<32x64xi32>
@@ -190,7 +190,7 @@ The ``aiex.npu.dma_wait()`` operation is a **blocking operation** that **waits**
 ``symbol`` specifies which DMA should be waited for. 
 Waiting is ensured with the issuing of a task-complete-token (TCT).
 
-.. code-block:: asm
+.. code-block:: none
     :caption: Example usage of ``aiex.npu.dma_wait()``
 
     aiex.npu.dma_wait { symbol = @out0 }
@@ -217,7 +217,7 @@ To adjust the ``driver.py`` to the new dimension sizes we simply had to replace 
 Implementing the data movement inside ``matmul.mlir`` proved to be more challenging.
 We start with the todo's inside the core unit. 
 
-.. code-block:: asm
+.. code-block:: none
 
     %core_0_2 = aie.core(%tile_0_2) {
       %c0 = arith.constant 0 : index
@@ -247,7 +247,7 @@ As the contraction dimension is ``K=1024`` and we always load ``64`` elements in
 After implementing the loops for the core, we moved on to the ``runtime_sequence``.
 The first step was to adjust the ``memref`` sizes accordingly.
 
-.. code-block:: asm 
+.. code-block:: none
     :capation: ``memref`` sizes
 
     aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>)
@@ -255,7 +255,7 @@ The first step was to adjust the ``memref`` sizes accordingly.
 After that we enhance the data movement operations. 
 As we did not want to write an endless number of loops we decided to increase the sizes for the ``dma_memcpy_nd`` operations. 
 
-.. code-block:: asm
+.. code-block:: none
     :caption: data movement operations
 
     // =========================================================================
@@ -332,7 +332,7 @@ The important things to notice are:
 - We are using only the buffer descriptor IDs ``0-9``, as this allows us to evenly distribute the data movements between the ``aiex.npu.dma_wait {symbol = ...}`` instructions.
 - It is necessary that the last two ``aiex.npu.dma_memcpy_nd`` operations in a block are enhanced to create a token (``issue_token``), which can then be used again for the synchronization of the data movement.
 
-.. code-block:: asm
+.. code-block:: none
     :caption: data movement synchronization
 
     // =========================================================================
@@ -392,7 +392,7 @@ However, as this was not the case, we enhanced our ``driver.py`` slightly to hel
 
 Based on these debug messages we could verify that we are working on our whole memory, but since the matmul still failed, we knew something was wrong.
 
-.. code-block:: txt
+.. code-block:: text
     :caption: initial debug response
 
     ========================================
@@ -421,7 +421,7 @@ Therefore, we added an additional clearing of the ``dm1-dm4`` registers with the
 However, we can't just apply these changes every time, but everytime before the 16 accumulation loops.
 That is why we also enhanced ``matmul.mlir`` file accordingly:
 
-.. code-block:: asm
+.. code-block:: none
     :caption: memory reset
 
     module {
