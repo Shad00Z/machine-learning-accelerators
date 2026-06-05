@@ -30,7 +30,6 @@ module {
           %buffer_out = aie.objectfifo.acquire @out_L1L2_0_0(Produce, 1) : !aie.objectfifosubview<memref<2x2x8x8xbf16>>
           %out = aie.objectfifo.subview.access %buffer_out[0] : !aie.objectfifosubview<memref<2x2x8x8xbf16>> -> memref<2x2x8x8xbf16>
           func.call @zero(%out) : (memref<2x2x8x8xbf16>) -> ()
-          %c = arith.constant 16 : index
           // first K-iteration: clears accumulators
           %b0i0 = aie.objectfifo.acquire @in0_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<2x8x8x8xbf16>>
           %i0_0 = aie.objectfifo.subview.access %b0i0[0] : !aie.objectfifosubview<memref<2x8x8x8xbf16>> -> memref<2x8x8x8xbf16>
@@ -39,7 +38,9 @@ module {
           func.call @matmul_init(%i0_0, %i1_0, %out) : (memref<2x8x8x8xbf16>, memref<8x2x8x8xbf16>, memref<2x2x8x8xbf16>) -> ()
           aie.objectfifo.release @in0_L2L1_0(Consume, 1)
           aie.objectfifo.release @in1_L2L1_0(Consume, 1)
-          // remaining 15 K-iterations: accumulate
+
+          // remaining 15 K-iterations (1024 / 64): accumulate
+          %c = arith.constant 16 : index
           scf.for %arg2 = %c1 to %c step %c1 {
             %buffer_in0 = aie.objectfifo.acquire @in0_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<2x8x8x8xbf16>>
             %in0 = aie.objectfifo.subview.access %buffer_in0[0] : !aie.objectfifosubview<memref<2x8x8x8xbf16>> -> memref<2x8x8x8xbf16>
@@ -57,12 +58,12 @@ module {
 
     aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>) {
       // =========================================================================
-      // 1. LONG-RUNNING ASYNC OUTPUT (Reserved exclusively on ID 0)
+      // LONG-RUNNING ASYNC OUTPUT (Reserved exclusively on ID 0)
       // =========================================================================
       aiex.npu.dma_memcpy_nd(%arg2[0, 0, 0, 0][16, 8, 16, 16][2048, 16, 128, 1]) {id = 0 : i64, metadata = @out_L2L3_0} : memref<256x128xbf16>
 
       // =========================================================================
-      // 2. BATCH 1: First 4 Pairs (Rows 0 to 63) -> IDs 1-8
+      // BATCH 1: First 4 Pairs (Rows 0 to 63) -> IDs 1-8
       // =========================================================================
       aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
       aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
@@ -77,7 +78,7 @@ module {
       aiex.npu.dma_wait {symbol = @in1_L3L2_0}
 
       // =========================================================================
-      // 3. BATCH 2: Next 4 Pairs (Rows 64 to 127) -> Reuse IDs 1-8 safely
+      // BATCH 2: Next 4 Pairs (Rows 64 to 127) -> Reuse IDs 1-8 safely
       // =========================================================================
       aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 65536][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
       aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
@@ -92,7 +93,7 @@ module {
       aiex.npu.dma_wait {symbol = @in1_L3L2_0}
 
       // =========================================================================
-      // 4. BATCH 3: Next 4 Pairs (Rows 128 to 191) -> Reuse IDs 1-8 safely
+      // BATCH 3: Next 4 Pairs (Rows 128 to 191) -> Reuse IDs 1-8 safely
       // =========================================================================
       aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 131072][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
       aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
@@ -107,7 +108,7 @@ module {
       aiex.npu.dma_wait {symbol = @in1_L3L2_0}
 
       // =========================================================================
-      // 5. BATCH 4: Final 4 Pairs (Rows 192 to 255) -> Reuse IDs 1-8 safely
+      // BATCH 4: Final 4 Pairs (Rows 192 to 255) -> Reuse IDs 1-8 safely
       // =========================================================================
       aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 196608][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
       aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
@@ -119,7 +120,7 @@ module {
       aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref<1024x128xbf16>
 
       // =========================================================================
-      // 6. FINAL CLEANUP AND VERIFICATION
+      // FINAL CLEANUP AND VERIFICATION
       // =========================================================================
       aiex.npu.dma_wait {symbol = @in0_L3L2_0}
       aiex.npu.dma_wait {symbol = @in1_L3L2_0}

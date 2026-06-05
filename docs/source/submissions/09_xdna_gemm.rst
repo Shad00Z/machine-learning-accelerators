@@ -195,5 +195,272 @@ Waiting is ensured with the issuing of a task-complete-token (TCT).
 
     aiex.npu.dma_wait { symbol = @out0 }
 
+
 Task 2: Data Layouts and Loops
 ------------------------------
+
+
+Task 3: Implementation
+----------------------
+
+a) Data Movement
+^^^^^^^^^^^^^^^^
+
+To adjust the ``driver.py`` to the new dimension sizes we simply had to replace the ones present with the new values. 
+
+.. code-block:: py
+
+    data_in0 = torch.randn( 256, 1024, dtype=torch.bfloat16)
+    data_in1 = torch.randn(1024,  128, dtype=torch.bfloat16)
+    data_out = torch.zeros( 256,  128, dtype=torch.bfloat16)
+
+Implementing the data movement inside ``matmul.mlir`` proved to be more challenging.
+We start with the todo's inside the core unit. 
+
+.. code-block:: asm
+
+    %core_0_2 = aie.core(%tile_0_2) {
+      %c0 = arith.constant 0 : index
+      %c4294967295 = arith.constant 4294967295 : index
+      %c1 = arith.constant 1 : index
+      scf.for %arg0 = %c0 to %c4294967295 step %c1 {
+        %ab = arith.constant 128 : index
+        scf.for %arg1 = %c0 to %ab step %c1 {
+          ...
+          %c = arith.constant 16 : index
+          scf.for %arg2 = %c1 to %c step %c1 {
+            ...
+          }
+          aie.objectfifo.release @out_L1L2_0_0(Produce, 1)
+        }
+      }
+      aie.end
+    }
+
+For that we looked at how many ``16x16`` tiles fit into the ``out`` matrix. 
+In this specific case we had ``256x128``, which boils down to ``16x8`` and this results in ``128`` iterations.
+
+To get a correct result we then had to fill in the inner most loop. 
+This loop accumulates the result in the currently acquired memory. 
+As the contraction dimension is ``K=1024`` and we always load ``64`` elements in the ``K`` dimension, we ultimately have ``16`` iterations to perform. 
+
+After implementing the loops for the core, we moved on to the ``runtime_sequence``.
+The first step was to adjust the ``memref`` sizes accordingly.
+
+.. code-block:: asm 
+    :capation: ``memref`` sizes
+
+    aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>)
+
+After that we enhance the data movement operations. 
+As we did not want to write an endless number of loops we decided to increase the sizes for the ``dma_memcpy_nd`` operations. 
+
+.. code-block:: asm
+    :caption: data movement operations
+
+    // =========================================================================
+    // LONG-RUNNING ASYNC OUTPUT (Reserved exclusively on ID 0)
+    // =========================================================================
+    aiex.npu.dma_memcpy_nd(%arg2[0, 0, 0, 0][16, 8, 16, 16][2048, 16, 128, 1]) {id = 0 : i64, metadata = @out_L2L3_0} : memref<256x128xbf16>
+
+    // =========================================================================
+    // BATCH 1: First 4 Pairs (Rows 0 to 63) -> IDs 1-8
+    // =========================================================================
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 16384][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 32768][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 49152][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref<1024x128xbf16>
+
+    aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+    aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+    // =========================================================================
+    // BATCH 2: Next 4 Pairs (Rows 64 to 127) -> Reuse IDs 1-8 safely
+    // =========================================================================
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 65536][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 81920][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 98304][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 114688][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref<1024x128xbf16>
+
+    aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+    aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+    // =========================================================================
+    // BATCH 3: Next 4 Pairs (Rows 128 to 191) -> Reuse IDs 1-8 safely
+    // =========================================================================
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 131072][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 147456][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 163840][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 180224][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref<1024x128xbf16>
+
+    aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+    aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+    // =========================================================================
+    // BATCH 4: Final 4 Pairs (Rows 192 to 255) -> Reuse IDs 1-8 safely
+    // =========================================================================
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 196608][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 212992][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 229376][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+    aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 245760][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref<256x1024xbf16>
+    aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref<1024x128xbf16>
+
+    // =========================================================================
+    // FINAL CLEANUP AND VERIFICATION
+    // =========================================================================
+    aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+    aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+    aiex.npu.dma_wait {symbol = @out_L2L3_0}
+
+The important things to notice are:
+
+- We are using only the buffer descriptor IDs ``0-9``, as this allows us to evenly distribute the data movements between the ``aiex.npu.dma_wait {symbol = ...}`` instructions.
+- It is necessary that the last two ``aiex.npu.dma_memcpy_nd`` operations in a block are enhanced to create a token (``issue_token``), which can then be used again for the synchronization of the data movement.
+
+.. code-block:: asm
+    :caption: data movement synchronization
+
+    // =========================================================================
+      // BATCH 1: First 4 Pairs (Rows 0 to 63) -> IDs 1-8
+      // =========================================================================
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref<256x1024xbf16>
+      ...
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref<1024x128xbf16>
+      aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 49152][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref<256x1024xbf16>
+      aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref<1024x128xbf16>
+
+      aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+      aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+b) Verifying Correctness
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Based on our understanding of the architecture (XDNA2), the ``matmul`` kernel from the previous assignment and the row-major data layout we expected everything to work like this. 
+
+However, as this was not the case, we enhanced our ``driver.py`` slightly to help us debug our current ``matmul.mlir``.
+
+.. code-block:: py
+    :caption: debug code
+
+    print("\n" + "="*40)
+    print("       NPU DEBUG DIAGNOSTICS        ")
+    print("="*40)
+    
+    # 1. Check for complete silence (All Zeros)
+    is_all_zero = torch.all(out == 0).item()
+    print(f"Is output completely zeros?: {is_all_zero}")
+    
+    # 2. Check fill percentage
+    nonzero_count = torch.count_nonzero(out).item()
+    total_elements = out.numel()
+    print(f"Active elements: {nonzero_count} / {total_elements} ({nonzero_count/total_elements*100:.2f}%)")
+    
+    # 3. Value Range Comparison
+    print(f"NPU Output Range: Min = {out.min().item():.4f}, Max = {out.max().item():.4f}")
+    print(f"CPU Reference Range: Min = {ref.min().item():.4f}, Max = {ref.max().item():.4f}")
+    
+    # 4. Error Metrics
+    abs_diff = torch.abs(out - ref)
+    print(f"Max Absolute Error: {abs_diff.max().item():.4f}")
+    print(f"Mean Absolute Error: {abs_diff.mean().item():.4f}")
+    
+    # 5. Row-by-Row Spatial Analysis
+    failing_rows = []
+    for r in range(out.shape[0]):
+        if not torch.allclose(out[r], ref[r], rtol=0.5, atol=2):
+            failing_rows.append(r)
+            
+    print(f"Failing Rows: {len(failing_rows)} / {out.shape[0]}")
+    if len(failing_rows) > 0:
+        print(f"First 10 failing row indices: {failing_rows[:10]}")
+    print("="*40 + "\n")
+
+Based on these debug messages we could verify that we are working on our whole memory, but since the matmul still failed, we knew something was wrong.
+
+.. code-block:: txt
+    :caption: initial debug response
+
+    ========================================
+    Is output completely zeros?: False
+    Active elements: 32768 / 32768 (100.00%)
+    NPU Output Range: Min = -1560.0000, Max = 1064.0000
+    CPU Reference Range: Min = -131.0000, Max = 134.0000
+    Max Absolute Error: 1576.0000
+    Mean Absolute Error: 199.0000
+    Failing Rows: 256 / 256
+    First 10 failing row indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    ========================================
+
+After performing some experiments, we realized that there is an initialization problem for our accumulation registers (``dm0-dm4``).
+Therefore, we added an additional clearing of the ``dm1-dm4`` registers with the ``vlcr`` instruction.
+
+.. code-block:: asm
+    :caption: accumulation register reset
+
+    matmul_init:
+        vclr	dm1
+        vclr	dm2
+        vclr	dm3
+        vclr	dm4
+
+However, we can't just apply these changes every time, but everytime before the 16 accumulation loops.
+That is why we also enhanced ``matmul.mlir`` file accordingly:
+
+.. code-block:: asm
+    :caption: memory reset
+
+    module {
+        memref.global @in0_L3L2_ping : memref<256x1024xbf16>
+        memref.global @in0_L3L2_pong : memref<256x1024xbf16>
+        aie.device(npu2) {
+            ...
+
+            %core_0_2 = aie.core(%tile_0_2) {
+                ...
+                scf.for %arg0 = %c0 to %c4294967295 step %c1 {
+                    ...
+                    scf.for %arg1 = %c0 to %ab step %c1 {
+                        ...
+                        // first K-iteration: clears accumulators
+                        %b0i0 = aie.objectfifo.acquire @in0_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<2x8x8x8xbf16>>
+                        %i0_0 = aie.objectfifo.subview.access %b0i0[0] : !aie.objectfifosubview<memref<2x8x8x8xbf16>> -> memref<2x8x8x8xbf16>
+                        %b0i1 = aie.objectfifo.acquire @in1_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<8x2x8x8xbf16>>
+                        %i1_0 = aie.objectfifo.subview.access %b0i1[0] : !aie.objectfifosubview<memref<8x2x8x8xbf16>> -> memref<8x2x8x8xbf16>
+                        func.call @matmul_init(%i0_0, %i1_0, %out) : (memref<2x8x8x8xbf16>, memref<8x2x8x8xbf16>, memref<2x2x8x8xbf16>) -> ()
+                        aie.objectfifo.release @in0_L2L1_0(Consume, 1)
+                        aie.objectfifo.release @in1_L2L1_0(Consume, 1)
+
+                        // remaining 15 K-iterations (1024 / 64): accumulate
+                        %c = arith.constant 16 : index
+                        scf.for %arg2 = %c1 to %c step %c1 {
+                            ...
+                        }
+                        aie.objectfifo.release @out_L1L2_0_0(Produce, 1)
+                    }
+                }
+                aie.end
+                } {stack_size = 1024 : i32}
+
+                aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>) {
+                    ...
+                }
+            }
+        }
+
+After integrating both of these changes we could run ``make run_matmul`` and everything matches.
+

@@ -14,7 +14,14 @@ import pyxrt
 
 def verify(in0: torch.Tensor, in1: torch.Tensor, out: torch.Tensor) -> None:
     """
-    Diagnostic verification to inspect NPU output patterns.
+    Verify the NPU output against a CPU reference.
+
+    Computation: out += in0 @ in1
+
+    Parameters
+    ----------
+    in0, in1 : bfloat16 torch tensors
+    out : bfloat16 torch tensor
     """
     ref = in0 @ in1
 
@@ -50,14 +57,6 @@ def verify(in0: torch.Tensor, in1: torch.Tensor, out: torch.Tensor) -> None:
     if len(failing_rows) > 0:
         print(f"First 10 failing row indices: {failing_rows[:10]}")
     print("="*40 + "\n")
-    
-    # nz = (out != 0)
-    # print("nonzero per row:", nz.sum(1).unique())      # 128 vs 0?  -> spatial (rows 0-63 only)
-    # print("nonzero per col:", nz.sum(0).unique())      # 64 vs 0?   -> column pattern
-    # print("first zero row:", (nz.sum(1)==0).nonzero()[0][:1])
-    
-    print("col-block max err:",
-      [abs(out[:, c:c+16] - ref[:, c:c+16]).max().item() for c in range(0, 128, 16)])
 
     if not torch.allclose(out, ref, rtol=0.5, atol=2):
         raise ValueError(f"[FAIL] verification did not pass.")
