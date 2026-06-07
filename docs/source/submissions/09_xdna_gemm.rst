@@ -15,7 +15,7 @@ a) ``aie.tile()``
 
 The ``aie.tile()`` operation creates an **AIE tile** within the AI Engine array.
 
-This operation can either specify ``row`` and ``col`` attributes, denoting the column and row of the tile or it can specify a ``allocation_scheme`` for the tile.
+This operation can either specify ``row`` and ``col`` attributes, denoting the row and column of the tile, or it can specify an ``allocation_scheme`` for the tile.
 The ``allocation_scheme`` can either be basic-sequential or bank-aware.
 
 A tile encompasses a CoreOp, MemOp, SwitchboxOp, BufferOp and LockOp.
@@ -30,7 +30,7 @@ b) ``aie.core()``
 ^^^^^^^^^^^^^^^^^
 
 The ``aie.core()`` operation represents an **AIEngine processor core**, which belongs to a tile. 
-At the end this operation generates a binary core for each core. 
+At the end this operation generates one binary per core. 
 
 This operation takes a ``tile`` as an operand and can specify a number of **optional** attributes:
 
@@ -117,7 +117,7 @@ The important thing for this operation is that the ``objectFifos`` should have a
 This can be achieved through the attributes for this operation: 
 
 - ``fifoIns``: references the input fifos
-- ``fifoOut``: references the input fifos
+- ``fifoOut``: references the output fifos
 - ``src_offset``: offset for the source tile
 - ``dst_offset``: offset for the destination tile
 
