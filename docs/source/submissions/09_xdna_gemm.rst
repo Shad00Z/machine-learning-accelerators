@@ -199,6 +199,13 @@ Waiting is ensured with the issuing of a task-complete-token (TCT).
 Task 2: Data Layouts and Loops
 ------------------------------
 
+We have constructed a small sketch that shows the data movements from main memory to the tiles. 
+Each arrow is annotated with an ``aie`` or ``aiex`` instruction, and sometimes also with a small description.
+
+.. image:: ../_static/data_movements.pdf
+    :width: 400
+    :alt:  This illustrations shows the data movement from main memory through the shim and memory tiles to the compute tiles.
+
 
 Task 3: Implementation
 ----------------------
