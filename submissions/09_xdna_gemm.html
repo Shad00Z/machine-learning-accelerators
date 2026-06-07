@@ -1,0 +1,685 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XDNA GEMM &mdash; Machine Learning Accelerators  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="XDNA GEMM Kernel" href="08_xdna_gemm_kernel.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Machine Learning Accelerators
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">XDNA GEMM</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#task-0-setup">Task 0: Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-1-mlir-aie-operations">Task 1: MLIR-AIE operations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-aie-tile">a) <code class="docutils literal notranslate"><span class="pre">aie.tile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-aie-core">b) <code class="docutils literal notranslate"><span class="pre">aie.core()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#c-aie-runtime-sequence">c) <code class="docutils literal notranslate"><span class="pre">aie.runtime_sequence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#d-aie-objectfifo">d) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#e-aie-objectfifo-link">e) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.link()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#f-aie-objectfifo-acquire">f) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.acquire()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#g-aie-objectfifo-release">g) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.release()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#h-aiex-npu-dma-memcpy-nd">h) <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_memcpy_nd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#i-aiex-npu-dma-wait">i) <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_wait()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-2-data-layouts-and-loops">Task 2: Data Layouts and Loops</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-3-implementation">Task 3: Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-data-movement">a) Data Movement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-verifying-correctness">b) Verifying Correctness</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#task-4-performance">Task 4: Performance</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Machine Learning Accelerators</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">XDNA GEMM</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/submissions/09_xdna_gemm.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="xdna-gemm">
+<h1>XDNA GEMM<a class="headerlink" href="#xdna-gemm" title="Link to this heading"></a></h1>
+<section id="task-0-setup">
+<h2>Task 0: Setup<a class="headerlink" href="#task-0-setup" title="Link to this heading"></a></h2>
+<p>For this initial task we simply copied our <code class="docutils literal notranslate"><span class="pre">matmul.s</span></code> kernel from the previous week and also added the <code class="docutils literal notranslate"><span class="pre">verify()</span></code> function to the new driver.</p>
+</section>
+<section id="task-1-mlir-aie-operations">
+<h2>Task 1: MLIR-AIE operations<a class="headerlink" href="#task-1-mlir-aie-operations" title="Link to this heading"></a></h2>
+<section id="a-aie-tile">
+<h3>a) <code class="docutils literal notranslate"><span class="pre">aie.tile()</span></code><a class="headerlink" href="#a-aie-tile" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aie.tile()</span></code> operation creates an <strong>AIE tile</strong> within the AI Engine array.</p>
+<p>This operation can either specify <code class="docutils literal notranslate"><span class="pre">row</span></code> and <code class="docutils literal notranslate"><span class="pre">col</span></code> attributes, denoting the row and column of the tile, or it can specify an <code class="docutils literal notranslate"><span class="pre">allocation_scheme</span></code> for the tile.
+The <code class="docutils literal notranslate"><span class="pre">allocation_scheme</span></code> can either be basic-sequential or bank-aware.</p>
+<p>A tile encompasses a CoreOp, MemOp, SwitchboxOp, BufferOp and LockOp.</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.tile()</span></code></span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>%tile33 = aie.tile(3, 3)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="b-aie-core">
+<h3>b) <code class="docutils literal notranslate"><span class="pre">aie.core()</span></code><a class="headerlink" href="#b-aie-core" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aie.core()</span></code> operation represents an <strong>AIEngine processor core</strong>, which belongs to a tile.
+At the end this operation generates one binary per core.</p>
+<p>This operation takes a <code class="docutils literal notranslate"><span class="pre">tile</span></code> as an operand and can specify a number of <strong>optional</strong> attributes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">stack_size</span></code>: specifies the amount of memory (bytes) reserved for the stack_size</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">link_with</span></code>: (deprecated) value is folded into <code class="docutils literal notranslate"><span class="pre">link_files</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">link_files</span></code>: links to externally-defined functions</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">elf_file</span></code>: specifies the name of the generated binary file</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dynamic_objfifo_lowering</span></code>: specifies if the <code class="docutils literal notranslate"><span class="pre">objectfifos</span></code> of the cores are lowered using the dynamic runtime lowering</p></li>
+</ul>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.core()</span></code> (1)</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>%tile = aie.tile(1, 1)
+%lock11_8 = aie.lock(%tile, 8)
+aie.core(%tile) {
+  aie.use_lock(%lock11_8, &quot;Acquire&quot;, 1)
+  aie.use_lock(%lock11_8, &quot;Release&quot;, 0)
+  aie.end
+}
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.core()</span></code> (2)</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>%tile = aie.tile(3, 3)
+aie.core(%tile) {
+  aie.end
+} { stackSize = 2048 : i32, elf_file = &quot;core_33.elf&quot; }
+</pre></div>
+</div>
+</div>
+</section>
+<section id="c-aie-runtime-sequence">
+<h3>c) <code class="docutils literal notranslate"><span class="pre">aie.runtime_sequence()</span></code><a class="headerlink" href="#c-aie-runtime-sequence" title="Link to this heading"></a></h3>
+<p>The instructions that are specified within the <code class="docutils literal notranslate"><span class="pre">aie.runtime_sequence()</span></code> operation allow the AI Engine array to be (<strong>re-</strong>) <strong>configured</strong> at runtime (e.g. data movement buffer descriptors).
+These instructions will then execute on the configuration co-processor of the AI Engine array.</p>
+<p>This operation has one <code class="docutils literal notranslate"><span class="pre">sym_name</span></code> attribute.</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.runtime_sequence()</span></code></span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.runtime_sequence(%arg0: memref&lt;16xi32&gt;) {
+  aie.trace.host_config buffer_size=65536
+  aie.trace.start_config @trace1
+}
+</pre></div>
+</div>
+</div>
+</section>
+<section id="d-aie-objectfifo">
+<h3>d) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo()</span></code><a class="headerlink" href="#d-aie-objectfifo" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aie.objectfifo()</span></code> creates a <strong>circular buffer</strong> between two tile operations (<code class="docutils literal notranslate"><span class="pre">aie_tile</span></code>).
+This buffer is created between one producer and one or more consumer tile operations.</p>
+<p>The operation takes two operands <code class="docutils literal notranslate"><span class="pre">producerTile</span></code> and a arbitrary number of <code class="docutils literal notranslate"><span class="pre">consumerTiles</span></code>.
+There are also 15 attributes that can be specified for this operation.</p>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.objectfifo()</span></code> (1 to 1)</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.objectfifo @of1 (%tile12, { %tile23 }, 4 : i32) : !aie.objectfifo&lt;memref&lt;16xi32&gt;&gt;
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.objectfifo()</span></code> (1 to 2 - broadcast)</span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.objectfifo @of2 (%tile12, { %tile13, %tile23 }, 4 : i32) : !aie.objectfifo&lt;memref&lt;16xi32&gt;&gt;
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.objectfifo()</span></code> (attributes)</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.objectfifo @of4 (%tile12 dimensionsToStream [&lt;16, 1&gt;, &lt;16, 16&gt;, &lt;1,1&gt;],
+                     {
+                       %tile13 dimensionsFromStream [],
+                       %tile23 dimensionsFromStream [&lt;2, 1&gt;, &lt;128, 2&gt;]
+                       }, 2 : i32
+                     ) : !aie.objectfifo&lt;memref&lt;256xi32&gt;&gt;
+</pre></div>
+</div>
+</div>
+</section>
+<section id="e-aie-objectfifo-link">
+<h3>e) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.link()</span></code><a class="headerlink" href="#e-aie-objectfifo-link" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.link()</span></code> operation links two <code class="docutils literal notranslate"><span class="pre">objectFifos</span></code>.
+That means that the <code class="docutils literal notranslate"><span class="pre">objectFifos</span></code> form <strong>one</strong> dataflow movement, which is split among multiple <code class="docutils literal notranslate"><span class="pre">objectFifos</span></code>.</p>
+<p>The important thing for this operation is that the <code class="docutils literal notranslate"><span class="pre">objectFifos</span></code> should have a link point, which can be a shared AIE tile.
+This can be achieved through the attributes for this operation:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">fifoIns</span></code>: references the input fifos</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fifoOut</span></code>: references the output fifos</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">src_offset</span></code>: offset for the source tile</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dst_offset</span></code>: offset for the destination tile</p></li>
+</ul>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.link()</span></code></span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.objectfifo @of1 (%t70, { %t72 }, 2) : !aie.objectfifo&lt;memref&lt;64xi16&gt;&gt;
+aie.objectfifo @of2 (%t72, { %t74 }, 2) : !aie.objectfifo&lt;memref&lt;64xi16&gt;&gt;
+aie.objectfifo.link [@of1] -&gt; [@of2] ([] [])
+</pre></div>
+</div>
+</div>
+</section>
+<section id="f-aie-objectfifo-acquire">
+<span id="acquire"></span><h3>f) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.acquire()</span></code><a class="headerlink" href="#f-aie-objectfifo-acquire" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.acquire()</span></code> operation <strong>acquires locks</strong> for the next given number of objects in <code class="docutils literal notranslate"><span class="pre">objectFifo</span></code>.
+Thereby, the lock mode can be chosen based on the port (producer - write, consumer - read).
+At the end this operation returns a subview of the acquired objects which can be accessed by them.</p>
+<p>The attributes of this operation are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">port</span></code>: is the port of an object fifo</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">objFifo_name</span></code>: description of the fifo object</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">size</span></code>: amount of fifo objects / locks to acquire</p></li>
+</ul>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.acquire()</span></code></span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>%subview = aie.objectfifo.acquire @of1 (Consume, 2) : !aie.objectfifosubview&lt;memref&lt;16xi32&gt;&gt;
+</pre></div>
+</div>
+</div>
+</section>
+<section id="g-aie-objectfifo-release">
+<h3>g) <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.release()</span></code><a class="headerlink" href="#g-aie-objectfifo-release" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.release()</span></code> operation <strong>releases the locks</strong> that have been acquired for the next given number of objects in the <code class="docutils literal notranslate"><span class="pre">objectFifo</span></code>.
+Here again, the lock mode is chosen based on the port (producer - release for read, consumer - release for write).</p>
+<p>This operation shares the same attributes as the <a class="reference internal" href="#acquire"><span class="std std-ref">aie.objectfifo.acquire()</span></a> operation.</p>
+<div class="literal-block-wrapper docutils container" id="id10">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.release()</span></code></span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.objectfifo.release @of1 (Produce, 1)
+</pre></div>
+</div>
+</div>
+</section>
+<section id="h-aiex-npu-dma-memcpy-nd">
+<h3>h) <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_memcpy_nd()</span></code><a class="headerlink" href="#h-aiex-npu-dma-memcpy-nd" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_memcpy_nd()</span></code> operation programs a direct memory access (DMA) to <strong>access</strong> a memory <code class="docutils literal notranslate"><span class="pre">memref</span></code> with an <strong>access pattern</strong> specified by <code class="docutils literal notranslate"><span class="pre">offsets</span></code>, <code class="docutils literal notranslate"><span class="pre">sizes</span></code> and <code class="docutils literal notranslate"><span class="pre">strides</span></code> (operands) or alternatively by <code class="docutils literal notranslate"><span class="pre">static_offsets</span></code>, <code class="docutils literal notranslate"><span class="pre">static_sizes</span></code> and <code class="docutils literal notranslate"><span class="pre">static_strides</span></code> (attributes).
+There are a few specific concepts worth noting:</p>
+<ul class="simple">
+<li><p><em>Data Layout Transformation</em>: is described by the <code class="docutils literal notranslate"><span class="pre">sizes</span></code> and <code class="docutils literal notranslate"><span class="pre">strides</span></code></p></li>
+<li><p><em>Automatic Linearization of Contiguous Accesses</em>: happens automatically through a canonicalization pattern</p></li>
+<li><p><em>Packet Header Attribute</em>: specifying the <code class="docutils literal notranslate"><span class="pre">packet</span></code> attribute ensures that every DMA BD a packet header is being generated (useful to guide arbitration throughout)</p></li>
+</ul>
+<p>Moreover, this operation has 4 operands and 14 attributes.</p>
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_memcpy_nd()</span></code></span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aiex.npu.dma_memcpy_nd(0, 0, %arg2[1, 1, 0, 0][1, 1, 32, 32][1, 1, 64, 1]) {id = 0 : i64, issue_token = true, metadata = @out0} : memref&lt;32x64xi32&gt;
+</pre></div>
+</div>
+</div>
+</section>
+<section id="i-aiex-npu-dma-wait">
+<h3>i) <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_wait()</span></code><a class="headerlink" href="#i-aiex-npu-dma-wait" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_wait()</span></code> operation is a <strong>blocking operation</strong> that <strong>waits</strong> for a DMA to complete its execution.
+<code class="docutils literal notranslate"><span class="pre">symbol</span></code> specifies which DMA should be waited for.
+Waiting is ensured with the issuing of a task-complete-token (TCT).</p>
+<div class="literal-block-wrapper docutils container" id="id12">
+<div class="code-block-caption"><span class="caption-text">Example usage of <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_wait()</span></code></span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aiex.npu.dma_wait { symbol = @out0 }
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+<section id="task-2-data-layouts-and-loops">
+<h2>Task 2: Data Layouts and Loops<a class="headerlink" href="#task-2-data-layouts-and-loops" title="Link to this heading"></a></h2>
+<p>We have constructed a small sketch that shows the data movements from main memory to the tiles.
+Each arrow is annotated with an <code class="docutils literal notranslate"><span class="pre">aie</span></code> or <code class="docutils literal notranslate"><span class="pre">aiex</span></code> instruction, and sometimes also with a small description.</p>
+<a class="reference internal image-reference" href="../_images/data_movements.pdf"><img alt="This illustrations shows the data movement from main memory through the shim and memory tiles to the compute tiles." src="../_images/data_movements.pdf" width="400" />
+</a>
+</section>
+<section id="task-3-implementation">
+<h2>Task 3: Implementation<a class="headerlink" href="#task-3-implementation" title="Link to this heading"></a></h2>
+<section id="a-data-movement">
+<h3>a) Data Movement<a class="headerlink" href="#a-data-movement" title="Link to this heading"></a></h3>
+<p>To adjust the <code class="docutils literal notranslate"><span class="pre">driver.py</span></code> to the new dimension sizes we simply had to replace the ones present with the new values.</p>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="n">data_in0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">1024</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">)</span>
+<span class="n">data_in1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span>  <span class="mi">128</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">)</span>
+<span class="n">data_out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span> <span class="mi">256</span><span class="p">,</span>  <span class="mi">128</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Implementing the data movement inside <code class="docutils literal notranslate"><span class="pre">matmul.mlir</span></code> proved to be more challenging.
+We start with the todo’s inside the core unit.</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>%core_0_2 = aie.core(%tile_0_2) {
+  %c0 = arith.constant 0 : index
+  %c4294967295 = arith.constant 4294967295 : index
+  %c1 = arith.constant 1 : index
+  scf.for %arg0 = %c0 to %c4294967295 step %c1 {
+    %ab = arith.constant 128 : index
+    scf.for %arg1 = %c0 to %ab step %c1 {
+      ...
+      %c = arith.constant 16 : index
+      scf.for %arg2 = %c1 to %c step %c1 {
+        ...
+      }
+      aie.objectfifo.release @out_L1L2_0_0(Produce, 1)
+    }
+  }
+  aie.end
+}
+</pre></div>
+</div>
+<p>For that we looked at how many <code class="docutils literal notranslate"><span class="pre">16x16</span></code> tiles fit into the <code class="docutils literal notranslate"><span class="pre">out</span></code> matrix.
+In this specific case we had <code class="docutils literal notranslate"><span class="pre">256x128</span></code>, which boils down to <code class="docutils literal notranslate"><span class="pre">16x8</span></code> and this results in <code class="docutils literal notranslate"><span class="pre">128</span></code> iterations.</p>
+<p>To get a correct result we then had to fill in the innermost loop.
+This loop accumulates the result in the currently acquired memory.
+As the contraction dimension is <code class="docutils literal notranslate"><span class="pre">K=1024</span></code> and we always load <code class="docutils literal notranslate"><span class="pre">64</span></code> elements in the <code class="docutils literal notranslate"><span class="pre">K</span></code> dimension, we ultimately have <code class="docutils literal notranslate"><span class="pre">16</span></code> iterations to perform.</p>
+<p>After implementing the loops for the core, we moved on to the <code class="docutils literal notranslate"><span class="pre">runtime_sequence</span></code>.
+The first step was to adjust the <code class="docutils literal notranslate"><span class="pre">memref</span></code> sizes accordingly.</p>
+<div class="literal-block-wrapper docutils container" id="id13">
+<div class="code-block-caption"><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">memref</span></code> sizes</span><a class="headerlink" href="#id13" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.runtime_sequence(%arg0: memref&lt;256x1024xbf16&gt;, %arg1: memref&lt;1024x128xbf16&gt;, %arg2: memref&lt;256x128xbf16&gt;)
+</pre></div>
+</div>
+</div>
+<p>After that we enhance the data movement operations.
+As we did not want to write an endless number of loops we decided to increase the sizes for the <code class="docutils literal notranslate"><span class="pre">dma_memcpy_nd</span></code> operations.</p>
+<div class="literal-block-wrapper docutils container" id="id14">
+<div class="code-block-caption"><span class="caption-text">data movement operations</span><a class="headerlink" href="#id14" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>// =========================================================================
+// LONG-RUNNING ASYNC OUTPUT (Reserved exclusively on ID 0)
+// =========================================================================
+aiex.npu.dma_memcpy_nd(%arg2[0, 0, 0, 0][16, 8, 16, 16][2048, 16, 128, 1]) {id = 0 : i64, metadata = @out_L2L3_0} : memref&lt;256x128xbf16&gt;
+
+// =========================================================================
+// BATCH 1: First 4 Pairs (Rows 0 to 63) -&gt; IDs 1-8
+// =========================================================================
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 16384][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 32768][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 49152][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref&lt;1024x128xbf16&gt;
+
+aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+// =========================================================================
+// BATCH 2: Next 4 Pairs (Rows 64 to 127) -&gt; Reuse IDs 1-8 safely
+// =========================================================================
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 65536][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 81920][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 98304][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 114688][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref&lt;1024x128xbf16&gt;
+
+aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+// =========================================================================
+// BATCH 3: Next 4 Pairs (Rows 128 to 191) -&gt; Reuse IDs 1-8 safely
+// =========================================================================
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 131072][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 147456][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 163840][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 180224][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref&lt;1024x128xbf16&gt;
+
+aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+
+// =========================================================================
+// BATCH 4: Final 4 Pairs (Rows 192 to 255) -&gt; Reuse IDs 1-8 safely
+// =========================================================================
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 196608][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 2 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 212992][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 4 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 229376][8, 16, 16, 64][0, 64, 1024, 1]) {id = 5 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 245760][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref&lt;256x1024xbf16&gt;
+aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref&lt;1024x128xbf16&gt;
+
+// =========================================================================
+// FINAL CLEANUP AND VERIFICATION
+// =========================================================================
+aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+aiex.npu.dma_wait {symbol = @out_L2L3_0}
+</pre></div>
+</div>
+</div>
+<p>The important things to notice are:</p>
+<ul class="simple">
+<li><p>We are using only the buffer descriptor IDs <code class="docutils literal notranslate"><span class="pre">0-9</span></code>, as this allows us to evenly distribute the data movements between the <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_wait</span> <span class="pre">{symbol</span> <span class="pre">=</span> <span class="pre">...}</span></code> instructions.</p></li>
+<li><p>It is necessary that the last two <code class="docutils literal notranslate"><span class="pre">aiex.npu.dma_memcpy_nd</span></code> operations in a block are enhanced to create a token (<code class="docutils literal notranslate"><span class="pre">issue_token</span></code>), which can then be used again for the synchronization of the data movement.</p></li>
+</ul>
+<div class="literal-block-wrapper docutils container" id="id15">
+<div class="code-block-caption"><span class="caption-text">data movement synchronization</span><a class="headerlink" href="#id15" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>// =========================================================================
+  // BATCH 1: First 4 Pairs (Rows 0 to 63) -&gt; IDs 1-8
+  // =========================================================================
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  ...
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 49152][8, 16, 16, 64][0, 64, 1024, 1]) {id = 7 : i64, metadata = @in0_L3L2_0, issue_token = true} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, metadata = @in1_L3L2_0, issue_token = true} : memref&lt;1024x128xbf16&gt;
+
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+</pre></div>
+</div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The offset calculation changes only for the <code class="docutils literal notranslate"><span class="pre">in0</span></code> matrix.
+That is, because <code class="docutils literal notranslate"><span class="pre">%arg0</span></code> always transfers a block of <code class="docutils literal notranslate"><span class="pre">M</span></code>-rows (16).
+There is no need to update the offset for <code class="docutils literal notranslate"><span class="pre">in1</span></code> as for each block of <code class="docutils literal notranslate"><span class="pre">M</span></code>-rows we need the full matrix.</p>
+</div>
+</section>
+<section id="b-verifying-correctness">
+<h3>b) Verifying Correctness<a class="headerlink" href="#b-verifying-correctness" title="Link to this heading"></a></h3>
+<p>Based on our understanding of the architecture (XDNA2), the <code class="docutils literal notranslate"><span class="pre">matmul</span></code> kernel from the previous assignment and the row-major data layout we expected everything to work like this.</p>
+<p>However, as this was not the case, we enhanced our <code class="docutils literal notranslate"><span class="pre">driver.py</span></code> slightly to help us debug our current <code class="docutils literal notranslate"><span class="pre">matmul.mlir</span></code>.</p>
+<div class="literal-block-wrapper docutils container" id="id16">
+<div class="code-block-caption"><span class="caption-text">debug code</span><a class="headerlink" href="#id16" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;=&quot;</span><span class="o">*</span><span class="mi">40</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;       NPU DEBUG DIAGNOSTICS        &quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="o">*</span><span class="mi">40</span><span class="p">)</span>
+
+<span class="c1"># 1. Check for complete silence (All Zeros)</span>
+<span class="n">is_all_zero</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">out</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Is output completely zeros?: </span><span class="si">{</span><span class="n">is_all_zero</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># 2. Check fill percentage</span>
+<span class="n">nonzero_count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+<span class="n">total_elements</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Active elements: </span><span class="si">{</span><span class="n">nonzero_count</span><span class="si">}</span><span class="s2"> / </span><span class="si">{</span><span class="n">total_elements</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">nonzero_count</span><span class="o">/</span><span class="n">total_elements</span><span class="o">*</span><span class="mi">100</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">%)&quot;</span><span class="p">)</span>
+
+<span class="c1"># 3. Value Range Comparison</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NPU Output Range: Min = </span><span class="si">{</span><span class="n">out</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">, Max = </span><span class="si">{</span><span class="n">out</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;CPU Reference Range: Min = </span><span class="si">{</span><span class="n">ref</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">, Max = </span><span class="si">{</span><span class="n">ref</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># 4. Error Metrics</span>
+<span class="n">abs_diff</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">out</span> <span class="o">-</span> <span class="n">ref</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Max Absolute Error: </span><span class="si">{</span><span class="n">abs_diff</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mean Absolute Error: </span><span class="si">{</span><span class="n">abs_diff</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># 5. Row-by-Row Spatial Analysis</span>
+<span class="n">failing_rows</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">r</span><span class="p">],</span> <span class="n">ref</span><span class="p">[</span><span class="n">r</span><span class="p">],</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="n">failing_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failing Rows: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">failing_rows</span><span class="p">)</span><span class="si">}</span><span class="s2"> / </span><span class="si">{</span><span class="n">out</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">failing_rows</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;First 10 failing row indices: </span><span class="si">{</span><span class="n">failing_rows</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="o">*</span><span class="mi">40</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<p>Based on these debug messages we could verify that we are working on our whole memory, but since the matmul still failed, we knew something was wrong.</p>
+<div class="literal-block-wrapper docutils container" id="id17">
+<div class="code-block-caption"><span class="caption-text">initial debug response</span><a class="headerlink" href="#id17" title="Link to this code"></a></div>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>========================================
+Is output completely zeros?: False
+Active elements: 32768 / 32768 (100.00%)
+NPU Output Range: Min = -1560.0000, Max = 1064.0000
+CPU Reference Range: Min = -131.0000, Max = 134.0000
+Max Absolute Error: 1576.0000
+Mean Absolute Error: 199.0000
+Failing Rows: 256 / 256
+First 10 failing row indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+========================================
+</pre></div>
+</div>
+</div>
+<p>After performing some experiments, we realized that there is an initialization problem for our accumulation registers (<code class="docutils literal notranslate"><span class="pre">dm0-dm4</span></code>).
+Therefore, we added an additional clearing of the <code class="docutils literal notranslate"><span class="pre">dm1-dm4</span></code> registers with the <code class="docutils literal notranslate"><span class="pre">vclr</span></code> instruction.</p>
+<div class="literal-block-wrapper docutils container" id="id18">
+<div class="code-block-caption"><span class="caption-text">accumulation register reset</span><a class="headerlink" href="#id18" title="Link to this code"></a></div>
+<div class="highlight-asm notranslate"><div class="highlight"><pre><span></span><span class="nl">matmul_init:</span>
+<span class="w">    </span><span class="nf">vclr</span><span class="w">    </span><span class="no">dm1</span>
+<span class="w">    </span><span class="nf">vclr</span><span class="w">    </span><span class="no">dm2</span>
+<span class="w">    </span><span class="nf">vclr</span><span class="w">    </span><span class="no">dm3</span>
+<span class="w">    </span><span class="nf">vclr</span><span class="w">    </span><span class="no">dm4</span>
+</pre></div>
+</div>
+</div>
+<p>However, we can’t just apply these changes every time, but every time before the 16 accumulation loops.
+That is why we also enhanced <code class="docutils literal notranslate"><span class="pre">matmul.mlir</span></code> file accordingly:</p>
+<div class="literal-block-wrapper docutils container" id="id19">
+<div class="code-block-caption"><span class="caption-text">memory reset</span><a class="headerlink" href="#id19" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>module {
+    memref.global @in0_L3L2_ping : memref&lt;256x1024xbf16&gt;
+    memref.global @in0_L3L2_pong : memref&lt;256x1024xbf16&gt;
+    aie.device(npu2) {
+        ...
+
+        %core_0_2 = aie.core(%tile_0_2) {
+            ...
+            scf.for %arg0 = %c0 to %c4294967295 step %c1 {
+                ...
+                scf.for %arg1 = %c0 to %ab step %c1 {
+                    ...
+                    // first K-iteration: clears accumulators
+                    %b0i0 = aie.objectfifo.acquire @in0_L2L1_0(Consume, 1) : !aie.objectfifosubview&lt;memref&lt;2x8x8x8xbf16&gt;&gt;
+                    %i0_0 = aie.objectfifo.subview.access %b0i0[0] : !aie.objectfifosubview&lt;memref&lt;2x8x8x8xbf16&gt;&gt; -&gt; memref&lt;2x8x8x8xbf16&gt;
+                    %b0i1 = aie.objectfifo.acquire @in1_L2L1_0(Consume, 1) : !aie.objectfifosubview&lt;memref&lt;8x2x8x8xbf16&gt;&gt;
+                    %i1_0 = aie.objectfifo.subview.access %b0i1[0] : !aie.objectfifosubview&lt;memref&lt;8x2x8x8xbf16&gt;&gt; -&gt; memref&lt;8x2x8x8xbf16&gt;
+                    func.call @matmul_init(%i0_0, %i1_0, %out) : (memref&lt;2x8x8x8xbf16&gt;, memref&lt;8x2x8x8xbf16&gt;, memref&lt;2x2x8x8xbf16&gt;) -&gt; ()
+                    aie.objectfifo.release @in0_L2L1_0(Consume, 1)
+                    aie.objectfifo.release @in1_L2L1_0(Consume, 1)
+
+                    // remaining 15 K-iterations (1024 / 64): accumulate
+                    %c = arith.constant 16 : index
+                    scf.for %arg2 = %c1 to %c step %c1 {
+                        ...
+                    }
+                    aie.objectfifo.release @out_L1L2_0_0(Produce, 1)
+                }
+            }
+            aie.end
+            } {stack_size = 1024 : i32}
+
+            aie.runtime_sequence(%arg0: memref&lt;256x1024xbf16&gt;, %arg1: memref&lt;1024x128xbf16&gt;, %arg2: memref&lt;256x128xbf16&gt;) {
+                ...
+            }
+        }
+    }
+</pre></div>
+</div>
+</div>
+<p>After integrating both of these changes we could run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">run_matmul</span></code> and everything matches.</p>
+</section>
+</section>
+<section id="task-4-performance">
+<h2>Task 4: Performance<a class="headerlink" href="#task-4-performance" title="Link to this heading"></a></h2>
+<p>If we understand the task correctly, we have to ensure that every time we have to wait on a <code class="docutils literal notranslate"><span class="pre">dma_wait</span></code> there is also a <code class="docutils literal notranslate"><span class="pre">dma_memcpy_nd</span></code> operation running and thereby overlapping with the lost time from the <code class="docutils literal notranslate"><span class="pre">dma_wait</span></code>.</p>
+<p>Therefore, our approach is to fill the engine’s queue with 4 tile pairs (ids <code class="docutils literal notranslate"><span class="pre">1-4</span></code> and <code class="docutils literal notranslate"><span class="pre">5-8</span></code>) without any waits.
+After this initial filling we proceed to the ‘main’ part.
+Here, we wait for one pair to finish (freeing the ids), and then immediately reissue these ids for the next tile.
+And because we are only waiting for one pair, there are still 3 other transfers streaming.
+This ensures that the data pipeline is never empty.
+We finish this data movement with the final waits at the end.</p>
+<p>Our approach looks like this:</p>
+<div class="literal-block-wrapper docutils container" id="id20">
+<div class="code-block-caption"><span class="caption-text">performant <code class="docutils literal notranslate"><span class="pre">runtime_sequence</span></code></span><a class="headerlink" href="#id20" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>aie.runtime_sequence(%arg0: memref&lt;256x1024xbf16&gt;, %arg1: memref&lt;1024x128xbf16&gt;, %arg2: memref&lt;256x128xbf16&gt;) {
+  aiex.npu.dma_memcpy_nd(%arg2[0, 0, 0, 0][16, 8, 16, 16][2048, 16, 128, 1]) {id = 0 : i64, issue_token = true, metadata = @out_L2L3_0} : memref&lt;256x128xbf16&gt;
+
+  // fill up: 4 tile-pairs in flight, no waits
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 0][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 16384][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 32768][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 49152][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+
+  // free one pair, issue the next — 12 tiles, ids cycle 1-4 / 5-8
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 65536][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 81920][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 98304][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 114688][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 131072][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 147456][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 163840][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 180224][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 196608][8, 16, 16, 64][0, 64, 1024, 1]) {id = 1 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 5 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 212992][8, 16, 16, 64][0, 64, 1024, 1]) {id = 2 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 6 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 229376][8, 16, 16, 64][0, 64, 1024, 1]) {id = 3 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 7 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_memcpy_nd(%arg0[0, 0, 0, 245760][8, 16, 16, 64][0, 64, 1024, 1]) {id = 4 : i64, issue_token = true, metadata = @in0_L3L2_0} : memref&lt;256x1024xbf16&gt;
+  aiex.npu.dma_memcpy_nd(%arg1[0, 0, 0, 0][8, 16, 64, 16][16, 8192, 128, 1]) {id = 8 : i64, issue_token = true, metadata = @in1_L3L2_0} : memref&lt;1024x128xbf16&gt;
+
+  // empty out: drain the 4 still-in-flight pairs, then output
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in0_L3L2_0}
+  aiex.npu.dma_wait {symbol = @in1_L3L2_0}
+  aiex.npu.dma_wait {symbol = @out_L2L3_0}
+}
+</pre></div>
+</div>
+</div>
+<p>After some experiments we could improve the depth to 5, meaning that there are 10 input ids (<code class="docutils literal notranslate"><span class="pre">1-5</span></code> and <code class="docutils literal notranslate"><span class="pre">6-10</span></code>).
+This version is also implemented in the <code class="docutils literal notranslate"><span class="pre">matmul_perf.mlir</span></code> file.</p>
+<p>The optimized version can be executed by running:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>make<span class="w"> </span>run_matmul_perf
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="08_xdna_gemm_kernel.html" class="btn btn-neutral float-left" title="XDNA GEMM Kernel" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Lucas Obitz, Luca-Philipp Grumbach.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
