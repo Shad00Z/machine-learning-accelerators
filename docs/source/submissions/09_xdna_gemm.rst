@@ -114,7 +114,7 @@ The ``aie.objectfifo.link()`` operation links two ``objectFifos``.
 That means that the ``objectFifos`` form **one** dataflow movement, which is split among multiple ``objectFifos``.
 
 The important thing for this operation is that the ``objectFifos`` should have a link point, which can be a shared AIE tile.
-This can be achieved throught the attributes for this operation: 
+This can be achieved through the attributes for this operation: 
 
 - ``fifoIns``: references the input fifos
 - ``fifoOut``: references the input fifos
@@ -240,7 +240,7 @@ We start with the todo's inside the core unit.
 For that we looked at how many ``16x16`` tiles fit into the ``out`` matrix. 
 In this specific case we had ``256x128``, which boils down to ``16x8`` and this results in ``128`` iterations.
 
-To get a correct result we then had to fill in the inner most loop. 
+To get a correct result we then had to fill in the innermost loop. 
 This loop accumulates the result in the currently acquired memory. 
 As the contraction dimension is ``K=1024`` and we always load ``64`` elements in the ``K`` dimension, we ultimately have ``16`` iterations to perform. 
 
@@ -248,7 +248,7 @@ After implementing the loops for the core, we moved on to the ``runtime_sequence
 The first step was to adjust the ``memref`` sizes accordingly.
 
 .. code-block:: none
-    :capation: ``memref`` sizes
+    :caption: ``memref`` sizes
 
     aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>)
 
@@ -413,7 +413,7 @@ Based on these debug messages we could verify that we are working on our whole m
     ========================================
 
 After performing some experiments, we realized that there is an initialization problem for our accumulation registers (``dm0-dm4``).
-Therefore, we added an additional clearing of the ``dm1-dm4`` registers with the ``vlcr`` instruction.
+Therefore, we added an additional clearing of the ``dm1-dm4`` registers with the ``vclr`` instruction.
 
 .. code-block:: asm
     :caption: accumulation register reset
@@ -424,7 +424,7 @@ Therefore, we added an additional clearing of the ``dm1-dm4`` registers with the
         vclr	dm3
         vclr	dm4
 
-However, we can't just apply these changes every time, but everytime before the 16 accumulation loops.
+However, we can't just apply these changes every time, but every time before the 16 accumulation loops.
 That is why we also enhanced ``matmul.mlir`` file accordingly:
 
 .. code-block:: none
