@@ -8,16 +8,10 @@ zero:
   mov r0, #0
   vbcst.16 x0, r0
   nop
-  nop
-  nop
-  nop
-  nop
-  nop
   vst x0, [p0], #64
   vst x0, [p0], #64
   vst x0, [p0], #64
-  vst x0, [p0], #64
-  ret lr
+  vst x0, [p0], #64; ret lr
   vst x0, [p0], #64                   // Delay Slot 5
   vst x0, [p0], #64                   // Delay Slot 4
   vst x0, [p0], #64                   // Delay Slot 3
