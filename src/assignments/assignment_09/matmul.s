@@ -1,15 +1,8 @@
 .file "matmul.s"
   .section .text.matmul,"ax",@progbits
-  .globl	matmul_init
   .globl matmul
   .p2align 4
-  .type	matmul_init,@function
   .type matmul,@function
-matmul_init:
-	vclr	dm1
-	vclr	dm2
-	vclr	dm3
-	vclr	dm4
 matmul:
 // Computes out += in0 * in1
 // L1 tensor views:
@@ -767,4 +760,3 @@ matmul:
   nop  // Delay Slot 1
 .Lfunc_end0:
   .size matmul, .Lfunc_end0-matmul
-  .size	matmul_init, .Lfunc_end0-matmul_init
