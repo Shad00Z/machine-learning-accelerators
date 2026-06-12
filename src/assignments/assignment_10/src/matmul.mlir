@@ -20,7 +20,7 @@ module {
     %mem_tile_5_1 = aie.tile(5, 1)
     %mem_tile_6_1 = aie.tile(6, 1)
     %mem_tile_7_1 = aie.tile(7, 1)
-    // Compute tiles (x=8 columns, y=4 rows → rows 2–5)
+    // Compute tiles (x=8 columns, y=4 rows -> rows 2–5)
     %tile_0_2 = aie.tile(0, 2)
     %tile_0_3 = aie.tile(0, 3)
     %tile_0_4 = aie.tile(0, 4)
@@ -53,7 +53,7 @@ module {
     %tile_7_3 = aie.tile(7, 3)
     %tile_7_4 = aie.tile(7, 4)
     %tile_7_5 = aie.tile(7, 5)
-    // in0: broadcast per column (all 4 row tiles in a column share the same in0) 
+    // in0: broadcast per column
     // col 0
     aie.objectfifo @in0_L3L2_0(%shim_noc_tile_0_0, {%mem_tile_0_1}, 2 : i32) : !aie.objectfifo<memref<16x64xbf16>>
     aie.objectfifo @in0_L2L1_0(%mem_tile_0_1 dimensionsToStream [<size = 2, stride = 512>, <size = 8, stride = 8>, <size = 8, stride = 64>, <size = 8, stride = 1>], {%tile_0_2, %tile_0_3, %tile_0_4, %tile_0_5}, 2 : i32) : !aie.objectfifo<memref<2x8x8x8xbf16>>
@@ -86,30 +86,25 @@ module {
     aie.objectfifo @in0_L3L2_7(%shim_noc_tile_7_0, {%mem_tile_7_1}, 2 : i32) : !aie.objectfifo<memref<16x64xbf16>>
     aie.objectfifo @in0_L2L1_7(%mem_tile_7_1 dimensionsToStream [<size = 2, stride = 512>, <size = 8, stride = 8>, <size = 8, stride = 64>, <size = 8, stride = 1>], {%tile_7_2, %tile_7_3, %tile_7_4, %tile_7_5}, 2 : i32) : !aie.objectfifo<memref<2x8x8x8xbf16>>
     aie.objectfifo.link [@in0_L3L2_7] -> [@in0_L2L1_7]([] [])
-    // in1: broadcast per row (all 8 column tiles in a row share the same in1) 
-    // Only 4 in1_L3L2 FIFOs needed (one per y-row). Placed on shim tiles 0-3.
-    // row_idx 0 (tile rows 2): mem tile 0 fans out to compute tiles col 0..7 row 2
+    // in1: broadcast per row
+    // row 0 (tile row 2): one in1 buffer shared across all 8 columns
     aie.objectfifo @in1_L3L2_0(%shim_noc_tile_0_0, {%mem_tile_0_1}, 2 : i32) : !aie.objectfifo<memref<64x16xbf16>>
     aie.objectfifo @in1_L2L1_0(%mem_tile_0_1 dimensionsToStream [<size = 8, stride = 128>, <size = 2, stride = 8>, <size = 8, stride = 16>, <size = 8, stride = 1>], {%tile_0_2, %tile_1_2, %tile_2_2, %tile_3_2, %tile_4_2, %tile_5_2, %tile_6_2, %tile_7_2}, 2 : i32) : !aie.objectfifo<memref<8x2x8x8xbf16>>
     aie.objectfifo.link [@in1_L3L2_0] -> [@in1_L2L1_0]([] [])
-    // row_idx 1 (tile rows 3): mem tile 1 fans out to compute tiles col 0..7 row 3
+    // row 1 (tile row 3): one in1 buffer shared across all 8 columns
     aie.objectfifo @in1_L3L2_1(%shim_noc_tile_1_0, {%mem_tile_1_1}, 2 : i32) : !aie.objectfifo<memref<64x16xbf16>>
     aie.objectfifo @in1_L2L1_1(%mem_tile_1_1 dimensionsToStream [<size = 8, stride = 128>, <size = 2, stride = 8>, <size = 8, stride = 16>, <size = 8, stride = 1>], {%tile_0_3, %tile_1_3, %tile_2_3, %tile_3_3, %tile_4_3, %tile_5_3, %tile_6_3, %tile_7_3}, 2 : i32) : !aie.objectfifo<memref<8x2x8x8xbf16>>
     aie.objectfifo.link [@in1_L3L2_1] -> [@in1_L2L1_1]([] [])
-    // row_idx 2 (tile rows 4): mem tile 2 fans out to compute tiles col 0..7 row 4
+    // row 2 (tile row 4): one in1 buffer shared across all 8 columns
     aie.objectfifo @in1_L3L2_2(%shim_noc_tile_2_0, {%mem_tile_2_1}, 2 : i32) : !aie.objectfifo<memref<64x16xbf16>>
     aie.objectfifo @in1_L2L1_2(%mem_tile_2_1 dimensionsToStream [<size = 8, stride = 128>, <size = 2, stride = 8>, <size = 8, stride = 16>, <size = 8, stride = 1>], {%tile_0_4, %tile_1_4, %tile_2_4, %tile_3_4, %tile_4_4, %tile_5_4, %tile_6_4, %tile_7_4}, 2 : i32) : !aie.objectfifo<memref<8x2x8x8xbf16>>
     aie.objectfifo.link [@in1_L3L2_2] -> [@in1_L2L1_2]([] [])
-    // row_idx 3 (tile rows 5): mem tile 3 fans out to compute tiles col 0..7 row 5
+    // row 3 (tile row 5): one in1 buffer shared across all 8 columns
     aie.objectfifo @in1_L3L2_3(%shim_noc_tile_3_0, {%mem_tile_3_1}, 2 : i32) : !aie.objectfifo<memref<64x16xbf16>>
     aie.objectfifo @in1_L2L1_3(%mem_tile_3_1 dimensionsToStream [<size = 8, stride = 128>, <size = 2, stride = 8>, <size = 8, stride = 16>, <size = 8, stride = 1>], {%tile_0_5, %tile_1_5, %tile_2_5, %tile_3_5, %tile_4_5, %tile_5_5, %tile_6_5, %tile_7_5}, 2 : i32) : !aie.objectfifo<memref<8x2x8x8xbf16>>
     aie.objectfifo.link [@in1_L3L2_3] -> [@in1_L2L1_3]([] [])
-    // Output FIFOs: each column joins 4 row outputs into one L2L3 stream 
-    // out_L1L2_<col>_<row_idx>: compute tile → mem tile, shape pmqn = 2×2×8×8
-    // out_L2L3_<col>: mem tile → shim tile, shape ypqmn (joined 4 rows)
-    //  dimensionsToStream maps [y, p, q, m, n] in buffer to row-major [y*p*m, q*n]
-    //  => sizes:  [4, 2, 8, 2, 8]  strides: [256, 128, 8, 64, 1]  on a 4*256=1024-elem L2 buf
-    //  Outer L3L2 memref<64x16xbf16> covers y*p*m=64 rows and q*n=16 cols
+    // Output FIFOs: each column joins 4 row tiles (offsets [0,256,512,768]) into one L2L3 stream
+    // dimensionsToStream reorders pqmn -> pmqn within each y-slot; out_L2L3 memref<64x16xbf16> = 4 y-slots
     // col 0
     aie.objectfifo @out_L1L2_0_0(%tile_0_2, {%mem_tile_0_1}, 2 : i32) : !aie.objectfifo<memref<2x2x8x8xbf16>>
     aie.objectfifo @out_L1L2_0_1(%tile_0_3, {%mem_tile_0_1}, 2 : i32) : !aie.objectfifo<memref<2x2x8x8xbf16>>
@@ -1126,9 +1121,7 @@ module {
       aie.end
     } {stack_size = 1024 : i32}
     aie.runtime_sequence(%arg0: memref<256x1024xbf16>, %arg1: memref<1024x128xbf16>, %arg2: memref<256x128xbf16>) {
-      // Each (a,b) block is issued and fully waited before the next.
-      // Cores run an infinite loop; each block consumes one ab-iteration.
-
+      // compute one ab-iteration per block and wait for the block to finish
       // a=0, b=0
       aiex.npu.dma_memcpy_nd(%arg2[0, 0, 0, 0][1, 4, 16, 16][0, 16, 128, 1]) {id = 0 : i64, metadata = @out_L2L3_0} : memref<256x128xbf16>
       aiex.npu.dma_memcpy_nd(%arg2[0, 0, 16, 0][1, 4, 16, 16][0, 16, 128, 1]) {id = 0 : i64, metadata = @out_L2L3_1} : memref<256x128xbf16>
