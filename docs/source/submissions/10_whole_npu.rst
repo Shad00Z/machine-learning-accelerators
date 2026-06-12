@@ -4,11 +4,25 @@ Using the whole NPU
 Task 1: Setup of the Whole NPU
 --------------------------------
 
-The NPU has three types of tiles arranged in a grid:
+The ``npu2`` device has three types of tiles arranged in 8 columns and 6 rows,
+as defined in the `MLIR-AIE device model <https://github.com/Xilinx/mlir-aie/blob/5a61144e13c99c9d430fbd09740c98fcf71d1936/docs/Devices.md?plain=1#L92-L103>`_:
 
-- **Shim tiles** (row 0): interface to host memory via DMA (columns 0–7)
-- **Memory tiles** (row 1): intermediate L2 buffers between the shim and compute tiles (columns 0–7)
-- **Compute tiles** (rows 2–5): the actual processing elements (8 columns * 4 rows)
+.. code-block:: none
+    :caption: Tile layout of the npu2 device
+
+    5 CCCCCCCC
+    4 CCCCCCCC
+    3 CCCCCCCC
+    2 CCCCCCCC
+    1 MMMMMMMM
+    0 DDDDDDDD
+      01234567
+
+These are:
+
+- **D: Shim tiles** (row 0): interface to host memory via DMA (columns 0–7)
+- **M: Memory tiles** (row 1): intermediate L2 buffers between the shim and compute tiles (columns 0–7)
+- **C: Compute tiles** (rows 2–5): the actual processing elements (8 columns * 4 rows)
 
 Since the task is to use the whole NPU, we first had to create variables for all tiles:
 
@@ -206,6 +220,8 @@ The ``dimensionsToStream`` on ``out_L2L3`` reorders the data from ``pqmn`` to ``
 as it streams out to the shim, matching the layout the host DMA expects:
 
 .. code-block:: none
+    :caption: Dimension order for the output FIFO from L2 to L3
+    :linenos:
 
     dimensionsToStream [<size = 2, stride = 128>,   // p: outer
                         <size = 8, stride = 8>,     // m
@@ -223,6 +239,8 @@ Task 4: Testing
 With all the tiles, FIFOs, and connections in place, we could finally test the whole NPU:
 
 .. code-block:: bash
+    :caption: Testing the whole NPU
+    :linenos:
 
     $ iron-fhs
     Activated virtualenv: /home/mla01/.cache/nix-amd-npu/venv-iron
