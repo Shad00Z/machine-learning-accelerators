@@ -248,3 +248,21 @@ With all the tiles, FIFOs, and connections in place, we could finally test the w
     $ make run_matmul
     python3 src/driver.py
     [PASS] matmul verification passed.
+
+Group Specific Component
+--------------------------------
+
+Pitch 1: Unary & Binary Primitives in cuTile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Extension of the config object & optimizer pipeline to support first/last touch unary primitives
+    - Unary primitives: e.g. ReLU, Sigmoid, Tanh
+- Extension of the config object & optimizer pipeline to support binary primitives as main op
+    - Binary primitives: e.g. Add, Mul, Min, Max
+- Operator fusion: support for fusing first/last touch unary primitive into main op
+
+Pitch 2: XDNA JIT Compiler
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Implementation of a JIT compiler for XDNA
+- Generates assembly code for XDNA for a given config object (from einsum string)
