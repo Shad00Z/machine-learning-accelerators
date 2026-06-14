@@ -252,7 +252,19 @@ With all the tiles, FIFOs, and connections in place, we could finally test the w
 Group Specific Component
 --------------------------------
 
-Pitch 1: Unary & Binary Primitives in cuTile
+Pitch 1: Fused cuTile Kernels for Local Diffusion
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Runnable local text-to-image generator on the NVIDIA Spark (optionally behind a small CLI/Gradio front end)
+- Use fused cuTile kernels inside diffusion denoising loop that collapse chained operations into a single pass.
+- **Problem**: repeated data round trips to memory for intermediate activations in the denoising step -> memory-bound
+- **Solution**: Profile one denoising step to locate the memory-bound chains, then replace them with hand-written fused cuTile kernels:
+    - **Kernel 1**: fused GroupNorm -> SiLU (halves the activation round-trips)
+    - **Kernel 2 (optional)**: fused LayerNorm -> GEGLU FFN
+- Each kernel is correctness-gated against the PyTorch reference before any timing.
+- **Deliverable**: a working generator with a baseline <-> fused toggle, plus a short reproducible report
+
+Pitch 2: Unary & Binary Primitives in cuTile
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Extension of the config object & optimizer pipeline to support first/last touch unary primitives
@@ -261,8 +273,9 @@ Pitch 1: Unary & Binary Primitives in cuTile
     - Binary primitives: e.g. Add, Mul, Min, Max
 - Operator fusion: support for fusing first/last touch unary primitive into main op
 
-Pitch 2: XDNA JIT Compiler
+Pitch 3: XDNA JIT Compiler
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Implementation of a JIT compiler for XDNA
 - Generates assembly code for XDNA for a given config object (from einsum string)
+- TODO: restrictions on supported operations, data types, and number of dimensions
