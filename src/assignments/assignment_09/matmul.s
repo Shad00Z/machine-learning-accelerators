@@ -1,15 +1,8 @@
 .file "matmul.s"
   .section .text.matmul,"ax",@progbits
-  .globl	matmul_init
   .globl matmul
   .p2align 4
-  .type	matmul_init,@function
   .type matmul,@function
-matmul_init:
-	vclr	dm1
-	vclr	dm2
-	vclr	dm3
-	vclr	dm4
 matmul:
 // Computes out += in0 * in1
 // L1 tensor views:
@@ -31,6 +24,17 @@ matmul:
   padda [p3], #256
   padda [p3], #256
   padda [p3], #256
+  mov p4, p2
+
+// Load output tensor into dm1..dm4
+  vlda.conv.fp32.bf16 cml1, [p4], #64
+  vlda.conv.fp32.bf16 cmh1, [p4], #64
+  vlda.conv.fp32.bf16 cml2, [p4], #64
+  vlda.conv.fp32.bf16 cmh2, [p4], #64
+  vlda.conv.fp32.bf16 cml3, [p4], #64
+  vlda.conv.fp32.bf16 cmh3, [p4], #64
+  vlda.conv.fp32.bf16 cml4, [p4], #64
+  vlda.conv.fp32.bf16 cmh4, [p4], #64
 
 // r=0
   // Step 1: load in1 into x0..x3
@@ -756,4 +760,3 @@ matmul:
   nop  // Delay Slot 1
 .Lfunc_end0:
   .size matmul, .Lfunc_end0-matmul
-  .size	matmul_init, .Lfunc_end0-matmul_init

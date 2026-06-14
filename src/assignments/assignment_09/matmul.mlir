@@ -2,7 +2,6 @@ module {
   memref.global @in0_L3L2_ping : memref<256x1024xbf16>
   memref.global @in0_L3L2_pong : memref<256x1024xbf16>
   aie.device(npu2) {
-    func.func private @matmul_init(memref<2x8x8x8xbf16>, memref<8x2x8x8xbf16>, memref<2x2x8x8xbf16>) attributes {link_with = "matmul.o"}
     func.func private @matmul(memref<2x8x8x8xbf16>, memref<8x2x8x8xbf16>, memref<2x2x8x8xbf16>) attributes {link_with = "matmul.o"}
     func.func private @zero(memref<2x2x8x8xbf16>) attributes {link_with = "zero.o"}
     %shim_noc_tile_0_0 = aie.tile(0, 0)
@@ -30,18 +29,9 @@ module {
           %buffer_out = aie.objectfifo.acquire @out_L1L2_0_0(Produce, 1) : !aie.objectfifosubview<memref<2x2x8x8xbf16>>
           %out = aie.objectfifo.subview.access %buffer_out[0] : !aie.objectfifosubview<memref<2x2x8x8xbf16>> -> memref<2x2x8x8xbf16>
           func.call @zero(%out) : (memref<2x2x8x8xbf16>) -> ()
-          // first K-iteration: clears accumulators
-          %b0i0 = aie.objectfifo.acquire @in0_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<2x8x8x8xbf16>>
-          %i0_0 = aie.objectfifo.subview.access %b0i0[0] : !aie.objectfifosubview<memref<2x8x8x8xbf16>> -> memref<2x8x8x8xbf16>
-          %b0i1 = aie.objectfifo.acquire @in1_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<8x2x8x8xbf16>>
-          %i1_0 = aie.objectfifo.subview.access %b0i1[0] : !aie.objectfifosubview<memref<8x2x8x8xbf16>> -> memref<8x2x8x8xbf16>
-          func.call @matmul_init(%i0_0, %i1_0, %out) : (memref<2x8x8x8xbf16>, memref<8x2x8x8xbf16>, memref<2x2x8x8xbf16>) -> ()
-          aie.objectfifo.release @in0_L2L1_0(Consume, 1)
-          aie.objectfifo.release @in1_L2L1_0(Consume, 1)
-
-          // remaining 15 K-iterations (1024 / 64): accumulate
+          // 16 K-iterations (1024 / 64): accumulate
           %c = arith.constant 16 : index
-          scf.for %arg2 = %c1 to %c step %c1 {
+          scf.for %arg2 = %c0 to %c step %c1 {
             %buffer_in0 = aie.objectfifo.acquire @in0_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<2x8x8x8xbf16>>
             %in0 = aie.objectfifo.subview.access %buffer_in0[0] : !aie.objectfifosubview<memref<2x8x8x8xbf16>> -> memref<2x8x8x8xbf16>
             %buffer_in1 = aie.objectfifo.acquire @in1_L2L1_0(Consume, 1) : !aie.objectfifosubview<memref<8x2x8x8xbf16>>
