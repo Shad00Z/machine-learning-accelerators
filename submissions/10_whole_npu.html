@@ -1,0 +1,426 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Using the whole NPU &mdash; Machine Learning Accelerators  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="XDNA GEMM" href="09_xdna_gemm.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Machine Learning Accelerators
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Using the whole NPU</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#task-1-setup-of-the-whole-npu">Task 1: Setup of the Whole NPU</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-2-broadcasting-the-inputs">Task 2: Broadcasting the Inputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-3-writing-the-output">Task 3: Writing the Output</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#task-4-testing">Task 4: Testing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#group-specific-component">Group Specific Component</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#pitch-1-fused-cutile-kernels-for-local-diffusion">Pitch 1: Fused cuTile Kernels for Local Diffusion</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pitch-2-unary-binary-primitives-in-cutile">Pitch 2: Unary &amp; Binary Primitives in cuTile</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pitch-3-xdna-jit-compiler">Pitch 3: XDNA JIT Compiler</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Machine Learning Accelerators</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Using the whole NPU</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/submissions/10_whole_npu.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="using-the-whole-npu">
+<h1>Using the whole NPU<a class="headerlink" href="#using-the-whole-npu" title="Link to this heading"></a></h1>
+<section id="task-1-setup-of-the-whole-npu">
+<h2>Task 1: Setup of the Whole NPU<a class="headerlink" href="#task-1-setup-of-the-whole-npu" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">npu2</span></code> device has three types of tiles arranged in 8 columns and 6 rows,
+as defined in the <a class="reference external" href="https://github.com/Xilinx/mlir-aie/blob/5a61144e13c99c9d430fbd09740c98fcf71d1936/docs/Devices.md?plain=1#L92-L103">MLIR-AIE device model</a>:</p>
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">Tile layout of the npu2 device</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>5 CCCCCCCC
+4 CCCCCCCC
+3 CCCCCCCC
+2 CCCCCCCC
+1 MMMMMMMM
+0 DDDDDDDD
+  01234567
+</pre></div>
+</div>
+</div>
+<p>These are:</p>
+<ul class="simple">
+<li><p><strong>D: Shim tiles</strong> (row 0): interface to host memory via DMA (columns 0–7)</p></li>
+<li><p><strong>M: Memory tiles</strong> (row 1): intermediate L2 buffers between the shim and compute tiles (columns 0–7)</p></li>
+<li><p><strong>C: Compute tiles</strong> (rows 2–5): the actual processing elements (8 columns * 4 rows)</p></li>
+</ul>
+<p>Since the task is to use the whole NPU, we first had to create variables for all tiles:</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Tile variables for the whole NPU</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>// Shim tiles (row 0)
+<span class="linenos"> 2</span>%shim_noc_tile_0_0 = aie.tile(0, 0)
+<span class="linenos"> 3</span>%shim_noc_tile_1_0 = aie.tile(1, 0)
+<span class="linenos"> 4</span>...
+<span class="linenos"> 5</span>%shim_noc_tile_7_0 = aie.tile(7, 0)
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>// Memory tiles (row 1)
+<span class="linenos"> 8</span>%mem_tile_0_1 = aie.tile(0, 1)
+<span class="linenos"> 9</span>%mem_tile_1_1 = aie.tile(1, 1)
+<span class="linenos">10</span>...
+<span class="linenos">11</span>%mem_tile_7_1 = aie.tile(7, 1)
+<span class="linenos">12</span>
+<span class="linenos">13</span>// Compute tiles (x=8 columns, y=4 rows -&gt; rows 2–5)
+<span class="linenos">14</span>%tile_0_2 = aie.tile(0, 2)
+<span class="linenos">15</span>%tile_0_3 = aie.tile(0, 3)
+<span class="linenos">16</span>%tile_0_4 = aie.tile(0, 4)
+<span class="linenos">17</span>%tile_0_5 = aie.tile(0, 5)
+<span class="linenos">18</span>%tile_1_2 = aie.tile(1, 2)
+<span class="linenos">19</span>%tile_1_3 = aie.tile(1, 3)
+<span class="linenos">20</span>%tile_1_4 = aie.tile(1, 4)
+<span class="linenos">21</span>%tile_1_5 = aie.tile(1, 5)
+<span class="linenos">22</span>...
+<span class="linenos">23</span>%tile_7_2 = aie.tile(7, 2)
+<span class="linenos">24</span>%tile_7_3 = aie.tile(7, 3)
+<span class="linenos">25</span>%tile_7_4 = aie.tile(7, 4)
+<span class="linenos">26</span>%tile_7_5 = aie.tile(7, 5)
+</pre></div>
+</div>
+</div>
+<p>Next, we needed to implement the core function for each of the 32 compute tiles.
+Since every compute tile performs the same operation, we could simply duplicate the same core function.
+We only had to change the loop to use <code class="docutils literal notranslate"><span class="pre">%c4</span> <span class="pre">=</span> <span class="pre">arith.constant</span> <span class="pre">4</span> <span class="pre">:</span> <span class="pre">index</span></code> instead of <code class="docutils literal notranslate"><span class="pre">%c128</span> <span class="pre">=</span> <span class="pre">arith.constant</span> <span class="pre">128</span> <span class="pre">:</span> <span class="pre">index</span></code>
+in order to process 4 ab-iterations per tile instead of 128 (<code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> are now handled spatially, leaving only <code class="docutils literal notranslate"><span class="pre">a*b</span> <span class="pre">=</span> <span class="pre">4</span></code> sequential iterations).
+We also had to correctly connect each compute tile to its corresponding input and output FIFOs:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;in0_L2L1_&lt;col&gt;</span></code>: the A-matrix FIFO for its column.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;in1_L2L1_&lt;row&gt;</span></code>: the B-matrix FIFO for its row.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;out_L1L2_&lt;col&gt;_&lt;row&gt;</span></code>: its own dedicated output FIFO.</p></li>
+</ul>
+<p>For example, the core at column 4, row 0 (tile (4,2)) uses <code class="docutils literal notranslate"><span class="pre">&#64;in0_L2L1_4</span></code>, <code class="docutils literal notranslate"><span class="pre">&#64;in1_L2L1_0</span></code>, and <code class="docutils literal notranslate"><span class="pre">&#64;out_L1L2_4_0</span></code>:</p>
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">Core function for tile (4,2) at column 4, row 0</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>%core_4_2 = aie.core(%tile_4_2) {
+<span class="linenos"> 2</span>  %c0 = arith.constant 0 : index
+<span class="linenos"> 3</span>  %c4294967295 = arith.constant 4294967295 : index
+<span class="linenos"> 4</span>  %c1 = arith.constant 1 : index
+<span class="linenos"> 5</span>  scf.for %arg0 = %c0 to %c4294967295 step %c1 {
+<span class="linenos"> 6</span>    %c0_1 = arith.constant 0 : index
+<span class="linenos"> 7</span>    %c4 = arith.constant 4 : index
+<span class="linenos"> 8</span>    %c1_1 = arith.constant 1 : index
+<span class="linenos"> 9</span>    scf.for %i_ab = %c0_1 to %c4 step %c1_1 {
+<span class="linenos">10</span>      %buffer_out = aie.objectfifo.acquire @out_L1L2_4_0(Produce, 1) : !aie.objectfifosubview&lt;memref&lt;2x2x8x8xbf16&gt;&gt;
+<span class="linenos">11</span>      %out = aie.objectfifo.subview.access %buffer_out[0] : !aie.objectfifosubview&lt;memref&lt;2x2x8x8xbf16&gt;&gt; -&gt; memref&lt;2x2x8x8xbf16&gt;
+<span class="linenos">12</span>      func.call @zero(%out) : (memref&lt;2x2x8x8xbf16&gt;) -&gt; ()
+<span class="linenos">13</span>      %c0_2 = arith.constant 0 : index
+<span class="linenos">14</span>      %c16 = arith.constant 16 : index
+<span class="linenos">15</span>      %c1_2 = arith.constant 1 : index
+<span class="linenos">16</span>      scf.for %i_c = %c0_2 to %c16 step %c1_2 {
+<span class="linenos">17</span>        %buffer_in0 = aie.objectfifo.acquire @in0_L2L1_4(Consume, 1) : !aie.objectfifosubview&lt;memref&lt;2x8x8x8xbf16&gt;&gt;
+<span class="linenos">18</span>        %in0 = aie.objectfifo.subview.access %buffer_in0[0] : !aie.objectfifosubview&lt;memref&lt;2x8x8x8xbf16&gt;&gt; -&gt; memref&lt;2x8x8x8xbf16&gt;
+<span class="linenos">19</span>        %buffer_in1 = aie.objectfifo.acquire @in1_L2L1_0(Consume, 1) : !aie.objectfifosubview&lt;memref&lt;8x2x8x8xbf16&gt;&gt;
+<span class="linenos">20</span>        %in1 = aie.objectfifo.subview.access %buffer_in1[0] : !aie.objectfifosubview&lt;memref&lt;8x2x8x8xbf16&gt;&gt; -&gt; memref&lt;8x2x8x8xbf16&gt;
+<span class="linenos">21</span>        func.call @matmul(%in0, %in1, %out) : (memref&lt;2x8x8x8xbf16&gt;, memref&lt;8x2x8x8xbf16&gt;, memref&lt;2x2x8x8xbf16&gt;) -&gt; ()
+<span class="linenos">22</span>        aie.objectfifo.release @in0_L2L1_4(Consume, 1)
+<span class="linenos">23</span>        aie.objectfifo.release @in1_L2L1_0(Consume, 1)
+<span class="linenos">24</span>      }
+<span class="linenos">25</span>      aie.objectfifo.release @out_L1L2_4_0(Produce, 1)
+<span class="linenos">26</span>    }
+<span class="linenos">27</span>  }
+<span class="linenos">28</span>  aie.end
+<span class="linenos">29</span>} {stack_size = 1024 : i32}
+</pre></div>
+</div>
+</div>
+</section>
+<section id="task-2-broadcasting-the-inputs">
+<h2>Task 2: Broadcasting the Inputs<a class="headerlink" href="#task-2-broadcasting-the-inputs" title="Link to this heading"></a></h2>
+<p>In this task, we had to extend the existing FIFOs to support the broadcast pattern of the inputs across the whole NPU.</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">Original FIFOs for the single-tile version</span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>aie.objectfifo @in0_L3L2_0(%shim_noc_tile_0_0, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 2</span>    : !aie.objectfifo&lt;memref&lt;16x64xbf16&gt;&gt;
+<span class="linenos"> 3</span>aie.objectfifo @in0_L2L1_0(%mem_tile_0_1
+<span class="linenos"> 4</span>    dimensionsToStream [&lt;size = 2, stride = 512&gt;, &lt;size = 8, stride = 8&gt;,
+<span class="linenos"> 5</span>                        &lt;size = 8, stride = 64&gt;, &lt;size = 8, stride = 1&gt;],
+<span class="linenos"> 6</span>    {%tile_0_2}, 2 : i32) : !aie.objectfifo&lt;memref&lt;2x8x8x8xbf16&gt;&gt;
+<span class="linenos"> 7</span>aie.objectfifo.link [@in0_L3L2_0] -&gt; [@in0_L2L1_0]([] [])
+<span class="linenos"> 8</span>aie.objectfifo @in1_L3L2_0(%shim_noc_tile_0_0, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 9</span>    : !aie.objectfifo&lt;memref&lt;64x16xbf16&gt;&gt;
+<span class="linenos">10</span>aie.objectfifo @in1_L2L1_0(%mem_tile_0_1
+<span class="linenos">11</span>    dimensionsToStream [&lt;size = 8, stride = 128&gt;, &lt;size = 2, stride = 8&gt;,
+<span class="linenos">12</span>                        &lt;size = 8, stride = 16&gt;, &lt;size = 8, stride = 1&gt;],
+<span class="linenos">13</span>    {%tile_0_2}, 2 : i32) : !aie.objectfifo&lt;memref&lt;8x2x8x8xbf16&gt;&gt;
+<span class="linenos">14</span>aie.objectfifo.link [@in1_L3L2_0] -&gt; [@in1_L2L1_0]([] [])
+</pre></div>
+</div>
+</div>
+<p>To scale this up, we had to duplicate and extend these FIFOs according to the broadcast pattern of each input:</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">in0</span></code> (A): broadcast per column, so all 4 row tiles in a column share the same A tile</dt><dd><ul>
+<li><p>Firstly we duplicated <code class="docutils literal notranslate"><span class="pre">in0_L3L2</span></code> and <code class="docutils literal notranslate"><span class="pre">in0_L2L1</span></code> for each of the 8 columns</p></li>
+<li><p>Secondly we added all 4 row compute tiles to the <code class="docutils literal notranslate"><span class="pre">in0_L2L1</span></code> consumer list</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">in1</span></code> (B): broadcast per row, so all 8 column tiles in a row share the same B tile</dt><dd><ul>
+<li><p>We created 4 <code class="docutils literal notranslate"><span class="pre">in1_L3L2</span></code> / <code class="docutils literal notranslate"><span class="pre">in1_L2L1</span></code> FIFO pairs (one per row), each with all 8 column compute tiles as consumers</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>For <code class="docutils literal notranslate"><span class="pre">in0</span></code> column 4, the consumer list expands from <code class="docutils literal notranslate"><span class="pre">{%tile_4_2}</span></code> to all 4 tiles in that column:</p>
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text">Broadcast FIFOs for <code class="docutils literal notranslate"><span class="pre">in0</span></code> column 4</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>// col 4: shim tile 4 -&gt; mem tile 4 -&gt; compute tiles in column 4
+<span class="linenos">2</span>aie.objectfifo @in0_L3L2_4(%shim_noc_tile_4_0, {%mem_tile_4_1}, 2 : i32)
+<span class="linenos">3</span>    : !aie.objectfifo&lt;memref&lt;16x64xbf16&gt;&gt;
+<span class="linenos">4</span>aie.objectfifo @in0_L2L1_4(%mem_tile_4_1
+<span class="linenos">5</span>    dimensionsToStream [&lt;size = 2, stride = 512&gt;, &lt;size = 8, stride = 8&gt;,
+<span class="linenos">6</span>                        &lt;size = 8, stride = 64&gt;, &lt;size = 8, stride = 1&gt;],
+<span class="linenos">7</span>    {%tile_4_2, %tile_4_3, %tile_4_4, %tile_4_5}, 2 : i32)
+<span class="linenos">8</span>    : !aie.objectfifo&lt;memref&lt;2x8x8x8xbf16&gt;&gt;
+<span class="linenos">9</span>aie.objectfifo.link [@in0_L3L2_4] -&gt; [@in0_L2L1_4]([] [])
+</pre></div>
+</div>
+</div>
+<p>For <code class="docutils literal notranslate"><span class="pre">in1</span></code> row 0, the consumer list expands to all 8 column tiles in that row:</p>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Broadcast FIFOs for <code class="docutils literal notranslate"><span class="pre">in1</span></code> row 0</span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>// row 0: shim tile 0 -&gt; mem tile 0 -&gt; compute tiles in row 0 (all 8 columns)
+<span class="linenos"> 2</span>aie.objectfifo @in1_L3L2_0(%shim_noc_tile_0_0, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 3</span>    : !aie.objectfifo&lt;memref&lt;64x16xbf16&gt;&gt;
+<span class="linenos"> 4</span>aie.objectfifo @in1_L2L1_0(%mem_tile_0_1
+<span class="linenos"> 5</span>    dimensionsToStream [&lt;size = 8, stride = 128&gt;, &lt;size = 2, stride = 8&gt;,
+<span class="linenos"> 6</span>                        &lt;size = 8, stride = 16&gt;, &lt;size = 8, stride = 1&gt;],
+<span class="linenos"> 7</span>    {%tile_0_2, %tile_1_2, %tile_2_2, %tile_3_2,
+<span class="linenos"> 8</span>     %tile_4_2, %tile_5_2, %tile_6_2, %tile_7_2}, 2 : i32)
+<span class="linenos"> 9</span>    : !aie.objectfifo&lt;memref&lt;8x2x8x8xbf16&gt;&gt;
+<span class="linenos">10</span>aie.objectfifo.link [@in1_L3L2_0] -&gt; [@in1_L2L1_0]([] [])
+</pre></div>
+</div>
+</div>
+</section>
+<section id="task-3-writing-the-output">
+<h2>Task 3: Writing the Output<a class="headerlink" href="#task-3-writing-the-output" title="Link to this heading"></a></h2>
+<p>Before we could test the whole NPU, we had to extend the output FIFO pattern as well.
+The original single-tile version had one <code class="docutils literal notranslate"><span class="pre">out_L1L2</span></code> FIFO from the compute tile to the memory tile,
+and one <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> FIFO from the memory tile to the shim:</p>
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text">Original output FIFOs for the single-tile version</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>aie.objectfifo @out_L1L2_0_0(%tile_0_2, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos">2</span>    : !aie.objectfifo&lt;memref&lt;2x2x8x8xbf16&gt;&gt;
+<span class="linenos">3</span>aie.objectfifo @out_L2L3_0(%mem_tile_0_1
+<span class="linenos">4</span>    dimensionsToStream [&lt;size = 2, stride = 128&gt;, &lt;size = 8, stride = 8&gt;,
+<span class="linenos">5</span>                        &lt;size = 2, stride = 64&gt;, &lt;size = 8, stride = 1&gt;],
+<span class="linenos">6</span>    {%shim_noc_tile_0_0}, 2 : i32) : !aie.objectfifo&lt;memref&lt;16x16xbf16&gt;&gt;
+<span class="linenos">7</span>aie.objectfifo.link [@out_L1L2_0_0] -&gt; [@out_L2L3_0]([] [])
+</pre></div>
+</div>
+</div>
+<p>For the full NPU, each of the 32 compute tiles needs its own <code class="docutils literal notranslate"><span class="pre">out_L1L2</span></code> FIFO,
+and the 4 row tiles in each column need to be joined into a single <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> FIFO for that column.
+We used <code class="docutils literal notranslate"><span class="pre">aie.objectfifo.link</span></code> with write offsets to place each tile’s 256-element result
+into a different slot of the shared L2 buffer:</p>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text">Output FIFOs for column 0, joining 4 row tiles</span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>// col 0: one output FIFO per row tile
+<span class="linenos"> 2</span>aie.objectfifo @out_L1L2_0_0(%tile_0_2, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 3</span>    : !aie.objectfifo&lt;memref&lt;2x2x8x8xbf16&gt;&gt;
+<span class="linenos"> 4</span>aie.objectfifo @out_L1L2_0_1(%tile_0_3, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 5</span>    : !aie.objectfifo&lt;memref&lt;2x2x8x8xbf16&gt;&gt;
+<span class="linenos"> 6</span>aie.objectfifo @out_L1L2_0_2(%tile_0_4, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 7</span>    : !aie.objectfifo&lt;memref&lt;2x2x8x8xbf16&gt;&gt;
+<span class="linenos"> 8</span>aie.objectfifo @out_L1L2_0_3(%tile_0_5, {%mem_tile_0_1}, 2 : i32)
+<span class="linenos"> 9</span>    : !aie.objectfifo&lt;memref&lt;2x2x8x8xbf16&gt;&gt;
+<span class="linenos">10</span>// join all 4 row outputs, write offsets [0, 256, 512, 768]
+<span class="linenos">11</span>aie.objectfifo @out_L2L3_0(%mem_tile_0_1
+<span class="linenos">12</span>    dimensionsToStream [&lt;size = 2, stride = 128&gt;, &lt;size = 8, stride = 8&gt;,
+<span class="linenos">13</span>                        &lt;size = 2, stride = 64&gt;, &lt;size = 8, stride = 1&gt;],
+<span class="linenos">14</span>    {%shim_noc_tile_0_0}, 2 : i32) : !aie.objectfifo&lt;memref&lt;64x16xbf16&gt;&gt;
+<span class="linenos">15</span>aie.objectfifo.link [@out_L1L2_0_0, @out_L1L2_0_1, @out_L1L2_0_2, @out_L1L2_0_3]
+<span class="linenos">16</span>    -&gt; [@out_L2L3_0]([0, 256, 512, 768] [])
+</pre></div>
+</div>
+</div>
+<p>The write offsets place each tile’s 256-element <code class="docutils literal notranslate"><span class="pre">pqmn</span></code> block into a separate y-slot in the
+1024-element L2 buffer, so the combined buffer has layout <code class="docutils literal notranslate"><span class="pre">ypqmn</span></code>.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">dimensionsToStream</span></code> on <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> reorders the data from <code class="docutils literal notranslate"><span class="pre">pqmn</span></code> to <code class="docutils literal notranslate"><span class="pre">pmqn</span></code> within each y-slot
+as it streams out to the shim, matching the layout the host DMA expects:</p>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">Dimension order for the output FIFO from L2 to L3</span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>dimensionsToStream [&lt;size = 2, stride = 128&gt;,   // p: outer
+<span class="linenos">2</span>                    &lt;size = 8, stride = 8&gt;,     // m
+<span class="linenos">3</span>                    &lt;size = 2, stride = 64&gt;,    // q
+<span class="linenos">4</span>                    &lt;size = 8, stride = 1&gt;]     // n: inner
+</pre></div>
+</div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> memref also grew from <code class="docutils literal notranslate"><span class="pre">memref&lt;16x16xbf16&gt;</span></code> (single tile, 256 elements) to
+<code class="docutils literal notranslate"><span class="pre">memref&lt;64x16xbf16&gt;</span></code> (4 tiles joined, 1024 elements) to include the 4 y-slots.</p>
+<p>We repeated this for all 8 columns, resulting in 8 <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> FIFOs in total.</p>
+</section>
+<section id="task-4-testing">
+<h2>Task 4: Testing<a class="headerlink" href="#task-4-testing" title="Link to this heading"></a></h2>
+<p>With all the tiles, FIFOs, and connections in place, we could finally test the whole NPU:</p>
+<div class="literal-block-wrapper docutils container" id="id10">
+<div class="code-block-caption"><span class="caption-text">Testing the whole NPU</span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>$<span class="w"> </span>iron-fhs
+<span class="linenos">2</span>Activated<span class="w"> </span>virtualenv:<span class="w"> </span>/home/mla01/.cache/nix-amd-npu/venv-iron
+<span class="linenos">3</span>
+<span class="linenos">4</span>$<span class="w"> </span>make<span class="w"> </span>run_matmul
+<span class="linenos">5</span>python3<span class="w"> </span>src/driver.py
+<span class="linenos">6</span><span class="o">[</span>PASS<span class="o">]</span><span class="w"> </span>matmul<span class="w"> </span>verification<span class="w"> </span>passed.
+</pre></div>
+</div>
+</div>
+</section>
+<section id="group-specific-component">
+<h2>Group Specific Component<a class="headerlink" href="#group-specific-component" title="Link to this heading"></a></h2>
+<section id="pitch-1-fused-cutile-kernels-for-local-diffusion">
+<h3>Pitch 1: Fused cuTile Kernels for Local Diffusion<a class="headerlink" href="#pitch-1-fused-cutile-kernels-for-local-diffusion" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Runnable local text-to-image generator on the NVIDIA Spark (optionally behind a small CLI/Gradio front end)</p></li>
+<li><p>Use fused cuTile kernels inside diffusion denoising loop that collapse chained operations into a single pass.</p></li>
+<li><p><strong>Problem</strong>: repeated data round trips to memory for intermediate activations in the denoising step -&gt; memory-bound</p></li>
+<li><dl class="simple">
+<dt><strong>Solution</strong>: Profile one denoising step to locate the memory-bound chains, then replace them with hand-written fused cuTile kernels:</dt><dd><ul>
+<li><p><strong>Kernel 1</strong>: fused GroupNorm -&gt; SiLU (halves the activation round-trips)</p></li>
+<li><p><strong>Kernel 2 (optional)</strong>: fused LayerNorm -&gt; GEGLU FFN</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Each kernel is correctness-gated against the PyTorch reference before any timing.</p></li>
+<li><p><strong>Deliverable</strong>: a working generator with a baseline &lt;-&gt; fused toggle, plus a short reproducible report</p></li>
+</ul>
+</section>
+<section id="pitch-2-unary-binary-primitives-in-cutile">
+<h3>Pitch 2: Unary &amp; Binary Primitives in cuTile<a class="headerlink" href="#pitch-2-unary-binary-primitives-in-cutile" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Extension of the config object &amp; optimizer pipeline to support first/last touch unary primitives</dt><dd><ul>
+<li><p>Unary primitives: e.g. ReLU, Sigmoid, Tanh</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>Extension of the config object &amp; optimizer pipeline to support binary primitives as main op</dt><dd><ul>
+<li><p>Binary primitives: e.g. Add, Mul, Min, Max</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Operator fusion: support for fusing first/last touch unary primitive into main op</p></li>
+</ul>
+</section>
+<section id="pitch-3-xdna-jit-compiler">
+<h3>Pitch 3: XDNA JIT Compiler<a class="headerlink" href="#pitch-3-xdna-jit-compiler" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Implementation of a JIT compiler for XDNA</p></li>
+<li><p>Generates assembly code for XDNA for a given config object (from einsum string)</p></li>
+<li><p>TODO: restrictions on supported operations, data types, and number of dimensions</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="09_xdna_gemm.html" class="btn btn-neutral float-left" title="XDNA GEMM" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Lucas Obitz, Luca-Philipp Grumbach.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
