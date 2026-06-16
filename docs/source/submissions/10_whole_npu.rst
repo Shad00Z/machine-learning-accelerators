@@ -209,7 +209,7 @@ into a different slot of the shared L2 buffer:
     aie.objectfifo @out_L2L3_0(%mem_tile_0_1
         dimensionsToStream [<size = 2, stride = 128>, <size = 8, stride = 8>,
                             <size = 2, stride = 64>, <size = 8, stride = 1>],
-        {%shim_noc_tile_0_0}, 2 : i32) : !aie.objectfifo<memref<64x16xbf16>>
+        {%shim_noc_tile_0_0}, 2 : i32) : !aie.objectfifo<memref<4x16x16xbf16>>
     aie.objectfifo.link [@out_L1L2_0_0, @out_L1L2_0_1, @out_L1L2_0_2, @out_L1L2_0_3]
         -> [@out_L2L3_0]([0, 256, 512, 768] [])
 
@@ -228,8 +228,11 @@ as it streams out to the shim, matching the layout the host DMA expects:
                         <size = 2, stride = 64>,    // q
                         <size = 8, stride = 1>]     // n: inner
 
-The ``out_L2L3`` memref also grew from ``memref<16x16xbf16>`` (single tile, 256 elements) to
-``memref<64x16xbf16>`` (4 tiles joined, 1024 elements) to include the 4 y-slots.
+The ``out_L2L3`` memref grew from ``memref<16x16xbf16>`` (single tile, 256 elements) to
+``memref<4x16x16xbf16>`` (4 tiles joined, 1024 elements). The shape describes
+the memory layout as ``y * (pm) * (qn)`` where the first dimension indexes the 4 y-slots
+(one per row tile), the second covers the 16 pm-rows (p=2, m=8), and the third covers the
+16 qn-columns (q=2, n=8).
 
 We repeated this for all 8 columns, resulting in 8 ``out_L2L3`` FIFOs in total.
 
