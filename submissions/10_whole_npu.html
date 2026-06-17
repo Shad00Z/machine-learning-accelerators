@@ -304,7 +304,7 @@ into a different slot of the shared L2 buffer:</p>
 <span class="linenos">11</span>aie.objectfifo @out_L2L3_0(%mem_tile_0_1
 <span class="linenos">12</span>    dimensionsToStream [&lt;size = 2, stride = 128&gt;, &lt;size = 8, stride = 8&gt;,
 <span class="linenos">13</span>                        &lt;size = 2, stride = 64&gt;, &lt;size = 8, stride = 1&gt;],
-<span class="linenos">14</span>    {%shim_noc_tile_0_0}, 2 : i32) : !aie.objectfifo&lt;memref&lt;64x16xbf16&gt;&gt;
+<span class="linenos">14</span>    {%shim_noc_tile_0_0}, 2 : i32) : !aie.objectfifo&lt;memref&lt;4x16x16xbf16&gt;&gt;
 <span class="linenos">15</span>aie.objectfifo.link [@out_L1L2_0_0, @out_L1L2_0_1, @out_L1L2_0_2, @out_L1L2_0_3]
 <span class="linenos">16</span>    -&gt; [@out_L2L3_0]([0, 256, 512, 768] [])
 </pre></div>
@@ -323,8 +323,11 @@ as it streams out to the shim, matching the layout the host DMA expects:</p>
 </pre></div>
 </div>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> memref also grew from <code class="docutils literal notranslate"><span class="pre">memref&lt;16x16xbf16&gt;</span></code> (single tile, 256 elements) to
-<code class="docutils literal notranslate"><span class="pre">memref&lt;64x16xbf16&gt;</span></code> (4 tiles joined, 1024 elements) to include the 4 y-slots.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> memref grew from <code class="docutils literal notranslate"><span class="pre">memref&lt;16x16xbf16&gt;</span></code> (single tile, 256 elements) to
+<code class="docutils literal notranslate"><span class="pre">memref&lt;4x16x16xbf16&gt;</span></code> (4 tiles joined, 1024 elements). The shape describes
+the memory layout as <code class="docutils literal notranslate"><span class="pre">y</span> <span class="pre">*</span> <span class="pre">(pm)</span> <span class="pre">*</span> <span class="pre">(qn)</span></code> where the first dimension indexes the 4 y-slots
+(one per row tile), the second covers the 16 pm-rows (p=2, m=8), and the third covers the
+16 qn-columns (q=2, n=8).</p>
 <p>We repeated this for all 8 columns, resulting in 8 <code class="docutils literal notranslate"><span class="pre">out_L2L3</span></code> FIFOs in total.</p>
 </section>
 <section id="task-4-testing">
