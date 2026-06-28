@@ -4,7 +4,7 @@ import torch
 from diffusers import AutoPipelineForText2Image, Transformer2DModel
 from diffusers.models.resnet import ResnetBlock2D
 from pathlib import Path
-from .resnet_block import inspect_block
+from sd_turbo.resnet.resnet_block import inspect_block
 
 
 @functools.lru_cache(maxsize=1)
@@ -14,7 +14,7 @@ def initialize_pipeline():
     return pipe
 
 
-def generation(pipeline, prompt, seed=0, out_dir="outputs"):
+def generation(pipeline, prompt, seed=0, out_dir="diffusion/outputs"):
     # Reproduce image
     generator = torch.Generator("cuda").manual_seed(seed)
 
