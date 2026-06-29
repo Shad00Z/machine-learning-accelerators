@@ -2,6 +2,7 @@
 # from verification.test_gn_silu import test_gn_silu_reference
 from sd_turbo.resnet.resnet_block import model_deconstruction
 from sd_turbo.image_to_text import generation, initialize_pipeline, model_information
+from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
 
 
 def main():
@@ -9,8 +10,12 @@ def main():
 
     # # prompt = "A cinematic shot of a baby racoon wearing an intricate italian priest robe."
     # # prompt = "A Star Wars Storm Trooper holding a light saber"
-    # prompt = "Will Smith eating spaghetti"
-    # generation(pipeline=pipe, prompt=prompt)
+    prompt = "Will Smith eating spaghetti"
+    
+    n = patch_unet(pipe.unet, verbose=True)
+    print(f"Patched {n} ResnetBlock2D blocks with fused GN+SiLU kernel.")
+    
+    generation(pipeline=pipe, prompt=prompt)
 
     unet = model_deconstruction(pipe)
     model_information(unet)

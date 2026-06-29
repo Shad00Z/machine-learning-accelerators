@@ -20,8 +20,8 @@ def generation(pipeline, prompt, seed=0, out_dir="diffusion/outputs"):
 
     image = pipeline(prompt=prompt, num_inference_steps=1, guidance_scale=0.0, generator=generator).images[0]
 
-    # Safe image
-    Path(out_dir).mkdir(exist_ok=True)
+    # Save image
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
     path = Path(out_dir) / f"sdturbo_seed{seed}.png"
     image.save(path)
     print("saved", path)
