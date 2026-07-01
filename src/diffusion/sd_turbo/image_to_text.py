@@ -6,7 +6,7 @@ from diffusers import AutoPipelineForText2Image, Transformer2DModel
 from diffusers.models.resnet import ResnetBlock2D
 from pathlib import Path
 from sd_turbo.resnet.resnet_block import inspect_block
-from utils.helper import _is_pow2, is_shape_fusable
+from utils.helper import is_shape_fusable
 
 
 @functools.lru_cache(maxsize=1)

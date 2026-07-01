@@ -7,7 +7,6 @@ import torch.nn.functional as F
 
 from diffusers.models.resnet import ResnetBlock2D
 
-from sd_turbo.image_to_text import _is_pow2
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
 from utils.helper import is_shape_fusable
 
