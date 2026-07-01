@@ -1,3 +1,4 @@
+import collections
 import functools
 import torch
 
@@ -5,6 +6,7 @@ from diffusers import AutoPipelineForText2Image, Transformer2DModel
 from diffusers.models.resnet import ResnetBlock2D
 from pathlib import Path
 from sd_turbo.resnet.resnet_block import inspect_block
+from utils.helper import _is_pow2, is_shape_fusable
 
 
 @functools.lru_cache(maxsize=1)
@@ -48,3 +50,47 @@ def model_information(unet):
     # Print transformer block information
     print("TRANSFORMER BLOCK")
     inspect_block(transformer_blocks[0])
+
+
+def survey_groupnorm_shapes(pipe, prompt="a photo", seed=0):
+    """
+    Run one generation and tally the input shape every ResnetBlock2D GroupNorm sees.
+    """
+    unet = pipe.unet
+    device = next(unet.parameters()).device
+    records, handles = [], []
+
+    def make_hook(num_groups):
+        # forward_pre_hook: args = (input,)
+        def hook(module, args):
+            _, c, h, w = args[0].shape
+            records.append((c, h, w, num_groups))
+        return hook
+
+    for _, block in unet.named_modules():
+        if isinstance(block, ResnetBlock2D):
+            for which in ("norm1", "norm2"):
+                norm = getattr(block, which)
+                handles.append(norm.register_forward_pre_hook(
+                    make_hook(getattr(norm, "num_groups", None))))
+
+    gen = torch.Generator(device=device).manual_seed(seed)
+    with torch.no_grad():
+        pipe(prompt=prompt, num_inference_steps=1, guidance_scale=0.0, generator=gen)
+    for h in handles:
+        h.remove()
+
+    counts = collections.Counter(records)
+
+    print(f"{'chan':>5} {'H':>4} {'W':>4} {'grps':>5} {'Cg':>4} {'count':>6}  {'fusable':>8}")
+    print("-" * 44)
+    fusable = total = 0
+    for (c, h, w, g), n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        ok = is_shape_fusable(c, h, w, g)
+        total += n
+        fusable += n if ok else 0
+        print(f"{c:>5} {h:>4} {w:>4} {g:>5} {c // g:>4} {n:>6}  {'YES' if ok else '':>8}")
+    print("-" * 44)
+    print(f"total GN calls: {total}   fusable: {fusable} ({100 * fusable / total:.0f}%)")
+    print(f"distinct shapes: {len(counts)}")
+    return counts

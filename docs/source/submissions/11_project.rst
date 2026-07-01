@@ -117,3 +117,68 @@ Therefore, we can use 10 channels per group and thereby, have :math:`10 \times 6
 
 For the fusion of the matmul with the ``LayerNorm + GEGLU``, we keep the contraction pattern of the two linear layers with ``(320 -> 2560, 1280 -> 320)``.
 We are going to fuse the ``LayerNorm`` as a first touch and then apply the ``GELU`` as a last touch for the first matmul.
+
+
+Milestone 2: Fused GroupNorm + SiLU Kernel
+------------------------------------------
+
+GroupNorm Shape Coverage
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A forward-pass survey of all 44 GroupNorm calls across the U-Net's ``ResnetBlock2D`` blocks reveals 14 distinct ``(channels, H, W, groups)`` shapes, of which the fused cuTile kernel currently serves only the ``(320, 64, 64, 32)`` case (16 % of calls).
+Because the kernel is already shape-parametric -- the channel count is only a loop bound and every spatial extent is a power of two -- all 44 calls are kernel-eligible, so full coverage requires merely relaxing the ``GnSiluFused._is_supported`` gate rather than writing new kernels.
+
+::
+
+     chan    H    W  grps   Cg  count   now eligible
+    ----------------------------------------------------
+     1280    8    8    32   40     11            YES
+      320   64   64    32   10      7   YES      YES
+      640   32   32    32   20      6            YES
+     1280   16   16    32   40      6            YES
+     2560    8    8    32   80      3            YES
+      640   64   64    32   20      2            YES
+     2560   16   16    32   80      2            YES
+      320   32   32    32   10      1            YES
+      640   16   16    32   20      1            YES
+      960   32   32    32   30      1            YES
+      960   64   64    32   30      1            YES
+     1280   32   32    32   40      1            YES
+     1920   16   16    32   60      1            YES
+     1920   32   32    32   60      1            YES
+    ----------------------------------------------------
+    total GN calls: 44   fused now: 7 (16%)   kernel-eligible: 44 (100%)
+    distinct shapes: 14
+
+After we applied the arbitrary shapes, we are now fusing everything:
+
+::
+
+     chan    H    W  grps   Cg  count   fusable
+    --------------------------------------------
+     1280    8    8    32   40     11       YES
+      320   64   64    32   10      7       YES
+      640   32   32    32   20      6       YES
+     1280   16   16    32   40      6       YES
+     2560    8    8    32   80      3       YES
+      640   64   64    32   20      2       YES
+     2560   16   16    32   80      2       YES
+      320   32   32    32   10      1       YES
+      640   16   16    32   20      1       YES
+      960   32   32    32   30      1       YES
+      960   64   64    32   30      1       YES
+     1280   32   32    32   40      1       YES
+     1920   16   16    32   60      1       YES
+     1920   32   32    32   60      1       YES
+    --------------------------------------------
+    total GN calls: 44   fusable: 44 (100%)
+    distinct shapes: 14
+
+
+Test Execution
+==============
+
+.. code-block:: bash
+    :caption: Test Execution
+
+    python -m pytest test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py -v
