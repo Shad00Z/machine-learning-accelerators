@@ -7,12 +7,9 @@ import torch.nn.functional as F
 
 from diffusers.models.resnet import ResnetBlock2D
 
+from sd_turbo.image_to_text import _is_pow2
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
-
-_FUSED_C = 320
-_FUSED_H = 64
-_FUSED_W = 64
-_FUSED_G = 32
+from utils.helper import is_shape_fusable
 
 
 class GnSiluFused(nn.Module):
@@ -30,14 +27,10 @@ class GnSiluFused(nn.Module):
         self.bias = group_norm.bias
 
     def _is_supported(self, x: torch.Tensor) -> bool:
+        if not x.is_cuda or x.dtype != torch.float16:
+            return False
         _, C, H, W = x.shape
-        return (
-            C == _FUSED_C
-            and H == _FUSED_H
-            and W == _FUSED_W
-            and self.num_groups == _FUSED_G
-            and x.is_cuda
-        )
+        return is_shape_fusable(C, H, W, self.num_groups)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self._is_supported(x):

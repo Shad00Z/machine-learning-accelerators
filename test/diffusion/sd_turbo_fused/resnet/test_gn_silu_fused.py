@@ -1,11 +1,14 @@
 import torch
+import pytest
 
 from sd_turbo.resnet.resnet_block import gn_silu_reference
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
 from data.load_helper import data_path, load_data
+from utils.helper import _cutile_available
 
 ATOL, RTOL = 2e-2, 2e-2
 
+@pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available")
 def test_gn_silu_reference(ref):
     """The torch reference recomputes the captured chain (sanity on loader + math)."""
     y_ref = gn_silu_reference(
@@ -19,6 +22,7 @@ def test_gn_silu_reference(ref):
     return y_ref
 
 
+@pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available")
 def test_gn_silu_kernel(ref):
     """The cuTile kernel matches the ref on real activations -- the M2 gate."""
     # Reference computation

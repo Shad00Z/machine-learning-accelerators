@@ -4,15 +4,9 @@ import torch
 from sd_turbo.resnet.resnet_block import gn_silu_reference
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
 from data.load_helper import data_path, load_data
+from utils.helper import _cutile_available
 
 ATOL, RTOL = 2e-2, 2e-2
-
-def _cutile_available():
-    try:
-        import cuda.tile  # noqa: F401
-    except Exception:
-        return False
-    return torch.cuda.is_available()
 
 
 @pytest.fixture(scope="module")

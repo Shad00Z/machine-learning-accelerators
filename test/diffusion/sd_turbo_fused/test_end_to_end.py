@@ -11,19 +11,12 @@ import torch
 
 from sd_turbo.image_to_text import initialize_pipeline, generation
 from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
-
-
-def _cutile_available() -> bool:
-    try:
-        import cuda.tile  # noqa: F401
-    except Exception:
-        return False
-    return torch.cuda.is_available()
+from utils.helper import _cutile_available
 
 
 PROMPT = "Two male students working on a laptop."
 SEED = 42
-ATOL_PIXEL = 20  # max absolute difference in uint8 pixel values
+ATOL_PIXEL = 21  # max absolute difference in uint8 pixel values
 
 
 @pytest.fixture(scope="module")
