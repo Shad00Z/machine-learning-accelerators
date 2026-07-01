@@ -4,6 +4,7 @@
 import torch
 
 from sd_turbo.resnet.resnet_block import gn_silu_reference
+from utils.helper import _cutile_available
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
 from data.load_helper import data_path, load_data
 
@@ -15,6 +16,7 @@ def _timed(fn, *args, warmup: int = WARMUP, iters: int = ITERS) -> float:
     """Return median latency in milliseconds over multiple measured runs."""
     # warmup
     for _ in range(warmup):
+        
         fn(*args)
     torch.cuda.synchronize()
 
@@ -46,7 +48,7 @@ def _load_ref_cuda():
 
 
 def main():
-    if not torch.cuda.is_available():
+    if not _cutile_available():
         print("CUDA not available – skipping benchmark.")
         return
 
