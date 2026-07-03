@@ -175,10 +175,168 @@ After we applied the arbitrary shapes, we are now fusing everything:
     distinct shapes: 14
 
 
+
+Kernel Benchmark and Profiling
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We compared the fused cuTile ``GroupNorm + SiLU`` against the eager PyTorch reference and
+``torch.compile`` on a single ``(1, 320, 64, 64)`` block, and profiled every kernel with
+Nsight Compute (``ncu``).
+
+.. list-table:: GroupNorm + SiLU on (1, 320, 64, 64), profiled with Nsight Compute
+   :header-rows: 1
+
+   * - Variant
+     - Kernels
+     - Total (us)
+     - Memory throughput
+   * - eager (reference)
+     - 4
+     - ~104
+     - 2 - 19 %
+   * - ``torch.compile``
+     - 3
+     - ~41
+     - 0.5 - 16 %
+   * - fused (cuTile)
+     - 2
+     - ~39
+     - 6 - 14 %
+
+At the kernel level the cuTile fusion matches ``torch.compile`` (two kernels vs three) and both
+plateau at a low memory throughput: a single batch-1 ``GroupNorm`` is too small to saturate the
+48 SMs, so the kernels are latency-bound, not bandwidth-bound. The larger speed-up seen in the
+Python micro-benchmark is dominated by ``torch.compile``'s per-call dispatch overhead rather than
+kernel efficiency. End-to-end, ``torch.compile`` additionally optimizes the whole U-Net graph
+(CUDA graphs, cross-kernel scheduling), which a per-block kernel replacement does not -- so the
+end-to-end difference reflects graph-level optimization, not the quality of the
+``GroupNorm + SiLU`` kernel.
+
+Occupancy is not the bottleneck
+"""""""""""""""""""""""""""""""
+
+The statistics kernel launches only ``N x groups = 32`` blocks, so we suspected it underfilled the
+48 SMs and wrote a split-reduction variant: per-channel partial sums (``N x channels = 320`` blocks)
+recombined in the apply pass. **Profiling disproved the hypothesis.** Raising the block count 32 -> 320
+left the memory throughput unchanged (6.73 % -> 6.70 %) and the achieved occupancy nearly flat
+(9.3 % -> 11.5 %); the split apply pass even ran *slower* (19.2 -> 23.4 us) because rebuilding the
+group statistics per block adds dependent scalar loads. The decisive evidence comes from
+``torch.compile``: its apply kernel runs at **94.9 % occupancy and still reaches only 15.7 % memory
+throughput**. The ceiling is therefore the *problem size* -- a single batch-1 ``GroupNorm`` (2.5 MiB,
+~19 us) cannot supply enough parallel work to saturate the GPU -- not the launch occupancy. The
+simple two-pass kernel remains the fastest variant; the split kernel is kept as a documented negative
+result. Further speed-ups must come from graph-level optimization (CUDA graphs) or larger batches,
+not from tuning this kernel. Sweeping the batch size confirms this is scale-independent: the
+split-reduction kernel stays within ~2 % of the two-pass kernel from ``B = 1`` to ``B = 128``
+(``split / two-pass`` = 0.98 - 1.01), so raising occupancy is neutral across the whole L2-to-DRAM
+range, not only at batch 1.
+
+Batch scaling: the L2 boundary
+""""""""""""""""""""""""""""""
+
+Sweeping the batch size makes the memory hierarchy directly visible. Each image needs
+``x`` + ``out`` = ``2 x 2.5 MiB = 5 MiB`` of working set, so the set crosses the ``24 MiB`` L2 cache
+between ``B = 4`` (20 MiB, fits) and ``B = 8`` (40 MiB, spills to DRAM):
+
+.. list-table:: Fused GroupNorm + SiLU, per-image latency vs batch size
+   :header-rows: 1
+
+   * - Batch
+     - us / call
+     - us / image
+     - Regime
+   * - 1
+     - 17.7
+     - 17.7
+     - L2-resident
+   * - 2
+     - 24.2
+     - 12.1
+     - L2-resident
+   * - 4
+     - 59.1
+     - 14.8
+     - L2-resident (near limit)
+   * - 8
+     - 238.7
+     - 29.8
+     - spills to DRAM
+   * - 16
+     - 536.0
+     - 33.5
+     - DRAM-bound
+   * - 32
+     - 1046.0
+     - 32.7
+     - DRAM-bound
+   * - 64
+     - 2092.5
+     - 32.7
+     - DRAM-bound
+
+While the working set is L2-resident the per-image latency stays ~12 - 18 us (latency-bound); once it
+spills, it plateaus at ~32.7 us/image. That plateau is exactly the DRAM-bandwidth cost of the two-pass
+kernel, which moves ``x`` twice plus ``out`` once: :math:`3 \times 2.5\,\text{MiB} / 240\,\text{GB/s} \approx 32.8\,\mu s`.
+This confirms the roofline premise from Milestone 1: at batch 1 the activation is L2-resident (so the
+fusion win is L2 traffic and launch overhead), and only at larger batch / resolution does it spill to
+DRAM, where reducing the number of passes would yield the larger, bandwidth-bound win.
+
+cuTile vs. torch.compile across batch sizes
+"""""""""""""""""""""""""""""""""""""""""""
+
+Comparing the fused cuTile kernel against ``torch.compile`` on random inputs across batch sizes
+separates the two regimes cleanly:
+
+.. list-table:: Median latency (us), fused GroupNorm + SiLU on random data
+   :header-rows: 1
+
+   * - Batch
+     - Working set
+     - ``torch.compile``
+     - cuTile
+     - cuTile vs compile
+   * - 1
+     - 5 MiB (L2)
+     - 29.8
+     - 15.7
+     - 1.90x
+   * - 8
+     - 40 MiB (DRAM)
+     - 225.1
+     - 260.4
+     - 0.86x
+   * - 32
+     - 160 MiB (DRAM)
+     - 1006.1
+     - 1075.8
+     - 0.94x
+   * - 64
+     - 320 MiB (DRAM)
+     - 1996.0
+     - 2044.2
+     - 0.98x
+   * - 128
+     - 640 MiB (DRAM)
+     - 3995.4
+     - 4067.1
+     - 0.98x
+
+At batch 1 cuTile is 1.90x faster, but this is a *launch-overhead* win: cuTile issues two kernels via a
+light launch path, whereas default-mode ``torch.compile`` issues three with Python dispatch guards. Once
+the working set spills to DRAM both kernels become bandwidth-bound -- they move the same bytes against the
+same ~240 GB/s roof -- so the ratio converges toward a tie (0.86 -> 0.98), the two implementations landing
+within a few percent of each other. The conclusion: for this memory-bound operation the cuTile kernel *matches* a
+heavily tuned production compiler to within ~10 %; its only clear advantage is launch overhead at batch 1,
+which ``torch.compile(mode="reduce-overhead")`` (CUDA graphs) would also remove. This closes the
+``GroupNorm + SiLU`` candidate: there is no kernel-level headroom left, so the remaining gains must come
+from graph-level launch amortization (CUDA graphs) and from the compute-bound transformer FFN candidate.
+
+
 Test Execution
 ==============
 
 .. code-block:: bash
     :caption: Test Execution
 
+    export PYTHONPATH=src/diffusion:test/diffusion
     python -m pytest test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py -v
