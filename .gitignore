@@ -10,3 +10,4 @@ src/diffusion/outputs
 
 # Binary
 test/diffusion/data/gn_silu_block0.npz
+test/diffusion/data/ffn_block0.npz
