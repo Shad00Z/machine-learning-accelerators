@@ -1,21 +1,25 @@
-"""Benchmark: end-to-end SD-Turbo image generation.
+"""Benchmark: end-to-end SD-Turbo image generation across fusion configurations.
 
-Compares three variants:
-  1. Baseline       - unmodified pipeline
-  2. Fused (cuTile) - GroupNorm+SiLU replaced by the cuTile kernel
-  3. torch.compile  - baseline pipeline with torch.compile on the UNet
+Compares five variants at the whole-pipeline level:
+  1. Baseline       - unmodified pipeline (eager)
+  2. Fused ResNet   - GroupNorm+SiLU replaced by the cuTile kernel (patch_unet)
+  3. Fused FFN      - transformer LayerNorm+GEGLU replaced by the cuTile kernel (patch_unet_ffn)
+  4. Fused Both     - ResNet + FFN fused
+  5. torch.compile  - baseline UNet compiled (mode='reduce-overhead', i.e. CUDA graphs)
+
+Speedups are reported vs baseline and vs torch.compile.
 """
-
 import torch
 from diffusers import AutoPipelineForText2Image
 
 from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
+from sd_turbo_fused.transformer.fused_ffn_block import patch_unet_ffn
 from utils.helper import _cutile_available
 
 PROMPT = "A photo of a cat wearing a hat, sitting on a bench in the park, with a sunny background, highly detailed."
 SEED = 42
-WARMUP = 3
-ITERS = 10
+WARMUP = 10
+ITERS = 40
 
 
 def _fresh_pipeline():
@@ -39,14 +43,12 @@ def _run_pipeline(pipe, seed: int = SEED) -> None:
 
 
 def _timed(pipe, warmup: int = WARMUP, iters: int = ITERS) -> float:
-    """Return median end-to-end latency in milliseconds."""
+    """Median end-to-end latency in milliseconds."""
     for _ in range(warmup):
         _run_pipeline(pipe)
     torch.cuda.synchronize()
-
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
-
     times = []
     for _ in range(iters):
         start.record()
@@ -54,53 +56,59 @@ def _timed(pipe, warmup: int = WARMUP, iters: int = ITERS) -> float:
         end.record()
         torch.cuda.synchronize()
         times.append(start.elapsed_time(end))
-
     times.sort()
     return times[len(times) // 2]
 
 
+def _patch_both(unet):
+    patch_unet(unet)
+    patch_unet_ffn(unet)
+    return
+
+
+def _variant(patch_fn=None, compile_unet=False) -> float:
+    """Fresh pipeline, optionally patched and/or compiled, then timed."""
+    pipe = _fresh_pipeline()
+    if patch_fn is not None:
+        patch_fn(pipe.unet)
+    if compile_unet:
+        pipe.unet = torch.compile(pipe.unet, mode="reduce-overhead")
+        t = _timed(pipe, warmup=WARMUP + 2)   # extra warmup to absorb compilation
+    else:
+        t = _timed(pipe)
+    del pipe
+    return t
+
+
 def main():
     if not _cutile_available():
-        print("CUDA not available – skipping benchmark.")
+        print("CUDA not available - skipping benchmark.")
         return
 
     print(f"Prompt      : {PROMPT!r}")
     print(f"Warmup iters: {WARMUP}  Measured iters: {ITERS}\n")
 
-    # 1. Baseline
-    print("===== Loading pipeline (baseline) =====")
-    pipe = _fresh_pipeline()
-    t_baseline = _timed(pipe)
-    del pipe
+    configs = [
+        ("Baseline",       None,           False),
+        ("Fused ResNet",   patch_unet,     False),
+        ("Fused FFN",      patch_unet_ffn, False),
+        ("Fused Both",     _patch_both,    False),
+        ("torch.compile",  None,           True),
+    ]
 
-    # 2. Fused (cuTile)
-    print("\n===== Loading pipeline for fused variant =====")
-    pipe_fused = _fresh_pipeline()
-    n_patched = patch_unet(pipe_fused.unet, verbose=False)
-    print(f"  {n_patched} ResnetBlock2D blocks patched")
-    t_fused = _timed(pipe_fused)
-    del pipe_fused
+    results = []
+    for label, patch_fn, comp in configs:
+        print(f"===== {label} =====")
+        results.append((label, _variant(patch_fn, comp)))
 
-    # 3. torch.compile
-    print("\n===== Loading pipeline for torch.compile variant =====")
-    pipe_compiled = _fresh_pipeline()
-    print("  Compiling UNet (mode='reduce-overhead')…")
-    pipe_compiled.unet = torch.compile(pipe_compiled.unet, mode="reduce-overhead")
-    # Extra warmup to absorb compilation on first real call
-    t_compiled = _timed(pipe_compiled, warmup=WARMUP + 2)
-    del pipe_compiled
+    t_base = dict(results)["Baseline"]
+    t_comp = dict(results)["torch.compile"]
 
-    # Results
-    print(f"\n{'Variant':<25} {'Median (ms)':>12} {'Speedup vs baseline':>20}")
-    print("-" * 60)
-    for label, t in [
-        ("Baseline", t_baseline),
-        ("Fused (cuTile)", t_fused),
-        ("torch.compile", t_compiled),
-    ]:
-        speedup = t_baseline / t if t > 0 else float("inf")
-        print(f"{label:<25} {t:>12.2f} {speedup:>19.2f}x")
-    print("-" * 60)
+    print(f"\n{'Variant':<16} {'Median (ms)':>12} {'vs baseline':>13} {'vs compile':>12}")
+    print("-" * 55)
+    for label, t in results:
+        print(f"{label:<16} {t:>12.2f} {t_base / t:>12.2f}x {t_comp / t:>11.2f}x")
+    print("-" * 55)
 
 
 if __name__ == "__main__":
