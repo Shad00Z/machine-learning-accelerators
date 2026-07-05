@@ -17,8 +17,7 @@ def test_gn_silu_reference(ref):
     assert y_ref.shape == ref["y"].shape, "Reference kernel failed!"
     print("Reference kernel passed!")
     torch.testing.assert_close(y_ref, ref["y"], atol=ATOL, rtol=RTOL)
-
-    return y_ref
+    return
 
 
 @pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available")
@@ -35,3 +34,4 @@ def test_gn_silu_kernel(ref):
 
     assert y_ref.shape == out.shape, "Reference kernel failed!"
     torch.testing.assert_close(out.cpu(), y_ref, atol=ATOL, rtol=RTOL)
+    return

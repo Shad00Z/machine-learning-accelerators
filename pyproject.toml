@@ -2,3 +2,8 @@
 pythonpath = ["src/diffusion", "test/diffusion"]
 testpaths  = ["test"]
 addopts    = "--import-mode=importlib"
+filterwarnings = [
+    "ignore::DeprecationWarning:diffusers.*",
+    "ignore::DeprecationWarning:transformers.*",
+    "ignore::UserWarning:huggingface_hub.*",
+]

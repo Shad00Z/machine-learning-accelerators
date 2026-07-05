@@ -10,6 +10,12 @@ from diffusers.models.resnet import ResnetBlock2D
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
 from utils.helper import is_shape_fusable
 
+# (C, H, W) shapes where the fused kernel beats eager for sd_turbo resnet block shapes (measured with bench_gn_silu)
+_VALID_GN_SHAPES = frozenset({
+    (320, 64, 64), (640, 32, 32), (640, 64, 64), (320, 32, 32), (640, 16, 16),
+    (960, 32, 32), (960, 64, 64), (1280, 32, 32), (1920, 32, 32),
+})
+
 
 class GnSiluFused(nn.Module):
     """Fused GroupNorm + SiLU.
@@ -29,7 +35,11 @@ class GnSiluFused(nn.Module):
         if not x.is_cuda or x.dtype != torch.float16:
             return False
         _, C, H, W = x.shape
-        return is_shape_fusable(C, H, W, self.num_groups)
+        if not is_shape_fusable(C, H, W, self.num_groups):
+            return False
+        if _VALID_GN_SHAPES is None:
+            return True
+        return (C, H, W) in _VALID_GN_SHAPES
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self._is_supported(x):

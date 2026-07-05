@@ -124,6 +124,14 @@ def main():
     #     t = _timed(launch_reference_config_kernel, x, w, b, 32, 1e-5)   # batched _timed
     #     print(f"B={B:3d}  {t*1e3:7.2f} us/call  {t/B*1e3:6.2f} us/image")
     
+    # Compare Eager vs cuTile vs torch.compile to decide which values to take
+    print("\n--- real U-Net GroupNorm shapes ---")
+    for C, H, W in ((1280, 8, 8), (320, 64, 64), (640, 32, 32), (1280, 16, 16),
+                    (2560, 8, 8), (640, 64, 64), (2560, 16, 16), (320, 32, 32),
+                    (640, 16, 16), (960, 32, 32), (960, 64, 64), (1280, 32, 32),
+                    (1920, 16, 16), (1920, 32, 32)):
+        bench_shape(1, C, H, W)
+    
     # For larger shapes (crossing the 24 MiB L2 boundary into DRAM)
     for B in (1, 8, 32, 64, 128):
         bench_shape(B, 320, 64, 64)
