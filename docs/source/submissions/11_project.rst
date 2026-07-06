@@ -666,7 +666,7 @@ Milestone 5: Gradio UI
 A simple Gradio interface wraps the optimized pipeline, allowing interactive text-to-image
 generation with the fused kernels on the DGX Spark.
 
-.. image:: ../_static/gradio_ui.png
+.. image:: ../_static/gradio-ui.png
    :alt: Gradio UI screenshot
 
 
