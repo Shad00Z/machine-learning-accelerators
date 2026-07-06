@@ -14,8 +14,7 @@ def gn_mean_stddev_kernel(x,
                           channels_per_group: ConstInt, 
                           height: ConstInt, 
                           width: ConstInt,
-                          eps
-    ):
+                          eps):
     # 1) Prepare
     num_groups = mean.shape[1]
     bid = ct.bid(0)

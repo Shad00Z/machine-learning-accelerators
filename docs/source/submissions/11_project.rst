@@ -121,6 +121,109 @@ We are going to fuse the ``LayerNorm`` as a first touch and then apply the ``GEL
 Milestone 2: Fused GroupNorm + SiLU Kernel
 ------------------------------------------
 
+torch.compile already fuses GN + SiLU
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Before implementing the cuTile kernel, we verified what ``torch.compile`` does with this candidate.
+Setting ``TORCH_LOGS=output_code`` and compiling a standalone ``GroupNorm + SiLU`` module (see
+``src/diffusion/sd_turbo/resnet/gn_check.py``) causes Inductor to print the generated Triton kernels:
+
+::
+
+    triton_red_fused_native_group_norm_0      # partial reduction (Welford, 160 blocks * 8192 elems)
+    triton_per_fused_native_group_norm_1      # combine partial results -> final mean/variance per group
+    triton_poi_fused_native_group_norm_silu_2 # apply norm + SiLU (fused into one pointwise kernel)
+
+``torch.compile`` (Inductor) fuses the normalization apply and SiLU into a single Triton
+kernel. However, the GroupNorm statistics (mean and variance per group) require a two-stage
+reduction: a first pass computes partial Welford statistics across the large spatial domain (40,960
+elements per group at ``320 x 64 x 64``), and a second pass combines those partial results into the
+final per-group mean and variance. This leaves ``torch.compile`` at 3 kernels total.
+
+The First Fused CuTile Kernel
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We designed our kernel with a similar two-pass approach, but with a single fused apply kernel that computes the mean and variance in registers and applies the normalization and SiLU in one pass. The first pass is a reduction kernel that computes the mean and variance per group:
+
+.. code-block:: python
+  :caption: Kernel for computing mean and variance per group
+
+  @ct.kernel
+  def gn_mean_stddev_kernel(x, 
+                            mean, 
+                            std_dev, 
+                            channels_per_group: ConstInt, 
+                            height: ConstInt, 
+                            width: ConstInt,
+                            eps):
+    # 1) Prepare
+    num_groups = mean.shape[1]
+    bid = ct.bid(0)
+    group_idx = bid % num_groups
+    n = bid // num_groups
+
+    # 2) Reduction / Accumulation
+    sum    = ct.zeros((1,), dtype=torch.float32)
+    sum_sq = ct.zeros((1,), dtype=torch.float32)
+    for channel_in_group in range(channels_per_group):
+        channel_idx = group_idx * channels_per_group + channel_in_group
+
+        tile = ct.load(x, index=(n, channel_idx, 0, 0), shape=(1, 1, height, width))
+        res_tile = ct.reshape(tile.astype(torch.float), (height * width,))
+
+        sum = sum + ct.sum(res_tile, axis=0)
+        sum_sq = sum_sq + ct.sum(res_tile * res_tile, axis=0)
+
+    # 3) Store
+    count = channels_per_group * height * width
+    group_mean    = sum / count
+    group_var     = sum_sq / count - group_mean * group_mean
+    group_std_dev = ct.rsqrt(group_var + eps)
+
+    ct.store(mean, index=(n, group_idx), tile=ct.reshape(group_mean, (1, 1)))
+    ct.store(std_dev, index=(n, group_idx), tile=ct.reshape(group_std_dev, (1, 1)))
+    return
+
+and the second pass is a pointwise kernel that normalizes the input and applies the SiLU activation:
+
+.. code-block:: python
+  :caption: Kernel for applying normalization and SiLU activation
+
+  @ct.kernel
+  def gn_silu_kernel(x, 
+                   out, 
+                   weight, 
+                   bias, 
+                   mean, 
+                   std_dev, 
+                   channels_per_group: ConstInt, 
+                   height: ConstInt, 
+                   width: ConstInt):
+    spatial_size = height * width
+    
+    # index calculation
+    bid = ct.bid(0)
+    channel_idx = bid % x.shape[1]
+    sample_idx  = bid // x.shape[1]
+    group_idx   = channel_idx // channels_per_group
+
+    # per-group, loaded as 1-element tiles to broadcast over the channel
+    mean_s    = ct.reshape(ct.load(mean,    index=(sample_idx, group_idx), shape=(1, 1)), (1,))  # VERIFY
+    inv_std_s = ct.reshape(ct.load(std_dev, index=(sample_idx, group_idx), shape=(1, 1)), (1,))  # VERIFY
+    weight_s  = ct.load(weight, index=(channel_idx,), shape=(1,)).astype(torch.float32)
+    bias_s    = ct.load(bias,   index=(channel_idx,), shape=(1,)).astype(torch.float32)
+
+    x_tile = ct.load(x, index=(sample_idx, channel_idx, 0, 0), shape=(1, 1, height, width))
+    x_fp32 = ct.reshape(x_tile.astype(torch.float32), (spatial_size,))
+    
+    normed = (x_fp32 - mean_s) * inv_std_s            # broadcast (1,) over (HW,)  # VERIFY broadcast
+    affine = normed * weight_s + bias_s
+    silu   = affine * (1.0 / (1.0 + ct.exp(-affine))) # SiLU, composed             # VERIFY scalar+tile
+
+    out_tile = ct.reshape(silu.astype(out.dtype), (1, 1, height, width))
+    ct.store(out, index=(sample_idx, channel_idx, 0, 0), tile=out_tile)
+    return
+
 GroupNorm Shape Coverage
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
