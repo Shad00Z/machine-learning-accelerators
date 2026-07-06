@@ -1,13 +1,13 @@
 Project: cuTile for Local Diffusion
 ===================================
 
-For the last three weeks of the machine-learning-accelerators course, we ought to select a personal project.
+For the last three weeks of the machine-learning-accelerators course, we were asked to select a personal project.
 We have decided to optimize the denoising loop of a local text-to-image diffusion model.
 
 As our model of choice we have selected the ``SD-Turbo`` text-to-image model.
 The architecture of ``SD-Turbo`` is a U-Net.
 
-Each denoising step runs the whole U-Net, which, for the ``SD-Turbo`` is built from 22 ResnetBlocks (and 16 transformer blocks).
+Each denoising step runs the whole U-Net, which, for the ``SD-Turbo``, is built from 22 ResnetBlocks (and 16 transformer blocks).
 For our selected model, the operations within such a block are:
 
 - GroupNorm,
@@ -23,7 +23,7 @@ Further, on the transformer side there are:
 
 Looking at these operations it becomes clear that there are a lot of memory transfers happening.
 Therefore, we plan to decrease the text-to-image time by fusing together several of these operations.
-That means we are optimizing the diffusion model in regards to memory bandwidth.
+That means we are optimizing the diffusion model with regard to memory bandwidth.
 
 Milestones
 ----------
@@ -37,10 +37,10 @@ To follow a clear plan for these three weeks we came up with six milestones.
 4. Patch both kernels into SD-Turbo and verify end-to-end image equivalence.
 5. Build a Gradio UI for running the optimized model on the DGX Spark.
 
-In regards to benchmarking we plan to:
+Regarding benchmarking we plan to:
 
 - compare against ``torch.compile``,
-- prove the approach with Nsight (bytes moved per step at each memory tier)
+- prove the approach with Nsight (bytes moved per step at each memory tier),
 - keep track on the gain of each of our fusing approaches, and
 - compare different tiling sizes and approaches.
 
@@ -98,7 +98,7 @@ Fusing
 After performing some initial tests, we verified that ``torch.compile`` already fuses ``norm + SiLU`` into a single kernel.
 Therefore, this kernel serves as a warm-up kernel.
 
-On the other hand, the ``Layernorm`` and ``GEGLU`` are executed as two separate kernels.
+On the other hand, the ``LayerNorm`` and ``GEGLU`` are executed as two separate kernels.
 Therefore, fusing them with the matmul provides higher value compared to the ``torch.compile`` reference.
 
 Tiling
@@ -665,6 +665,14 @@ Milestone 5: Gradio UI
 
 A simple Gradio interface wraps the optimized pipeline, allowing interactive text-to-image
 generation with the fused kernels on the DGX Spark.
+
+It can be run with:
+
+.. code-block:: bash
+
+    python src/diffusion/app.py
+
+The UI can then be accessed via the browser:
 
 .. image:: ../_static/gradio-ui.png
    :alt: Gradio UI screenshot
