@@ -24,46 +24,48 @@ def ffn_mm1_geglu(x, w1t, b1, ln_weight, ln_bias, gated,
 
     proj = LN(x) @ w1t + b1 has Nfull = 2*inner columns;
     GEGLU splits into (hidden, gate) halves -> hidden * gelu(gate). 
-    Fused: two accumulators (hidden cols n_tile, gate cols n_tile + n_tiles)
+    Fused: two accumulators (hidden cols n_tile, gate cols n_tile + num_tiles_n)
     """
     K     = x.shape[1]
     inner = gated.shape[1]
+    num_tiles_n = ct.cdiv(inner, tN)
 
-    # column-tiles of the hidden half == gate-half tile offset
-    n_tiles = ct.cdiv(inner, tN)
     bid = ct.bid(0)
-    n_tile = bid % n_tiles
-    m_tile = bid // n_tiles
+    n_tile = bid % num_tiles_n
+    m_tile = bid // num_tiles_n
 
     # LayerNorm: per-row mean / inv_std over K
     row_sum = ct.zeros((tM,), dtype=torch.float32)
     row_sq  = ct.zeros((tM,), dtype=torch.float32)
     for k in range(ct.cdiv(K, tK)):
-        xt = ct.load(x, index=(m_tile, k), shape=(tM, tK), padding_mode=ct.PaddingMode.ZERO).astype(torch.float32)
-        row_sum = row_sum + ct.sum(xt,      axis=1)
-        row_sq  = row_sq  + ct.sum(xt * xt, axis=1)
+        x_tile = ct.load(x, index=(m_tile, k), shape=(tM, tK), padding_mode=ct.PaddingMode.ZERO).astype(torch.float32)
+        row_sum = row_sum + ct.sum(x_tile,          axis=1)
+        row_sq  = row_sq  + ct.sum(x_tile * x_tile, axis=1)
     mean_1d = row_sum / K
     mean    = ct.reshape(mean_1d, (tM, 1))
     inv_std = ct.reshape(ct.rsqrt(row_sq / K - mean_1d * mean_1d + eps), (tM, 1))
 
-    # mm1 for the hidden half (w1t col-tile n_tile) and gate half (col-tile n_tile + n_tiles)
+    # mm1 for the hidden half (w1t col-tile n_tile) and gate half (col-tile n_tile + num_tiles_n)
     acc_a = ct.zeros((tM, tN), dtype=torch.float32)
     acc_b = ct.zeros((tM, tN), dtype=torch.float32)
     for k in range(ct.cdiv(K, tK)):
-        xt = ct.load(x, index=(m_tile, k), shape=(tM, tK), padding_mode=ct.PaddingMode.ZERO).astype(torch.float32)
+        x_tile = ct.load(x, index=(m_tile, k), shape=(tM, tK), padding_mode=ct.PaddingMode.ZERO).astype(torch.float32)
         lw = ct.load(ln_weight, index=(k,), shape=(tK,), padding_mode=ct.PaddingMode.ZERO).astype(torch.float32)
         lb = ct.load(ln_bias,   index=(k,), shape=(tK,), padding_mode=ct.PaddingMode.ZERO).astype(torch.float32)
-        normed = ((xt - mean) * inv_std * lw + lb).astype(torch.float16)
+        normed = ((x_tile - mean) * inv_std * lw + lb).astype(torch.float16)
+        # Hidden
         wa = ct.load(w1t, index=(k, n_tile),           shape=(tK, tN), padding_mode=ct.PaddingMode.ZERO)
-        wb = ct.load(w1t, index=(k, n_tile + n_tiles), shape=(tK, tN), padding_mode=ct.PaddingMode.ZERO)
         acc_a = ct.mma(normed, wa, acc_a)
+        
+        # Gate
+        wb = ct.load(w1t, index=(k, n_tile + num_tiles_n), shape=(tK, tN), padding_mode=ct.PaddingMode.ZERO)
         acc_b = ct.mma(normed, wb, acc_b)
 
     # GEGLU: hidden * gelu(gate), gelu via tanh approximation
-    a = acc_a + ct.load(b1, index=(n_tile,),           shape=(tN,)).astype(torch.float32)
-    g = acc_b + ct.load(b1, index=(n_tile + n_tiles,), shape=(tN,)).astype(torch.float32)
-    gelu_g = 0.5 * g * (1.0 + ct.tanh(0.7978845608 * (g + 0.044715 * g * g * g)))
-    gated_tile = a * gelu_g
+    hidden = acc_a + ct.load(b1, index=(n_tile,),               shape=(tN,)).astype(torch.float32)
+    gate = acc_b + ct.load(b1, index=(n_tile + num_tiles_n,), shape=(tN,)).astype(torch.float32)
+    gelu_gate = 0.5 * gate * (1.0 + ct.tanh(0.7978845608 * (gate + 0.044715 * gate * gate * gate)))
+    gated_tile = hidden * gelu_gate
     ct.store(gated, index=(m_tile, n_tile), tile=gated_tile.astype(gated.dtype))
     return
 
@@ -103,27 +105,31 @@ def launch_ffn_kernel(x, ln_weight, ln_bias, eps, w1, b1, w2, b2, tM=None, tN=No
 
     x: (B, T, dim). Returns (B, T, dim).
     """
+    # 1, 4096, 320
     B, T, dim = x.shape
     M = B * T
-    x2d = x.reshape(M, dim)
     # 2 * inner
-    Nfull = w1.shape[0]
-    inner = Nfull // 2
+    N_cols = w1.shape[0]
+    inner = N_cols // 2
     if tM is None or tN is None or tK is None:
         tM, tN, tK = best_ffn_tile(dim, M, inner)
 
-    w1t = w1.t().contiguous()
-    w2t = w2.t().contiguous()
+    # Pass 1
+    flatten_2d = x.reshape(M, dim)
+    w1_transpose = w1.t().contiguous()
     gated = torch.empty((M, inner), dtype=x.dtype, device=x.device)
-    out2d = torch.empty((M, dim),   dtype=x.dtype, device=x.device)
-    s = torch.cuda.current_stream()
 
     gridA = (((M + tM - 1) // tM) * ((inner + tN - 1) // tN), 1, 1)
-    ct.launch(s, gridA, ffn_mm1_geglu,
-              (x2d, w1t, b1, ln_weight, ln_bias, gated, tM, tN, tK, float(eps)))
+    ct.launch(torch.cuda.current_stream(), gridA, ffn_mm1_geglu,
+              (flatten_2d, w1_transpose, b1, ln_weight, ln_bias, gated, tM, tN, tK, float(eps)))
+    
+    # Pass 2
+    w2_transpose = w2.t().contiguous()
+    out2d = torch.empty((M, dim),   dtype=x.dtype, device=x.device)
 
     gridB = (((M + tM - 1) // tM) * ((dim + tN - 1) // tN), 1, 1)
-    ct.launch(s, gridB, ffn_mm2, (gated, w2t, b2, out2d, tM, tN, tK))
+    ct.launch(torch.cuda.current_stream(), gridB, ffn_mm2, 
+              (gated, w2_transpose, b2, out2d, tM, tN, tK))
 
     return out2d.reshape(B, T, dim)
 

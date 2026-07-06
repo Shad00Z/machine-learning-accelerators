@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from diffusers.models.resnet import ResnetBlock2D
 
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
+from sd_turbo_fused.resnet.gn_silu_single_kernel import launch_single_pass_kernel
 from utils.helper import is_shape_fusable
 
 # (C, H, W) shapes where the fused kernel beats eager for sd_turbo resnet block shapes (measured with bench_gn_silu)
@@ -15,6 +16,7 @@ _VALID_GN_SHAPES = frozenset({
     (320, 64, 64), (640, 32, 32), (640, 64, 64), (320, 32, 32), (640, 16, 16),
     (960, 32, 32), (960, 64, 64), (1280, 32, 32), (1920, 32, 32),
 })
+_SINGLE_PASS_MIN_BATCH = 3
 
 
 class GnSiluFused(nn.Module):
@@ -43,9 +45,9 @@ class GnSiluFused(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self._is_supported(x):
-            return launch_reference_config_kernel(
-                x, self.weight, self.bias, self.num_groups, self.eps
-            )
+            launch = (launch_single_pass_kernel if x.shape[0] >= _SINGLE_PASS_MIN_BATCH
+                      else launch_reference_config_kernel)
+            return launch(x, self.weight, self.bias, self.num_groups, self.eps)
         # Fallback: reference GroupNorm + SiLU
         return F.silu(
             F.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)

@@ -7,6 +7,7 @@ from sd_turbo.resnet.resnet_block import gn_silu_reference
 from utils.helper import _cutile_available
 from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
 from sd_turbo_fused.resnet.gn_silu_split_kernel import launch_split_config_kernel
+from sd_turbo_fused.resnet.gn_silu_single_kernel import launch_single_pass_kernel
 from data.load_helper import data_path, load_data
 
 WARMUP = 50
@@ -63,22 +64,36 @@ def _load_ref_cuda():
     }
 
 
-def bench_shape(B, C, H, W, G=32, eps=1e-5):
+def _bench_shape(B, C, H, W, G=32, eps=1e-5):
+    """Time all variants for one (B, C, H, W); returns us per call (+ working set)."""
     x = torch.randn(B, C, H, W, dtype=torch.float16, device="cuda")
     w = torch.randn(C, dtype=torch.float16, device="cuda")
     b = torch.randn(C, dtype=torch.float16, device="cuda")
     compiled = torch.compile(gn_silu_reference)
+    us = lambda fn: _timed(fn, x, w, b, G, eps) * 1e3   # ms -> us
+    return {
+        "eager":   us(gn_silu_reference),
+        "compile": us(compiled),
+        "cuTile":  us(launch_reference_config_kernel),   # 2-kernel reference
+        "split":   us(launch_split_config_kernel),       # split-reduction
+        "single":  us(launch_single_pass_kernel),        # single-pass
+        "ws":      2 * B * C * H * W * 2 / 2**20,         # x + out, MiB
+    }
 
-    t_e = _timed(gn_silu_reference,              x, w, b, G, eps)
-    t_c = _timed(compiled,                       x, w, b, G, eps)
-    t_f = _timed(launch_reference_config_kernel, x, w, b, G, eps)
-    t_s = _timed(launch_split_config_kernel,     x, w, b, G, eps)
 
-    ws = 2 * B * C * H * W * 2 / 2**20   # x+out working set in MiB
-    print(f"B={B:3d} {C}x{H}x{W}  ws={ws:6.0f}MiB | "
-          f"eager {t_e*1e3:7.1f}  compile {t_c*1e3:7.1f}  "
-          f"cuTile {t_f*1e3:7.1f}  split {t_s*1e3:7.1f} us "
-          f"| cuTile/compile {t_c/t_f:.2f}x  split/cuTile {t_f/t_s:.2f}x")
+def bench_table(configs, title):
+    """Aligned table: eager | compile | all 3 cuTile kernels (us) + ratios + gate, per (B, C, H, W)."""
+    hdr = (f"{'batch':>5} {'shape':>11} {'WS/MiB':>7} {'eager':>7} {'compile':>8} "
+           f"{'cuTile':>7} {'split':>7} {'single':>7} {'cuT/cmp':>8} {'sgl/cmp':>8} {'gate':>7}")
+    print(f"\n=== {title} ===")
+    print(hdr)
+    print("-" * len(hdr))
+    for B, C, H, W in configs:
+        r = _bench_shape(B, C, H, W)
+        gate = "fuse" if r["cuTile"] < r["eager"] else "eager"   # profitable = beats eager
+        print(f"{B:>5} {f'{C}x{H}x{W}':>11} {r['ws']:>7.0f} {r['eager']:>7.1f} {r['compile']:>8.1f} "
+              f"{r['cuTile']:>7.1f} {r['split']:>7.1f} {r['single']:>7.1f} "
+              f"{r['compile']/r['cuTile']:>7.2f}x {r['compile']/r['single']:>7.2f}x {gate:>7}")
 
 
 def main():
@@ -98,43 +113,47 @@ def main():
     # torch.compile baseline
     gn_silu_compiled = torch.compile(gn_silu_reference)
 
-    t_eager       = _timed(gn_silu_reference,              x, w, b, ng, eps)
-    t_compiled    = _timed(gn_silu_compiled,               x, w, b, ng, eps)
-    t_fused       = _timed(launch_reference_config_kernel, x, w, b, ng, eps)
-    t_fused_split = _timed(launch_split_config_kernel,     x, w, b, ng, eps)
+    t_eager        = _timed(gn_silu_reference,              x, w, b, ng, eps)
+    t_compiled     = _timed(gn_silu_compiled,               x, w, b, ng, eps)
+    t_fused        = _timed(launch_reference_config_kernel, x, w, b, ng, eps)
+    t_fused_split  = _timed(launch_split_config_kernel,     x, w, b, ng, eps)
+    t_fused_single = _timed(launch_single_pass_kernel,      x, w, b, ng, eps)
 
     header = (f"{'Variant':<22} {'Median (ms)':>12} {'vs eager':>10} "
               f"{'vs compile':>12} {'vs fused':>10}")
     print(header)
     print("-" * len(header))
-    for label, t in (("Unfused (eager)",      t_eager),
-                     ("torch.compile",        t_compiled),
-                     ("Fused (cuTile)",       t_fused),
-                     ("Fused Split (cuTile)", t_fused_split)):
+    for label, t in (("Unfused (eager)",       t_eager),
+                     ("torch.compile",         t_compiled),
+                     ("Fused (cuTile)",        t_fused),
+                     ("Fused Split (cuTile)",  t_fused_split),
+                     ("Fused Single (cuTile)", t_fused_single)):
         vs_eager   = t_eager    / t if t > 0 else float("inf")
         vs_compile = t_compiled / t if t > 0 else float("inf")
         vs_fused   = t_fused    / t if t > 0 else float("inf")
         print(f"{label:<22} {t:>12.4f} {vs_eager:>9.2f}x {vs_compile:>11.2f}x {vs_fused:>9.2f}x")
     print("-" * len(header))
     
-    # for B in (1, 2, 4, 8, 16, 32, 64):
-    #     x = torch.randn(B, 320, 64, 64, dtype=torch.float16, device="cuda")
-    #     w = torch.randn(320, dtype=torch.float16, device="cuda")
-    #     b = torch.randn(320, dtype=torch.float16, device="cuda")
-    #     t = _timed(launch_reference_config_kernel, x, w, b, 32, 1e-5)   # batched _timed
-    #     print(f"B={B:3d}  {t*1e3:7.2f} us/call  {t/B*1e3:6.2f} us/image")
+    print("-" * len(header))
+    for B in (1, 2, 4, 8, 16, 32, 64):
+        x = torch.randn(B, 320, 64, 64, dtype=torch.float16, device="cuda")
+        w = torch.randn(320, dtype=torch.float16, device="cuda")
+        b = torch.randn(320, dtype=torch.float16, device="cuda")
+        t = _timed(launch_reference_config_kernel, x, w, b, 32, 1e-5)   # batched _timed
+        print(f"B={B:3d}  {t*1e3:7.2f} us/call  {t/B*1e3:6.2f} us/image")
+    print("-" * len(header))
     
-    # Compare Eager vs cuTile vs torch.compile to decide which values to take
-    print("\n--- real U-Net GroupNorm shapes ---")
-    for C, H, W in ((1280, 8, 8), (320, 64, 64), (640, 32, 32), (1280, 16, 16),
-                    (2560, 8, 8), (640, 64, 64), (2560, 16, 16), (320, 32, 32),
-                    (640, 16, 16), (960, 32, 32), (960, 64, 64), (1280, 32, 32),
-                    (1920, 16, 16), (1920, 32, 32)):
-        bench_shape(1, C, H, W)
-    
-    # For larger shapes (crossing the 24 MiB L2 boundary into DRAM)
-    for B in (1, 8, 32, 64, 128):
-        bench_shape(B, 320, 64, 64)
+    # Real U-Net GroupNorm shapes at batch 1 (sorted by spatial size H*W, matches the report table)
+    real_shapes = [(320, 64, 64), (640, 64, 64), (960, 64, 64),
+                   (320, 32, 32), (640, 32, 32), (960, 32, 32), (1280, 32, 32), (1920, 32, 32),
+                   (640, 16, 16), (1280, 16, 16), (1920, 16, 16), (2560, 16, 16),
+                   (1280, 8, 8), (2560, 8, 8)]
+    bench_table([(1, C, H, W) for (C, H, W) in real_shapes],
+                "Real U-Net GroupNorm shapes (batch 1)")
+
+    # Batch sweep on 320x64x64 (crossing the 24 MiB L2 boundary into DRAM)
+    bench_table([(B, 320, 64, 64) for B in (1, 8, 32, 64, 128)],
+                "Batch sweep - 320x64x64")
 
 
 if __name__ == "__main__":
