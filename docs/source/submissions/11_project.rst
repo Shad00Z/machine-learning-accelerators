@@ -30,13 +30,11 @@ Milestones
 
 To follow a clear plan for these three weeks we came up with five milestones.
 
-0. Inspect SD-Turbo model in regards to memory requirements and realization on the DGX Spark GPU (Roofline model).
-1. Reason about fusing candidates (layers) and tiling approaches.
-2. Implement fusion kernel for two candidates (+ verify correctness via ``torch.allclose`` per block and benchmark).
-3. Include the optimized kernel into the SD-Turbo model (+ verify end-to-end image equivalence).
-4. Optimize the first candidate.
-5. Repeat for the next candidate (Step 2).
-6. Create CLI, Gradio UI to use the optimized model on the DGX Spark.
+0. Set up the environment and install required dependencies.
+1. Inspect SD-Turbo model, identify fusion candidates, reason about tiling approaches, and build a roofline model.
+2. Implement and optimize fused GroupNorm + SiLU kernel (+ verify correctness via ``torch.allclose`` per block and benchmark).
+3. Implement and optimize fused LayerNorm + GEGLU FFN kernel (+ verify correctness via ``torch.allclose`` per block and benchmark).
+4. Patch both kernels into SD-Turbo and verify end-to-end image equivalence.
 
 In regards to benchmarking we plan to:
 
@@ -348,7 +346,7 @@ whole-model effect is within noise (GroupNorm is a small fraction of the step), 
 per-shape correctness, not an end-to-end number.
 
 
-Milestone 5: Fused LayerNorm + GEGLU FFN
+Milestone 3: Fused LayerNorm + GEGLU FFN
 ----------------------------------------
 
 The second candidate is the transformer feed-forward block
@@ -595,8 +593,8 @@ competitive on the compute-bound shapes, so the end-to-end result still does not
 paying for a kernel that loses.
 
 
-End-to-end: does fusion beat the baseline?
-------------------------------------------
+Milestone 4: End-to-end Evaluation
+----------------------------------
 
 Patching each fused kernel into the full SD-Turbo U-Net and timing one generation gives the
 whole-model picture. Both patches were first verified to be image-equivalent to the baseline (the
