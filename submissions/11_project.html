@@ -73,10 +73,23 @@
 <li class="toctree-l4"><a class="reference internal" href="#occupancy-is-not-the-bottleneck">Occupancy is not the bottleneck</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#batch-scaling-the-l2-boundary">Batch scaling: the L2 boundary</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#cutile-vs-torch-compile-across-batch-sizes">cuTile vs. torch.compile across batch sizes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#real-shape-coverage-and-a-profitability-gate">Real-shape coverage and a profitability gate</a></li>
 </ul>
 </li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#milestone-5-fused-layernorm-geglu-ffn">Milestone 5: Fused LayerNorm + GEGLU FFN</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#fusion-headroom-gpu-verified">Fusion headroom (GPU-verified)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kernel-and-correctness">Kernel and correctness</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#result-fusion-does-not-beat-cublas-here">Result: fusion does not beat cuBLAS here</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#profiling-occupancy-bound-ncu">Profiling: occupancy-bound (NCU)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#per-shape-tile-selection">Per-shape tile selection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#profitability-gate-only-fuse-where-it-wins">Profitability gate: only fuse where it wins</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#end-to-end-does-fusion-beat-the-baseline">End-to-end: does fusion beat the baseline?</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="#test-execution">Test Execution</a></li>
@@ -483,13 +496,340 @@ which <code class="docutils literal notranslate"><span class="pre">torch.compile
 <code class="docutils literal notranslate"><span class="pre">GroupNorm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> candidate: there is no kernel-level headroom left, so the remaining gains must come
 from graph-level launch amortization (CUDA graphs) and from the compute-bound transformer FFN candidate.</p>
 </section>
+<section id="real-shape-coverage-and-a-profitability-gate">
+<h4>Real-shape coverage and a profitability gate<a class="headerlink" href="#real-shape-coverage-and-a-profitability-gate" title="Link to this heading"></a></h4>
+<p>Extending the batch-1 comparison to all 14 real U-Net GroupNorm shapes confirms the launch-overhead
+picture: default-mode <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> sits at a ~27 us dispatch floor <em>regardless of shape</em>, so the
+fused kernel – whose latency tracks the actual work – beats it on 11 of 14 shapes (1.1 - 2.9x). But it
+loses to plain <strong>eager</strong> on 5 high-channel, tiny-spatial shapes (<code class="docutils literal notranslate"><span class="pre">C</span> <span class="pre">&gt;=</span> <span class="pre">1280,</span> <span class="pre">H</span> <span class="pre">&lt;=</span> <span class="pre">16</span></code>), where too few
+elements per group leave the two-pass kernel underutilized. A <code class="docutils literal notranslate"><span class="pre">_PROFITABLE_GN_SHAPES</span></code> gate (mirroring
+the FFN one) therefore fuses only the 9 beat-eager shapes and defers the rest, making the ResNet patch a
+non-regression vs eager. Two honest caveats: these batch-1 wins are the launch-overhead advantage that
+<code class="docutils literal notranslate"><span class="pre">mode=&quot;reduce-overhead&quot;</span></code> (CUDA graphs) would remove – not kernel-efficiency gains – and the gate’s
+whole-model effect is within noise (GroupNorm is a small fraction of the step), so its justification is
+per-shape correctness, not an end-to-end number.</p>
 </section>
+</section>
+</section>
+<section id="milestone-5-fused-layernorm-geglu-ffn">
+<h2>Milestone 5: Fused LayerNorm + GEGLU FFN<a class="headerlink" href="#milestone-5-fused-layernorm-geglu-ffn" title="Link to this heading"></a></h2>
+<p>The second candidate is the transformer feed-forward block
+<code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">-&gt;</span> <span class="pre">mm1</span> <span class="pre">(dim</span> <span class="pre">-&gt;</span> <span class="pre">8*dim)</span> <span class="pre">-&gt;</span> <span class="pre">GEGLU</span> <span class="pre">-&gt;</span> <span class="pre">mm2</span> <span class="pre">(4*dim</span> <span class="pre">-&gt;</span> <span class="pre">dim)</span></code>. A shape survey over the 16
+transformer blocks finds four distinct <code class="docutils literal notranslate"><span class="pre">(tokens,</span> <span class="pre">dim)</span></code> shapes: <code class="docutils literal notranslate"><span class="pre">4096x320</span></code>, <code class="docutils literal notranslate"><span class="pre">1024x640</span></code>,
+<code class="docutils literal notranslate"><span class="pre">256x1280</span></code> and <code class="docutils literal notranslate"><span class="pre">64x1280</span></code>. Unlike <code class="docutils literal notranslate"><span class="pre">GroupNorm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> this candidate is compute-bound
+(~150 GFLOP per denoising step across the FFNs), so the goal is to hide the LayerNorm and GEGLU
+memory passes inside the matmuls rather than to save bandwidth on an elementwise chain.</p>
+<section id="fusion-headroom-gpu-verified">
+<h3>Fusion headroom (GPU-verified)<a class="headerlink" href="#fusion-headroom-gpu-verified" title="Link to this heading"></a></h3>
+<p>Compiling the block with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> on the Spark and inspecting the generated Triton code
+confirms the Milestone 1 hypothesis on GPU: Inductor emits LayerNorm and the GEGLU gate as
+separate Triton kernels around two external cuBLAS matmuls.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">triton_per_fused_native_layer_norm_0</span>             <span class="c1"># LayerNorm  (own kernel)</span>
+<span class="n">extern_kernels</span><span class="o">.</span><span class="n">addmm</span><span class="p">(</span> <span class="p">(</span><span class="mi">4096</span><span class="p">,</span><span class="mi">320</span><span class="p">)</span> <span class="o">@</span> <span class="p">(</span><span class="mi">320</span><span class="p">,</span><span class="mi">2560</span><span class="p">)</span> <span class="p">)</span>  <span class="c1"># mm1        (cuBLAS)</span>
+<span class="n">triton_poi_fused_gelu_mul_split_view_1</span>           <span class="c1"># GEGLU gate (own kernel)</span>
+<span class="n">extern_kernels</span><span class="o">.</span><span class="n">addmm</span><span class="p">(</span> <span class="p">(</span><span class="mi">4096</span><span class="p">,</span><span class="mi">1280</span><span class="p">)</span> <span class="o">@</span> <span class="p">(</span><span class="mi">1280</span><span class="p">,</span><span class="mi">320</span><span class="p">)</span> <span class="p">)</span> <span class="c1"># mm2        (cuBLAS)</span>
+</pre></div>
+</div>
+<p>Because the matmuls run in cuBLAS, Inductor cannot fold the norm or activation into them, so the
+<code class="docutils literal notranslate"><span class="pre">mm1</span></code> output (the proj) is materialized to DRAM and read back by the gate kernel. GEGLU projects to
+twice the feed-forward inner dimension, so at the top shape the proj is <code class="docutils literal notranslate"><span class="pre">[tokens,</span> <span class="pre">2*inner]</span></code> wide:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">inner</span>      <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">dim</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">320</span> <span class="o">=</span> <span class="mi">1280</span>        <span class="p">(</span><span class="n">feed</span><span class="o">-</span><span class="n">forward</span> <span class="n">expansion</span><span class="p">,</span> <span class="n">mult</span> <span class="o">=</span> <span class="mi">4</span><span class="p">)</span>
+<span class="n">proj</span> <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span><span class="n">tokens</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">inner</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">2560</span><span class="p">]</span>     <span class="p">(</span><span class="n">GEGLU</span> <span class="o">-&gt;</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">inner</span><span class="p">)</span>
+<span class="n">proj</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="mi">4096</span> <span class="o">*</span> <span class="mi">2560</span> <span class="o">*</span> <span class="mi">2</span> <span class="p">(</span><span class="n">fp16</span><span class="p">)</span>  <span class="o">=</span> <span class="mi">20</span><span class="p">,</span><span class="mi">971</span><span class="p">,</span><span class="mi">520</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="mi">20</span> <span class="n">MiB</span>
+<span class="nb">round</span><span class="o">-</span><span class="n">trip</span> <span class="o">=</span> <span class="n">write</span> <span class="o">+</span> <span class="n">read</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">20</span> <span class="n">MiB</span> <span class="o">=</span> <span class="mi">40</span> <span class="n">MiB</span> <span class="n">per</span> <span class="n">FFN</span> <span class="n">call</span>
+</pre></div>
+</div>
+<p>Folding the LayerNorm into <code class="docutils literal notranslate"><span class="pre">mm1</span></code>’s prologue and the GEGLU into its epilogue keeps the proj in
+registers, avoiding that ~40 MiB round-trip entirely – headroom cuTile can capture and
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> cannot.</p>
+</section>
+<section id="kernel-and-correctness">
+<h3>Kernel and correctness<a class="headerlink" href="#kernel-and-correctness" title="Link to this heading"></a></h3>
+<p>The fused kernel is two cuTile kernels: <strong>Kernel A</strong> (LayerNorm prologue -&gt; <code class="docutils literal notranslate"><span class="pre">mm1</span></code> -&gt; GEGLU
+epilogue) producing the gated <code class="docutils literal notranslate"><span class="pre">[tokens,</span> <span class="pre">4*dim]</span></code> without ever materializing the <code class="docutils literal notranslate"><span class="pre">8*dim</span></code> proj,
+and <strong>Kernel B</strong> (<code class="docutils literal notranslate"><span class="pre">mm2</span></code>). Both use the <code class="docutils literal notranslate"><span class="pre">ct.mma</span></code> tile contraction with tile-unit load indexing.
+The kernel matches the captured block output within an fp16 tolerance (GELU uses the tanh
+approximation, since cuTile has no <code class="docutils literal notranslate"><span class="pre">erf</span></code>).</p>
+</section>
+<section id="result-fusion-does-not-beat-cublas-here">
+<h3>Result: fusion does not beat cuBLAS here<a class="headerlink" href="#result-fusion-does-not-beat-cublas-here" title="Link to this heading"></a></h3>
+<p>Benchmarked against the eager block and <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>:</p>
+<table class="docutils align-default" id="id7">
+<caption><span class="caption-text">FFN latency (us): eager / torch.compile / cuTile fused</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>tokens x dim</p></th>
+<th class="head"><p>eager</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></th>
+<th class="head"><p>cuTile</p></th>
+<th class="head"><p>cuTile vs compile</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>4096 x 320</p></td>
+<td><p>397</p></td>
+<td><p>331</p></td>
+<td><p>352</p></td>
+<td><p>0.94x</p></td>
+</tr>
+<tr class="row-odd"><td><p>1024 x 640</p></td>
+<td><p>235</p></td>
+<td><p>181</p></td>
+<td><p>429</p></td>
+<td><p>0.42x</p></td>
+</tr>
+<tr class="row-even"><td><p>256 x 1280</p></td>
+<td><p>223</p></td>
+<td><p>264</p></td>
+<td><p>1072</p></td>
+<td><p>0.25x</p></td>
+</tr>
+</tbody>
+</table>
+<p>The fused cuTile kernel is slower than <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>, and increasingly so at the smaller-token,
+higher-dim shapes. The cause is matmul utilization: a tile-size sweep tops out at <strong>31.7 TFLOPS</strong>
+(tile <code class="docutils literal notranslate"><span class="pre">128x64x64</span></code>), only ~32 % of the ~100 TFLOP/s FP16 tensor ceiling, whereas <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>
+dispatches the matmuls to cuBLAS, which runs far closer to peak. On a compute-bound operation a
+matmul that is ~3x slower than cuBLAS cannot be recovered by removing the memory passes, even though
+those passes are real (at 4096 x 320, where the proj round-trip is comparable to the matmul time,
+cuTile does reach a near-tie at 0.94x).</p>
+<p>This is the intended contrast with Milestone 2 and confirms the Milestone 1 roofline reasoning:</p>
+<ul class="simple">
+<li><p><strong>Memory-bound (GroupNorm + SiLU):</strong> cuTile <em>ties</em> <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> – fusion captures the win
+because there is no cuBLAS matmul to beat.</p></li>
+<li><p><strong>Compute-bound (LayerNorm + GEGLU):</strong> cuTile <em>loses</em> – the matmul dominates and a hand-written
+tile GEMM does not reach cuBLAS-level utilization, so the fusion saving is given back.</p></li>
+</ul>
+<p>The tile-throughput heatmaps (one per <code class="docutils literal notranslate"><span class="pre">k_tile</span></code>) show throughput rising with tile size up to a
+sweet spot around <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span> <span class="pre">x</span> <span class="pre">64</span></code> (31.7 TFLOPS at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>), then <em>collapsing</em> for the
+largest tiles – the signature of register spilling.</p>
+<section id="profiling-occupancy-bound-ncu">
+<h4>Profiling: occupancy-bound (NCU)<a class="headerlink" href="#profiling-occupancy-bound-ncu" title="Link to this heading"></a></h4>
+<p>Nsight Compute pins the cause. <em>Occupancy</em> is the fraction of an SM’s maximum warps that are actually
+resident; the GPU hides memory latency by switching among resident warps, so when one warp stalls on
+a load another can run. High occupancy therefore requires many warps per SM, but each SM has a fixed
+register file that all its threads share – so a high register count per thread caps how many warps
+fit. Both fused kernels compile to <strong>255 registers per thread</strong> (the hardware maximum), which pins
+occupancy at ~12 %:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">register</span> <span class="n">file</span> <span class="n">per</span> <span class="n">SM</span>  <span class="o">=</span> <span class="mi">65</span><span class="p">,</span><span class="mi">536</span> <span class="n">registers</span> <span class="p">(</span><span class="mi">256</span> <span class="n">KB</span><span class="p">)</span>
+<span class="n">registers</span> <span class="n">per</span> <span class="n">thread</span>  <span class="o">=</span> <span class="mi">255</span>                       <span class="p">(</span><span class="n">the</span> <span class="n">hardware</span> <span class="n">maximum</span><span class="p">)</span>
+<span class="n">resident</span> <span class="n">threads</span>      <span class="o">=</span> <span class="mi">65</span><span class="p">,</span><span class="mi">536</span> <span class="o">/</span> <span class="mi">255</span> <span class="o">~=</span> <span class="mi">257</span> <span class="n">threads</span> <span class="o">=</span> <span class="mi">8</span> <span class="n">warps</span>
+<span class="n">occupancy</span>             <span class="o">=</span> <span class="mi">8</span> <span class="o">/</span> <span class="mi">64</span> <span class="nb">max</span> <span class="n">warps</span> <span class="o">~=</span> <span class="mf">12.5</span> <span class="o">%</span>   <span class="p">(</span><span class="n">NCU</span> <span class="n">measured</span><span class="p">:</span> <span class="mf">11.9</span> <span class="o">%</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>With only ~8 resident warps there is nothing to hide memory latency, so neither the compute
+(~19 - 24 %) nor the memory (~33 - 40 %) pipe approaches saturation: the kernels are <em>occupancy-bound</em>,
+not compute- or memory-bound. The register pressure is inherent to the design – the GEGLU keeps <strong>two live accumulators</strong> (hidden and gate)
+across the entire reduction, doubling a plain GEMM’s footprint – and cuTile exposes no
+register/shared-memory blocking control, so the kernel cannot reach the occupancy cuBLAS sustains via
+shared-memory staging and warp specialization. This is the concrete reason a hand-written tile GEMM
+does not match cuBLAS on the compute-bound path.</p>
+<p>We tested the obvious fix – a register-reduced variant that splits the GEGLU into two
+single-accumulator kernels (materializing the hidden half between them). It ran <strong>slower</strong>, not
+faster (521 vs 351 us at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>): splitting sacrifices the fused kernel’s reuse of the
+normalized A operand (the LayerNorm and normalization are recomputed for both halves) and adds a
+10 MiB buffer round-trip, which outweighs the occupancy gained. The fully-fused two-accumulator
+kernel therefore remains the best cuTile variant – the register pressure is the price of A-operand
+reuse and is worth paying. The ~32 % ceiling is intrinsic to a hand-written tile GEMM in cuTile and
+is recovered by neither zero-padded larger tiles nor register-splitting.</p>
+<p>An <strong>L2 block swizzle</strong> (grouping <code class="docutils literal notranslate"><span class="pre">GROUP_M</span></code> row-tiles so concurrent blocks reuse the weight columns
+from L2) gave a modest, shape-dependent gain – largest (~15 %) at the weight-heavy <code class="docutils literal notranslate"><span class="pre">256</span> <span class="pre">x</span> <span class="pre">1280</span></code>
+shape where L2 pressure is highest, and negligible at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> where the weights are already
+L2-resident. It brings <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> to a <strong>near-tie with torch.compile</strong> (0.96x at a fixed <code class="docutils literal notranslate"><span class="pre">64x64x64</span></code>
+tile; <strong>1.05x once the tile is tuned per shape</strong> – see below), but does not touch
+the occupancy bound; reaching parity across all shapes would require shared-memory blocking, which
+cuTile does not straightforwardly expose alongside the fused epilogue. Notably, <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> – the
+top-resolution shape where the fusion’s avoided proj round-trip is largest – is exactly where the
+fused kernel is competitive, consistent with the memory-vs-compute-bound framing throughout.</p>
+</section>
+<section id="per-shape-tile-selection">
+<h4>Per-shape tile selection<a class="headerlink" href="#per-shape-tile-selection" title="Link to this heading"></a></h4>
+<p>A single fixed tile is not optimal, because the three FFN shapes have different aspect ratios. Re-running
+the <code class="docutils literal notranslate"><span class="pre">(tM,</span> <span class="pre">tN,</span> <span class="pre">tK)</span></code> sweep and taking the best tile <em>per shape</em> shows a clear pattern and a large win on
+the dominant shape:</p>
+<table class="docutils align-default" id="id8">
+<caption><span class="caption-text">Best swizzle tile per FFN shape (from the tile sweep)</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Shape (tokens x dim)</p></th>
+<th class="head"><p>Fixed <code class="docutils literal notranslate"><span class="pre">64x64x64</span></code></p></th>
+<th class="head"><p>Best tile</p></th>
+<th class="head"><p>Best latency</p></th>
+<th class="head"><p>Speedup</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>4096 x 320</p></td>
+<td><p>777 us</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span> <span class="pre">x</span> <span class="pre">64</span></code></p></td>
+<td><p>316 us</p></td>
+<td><p>2.46x</p></td>
+</tr>
+<tr class="row-odd"><td><p>1024 x 640</p></td>
+<td><p>436 us</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">64</span> <span class="pre">x</span> <span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span></code></p></td>
+<td><p>392 us</p></td>
+<td><p>1.11x</p></td>
+</tr>
+<tr class="row-even"><td><p>256 x 1280</p></td>
+<td><p>918 us</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">64</span> <span class="pre">x</span> <span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span></code></p></td>
+<td><p>911 us</p></td>
+<td><p>~1.0x</p></td>
+</tr>
+</tbody>
+</table>
+<p>The pattern is that the best tile tracks the problem’s aspect ratio: the <strong>tall</strong> shape (4096 rows) prefers
+a <strong>tall tile</strong> (<code class="docutils literal notranslate"><span class="pre">tM</span> <span class="pre">=</span> <span class="pre">128</span></code>), which amortizes each loaded weight column over more rows; the <strong>wide</strong>
+shapes (fewer rows, larger <code class="docutils literal notranslate"><span class="pre">dim</span></code>) prefer a <strong>wide tile</strong> (<code class="docutils literal notranslate"><span class="pre">tN</span> <span class="pre">=</span> <span class="pre">128</span></code>). <code class="docutils literal notranslate"><span class="pre">dim</span> <span class="pre">=</span> <span class="pre">320</span></code> is not divisible
+by 128, so <code class="docutils literal notranslate"><span class="pre">tN</span></code> cannot widen there – the sweep is forced onto <code class="docutils literal notranslate"><span class="pre">tM</span></code> and happens to land on the right
+lever. The <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> block is both the largest and the most frequent (the early transformer blocks),
+so its 2.46x kernel speedup dominates the FFN’s total time.</p>
+<p><strong>Approach.</strong> Rather than hard-code one tile, the launchers auto-select via <code class="docutils literal notranslate"><span class="pre">best_ffn_tile(dim,</span> <span class="pre">tokens,</span>
+<span class="pre">inner)</span></code> (in <code class="docutils literal notranslate"><span class="pre">ffn_kernel.py</span></code>): a per-<code class="docutils literal notranslate"><span class="pre">dim</span></code> lookup of the tuned tile, guarded by a divisibility check
+(<code class="docutils literal notranslate"><span class="pre">tM</span></code> must divide the row count; <code class="docutils literal notranslate"><span class="pre">tN</span></code> must divide both <code class="docutils literal notranslate"><span class="pre">inner</span></code> and <code class="docutils literal notranslate"><span class="pre">dim</span></code>) that falls back to
+<code class="docutils literal notranslate"><span class="pre">64x64x64</span></code> for any shape not in the table, so a mismatched shape can never pick a padding-only tile.
+Both the plain and swizzled launchers default to it, and an explicit tile still overrides for
+benchmarking. The <code class="docutils literal notranslate"><span class="pre">FusedFFN</span></code> model patch uses the <strong>swizzled</strong> launcher (the fastest variant on the
+two larger shapes – the plain kernel is ~2.4x slower at <code class="docutils literal notranslate"><span class="pre">1024</span> <span class="pre">x</span> <span class="pre">640</span></code>).</p>
+<p>Wiring this in and re-running <code class="docutils literal notranslate"><span class="pre">bench_compare</span></code> (each variant now at its tuned tile) confirms it end to
+end, and shows the swizzle is the best cuTile variant on the two larger shapes:</p>
+<table class="docutils align-default" id="id9">
+<caption><span class="caption-text">FFN latency with tuned tiles (us; ratio = x vs torch.compile)</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Shape (tokens x dim)</p></th>
+<th class="head"><p>eager</p></th>
+<th class="head"><p>torch.compile</p></th>
+<th class="head"><p>fused</p></th>
+<th class="head"><p>swizzle</p></th>
+<th class="head"><p>split</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>4096 x 320</p></td>
+<td><p>399</p></td>
+<td><p>330</p></td>
+<td><p>351 (0.94x)</p></td>
+<td><p><strong>314 (1.05x)</strong></p></td>
+<td><p>684 (0.48x)</p></td>
+</tr>
+<tr class="row-odd"><td><p>1024 x 640</p></td>
+<td><p>238</p></td>
+<td><p>357</p></td>
+<td><p>954 (0.37x)</p></td>
+<td><p><strong>394 (0.91x)</strong></p></td>
+<td><p>553 (0.65x)</p></td>
+</tr>
+<tr class="row-even"><td><p>256 x 1280</p></td>
+<td><p>230</p></td>
+<td><p>263</p></td>
+<td><p>1950 (0.13x)</p></td>
+<td><p>1332 (0.20x)</p></td>
+<td><p><strong>1090 (0.24x)</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p>The headline is <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>: the tuned swizzle reaches <strong>1.05x vs torch.compile</strong> – the first (and
+only) cuTile variant to cross parity, on the top-resolution, most-frequent shape, exactly where the
+avoided proj round-trip is largest. At <code class="docutils literal notranslate"><span class="pre">1024</span> <span class="pre">x</span> <span class="pre">640</span></code> the swizzle (0.91x) is the strongest variant but
+still short of cuBLAS; at <code class="docutils literal notranslate"><span class="pre">256</span> <span class="pre">x</span> <span class="pre">1280</span></code> every variant loses badly (~0.2x), and there the single-accumulator
+<code class="docutils literal notranslate"><span class="pre">split</span></code> marginally leads the cuTile field – the weight-heavy, few-token regime where occupancy hurts most.</p>
+<p>This is a free win – a launch-parameter change, no kernel rewrite – but it does <strong>not</strong> overturn the
+conclusion: even the tuned <code class="docutils literal notranslate"><span class="pre">31.9</span> <span class="pre">TFLOPS</span></code> is still only ~32 % of the FP16 tensor ceiling, so the
+occupancy bound and the loss to cuBLAS on the compute-bound path stand across the shape mix. It narrows
+the gap – to a genuine win at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> – but does not close it overall.</p>
+</section>
+<section id="profitability-gate-only-fuse-where-it-wins">
+<h4>Profitability gate: only fuse where it wins<a class="headerlink" href="#profitability-gate-only-fuse-where-it-wins" title="Link to this heading"></a></h4>
+<p>The table above also shows the fused kernel is <em>worse than plain eager</em> on the two larger shapes – at
+<code class="docutils literal notranslate"><span class="pre">1024</span> <span class="pre">x</span> <span class="pre">640</span></code> eager is 238 us vs the swizzle’s 394, and at <code class="docutils literal notranslate"><span class="pre">256</span> <span class="pre">x</span> <span class="pre">1280</span></code> eager (230) even beats
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> (263). Running the kernel there is strictly self-harm. The <code class="docutils literal notranslate"><span class="pre">FusedFFN</span></code> patch therefore
+gates on <strong>profitability</strong>, not just correctness: a <code class="docutils literal notranslate"><span class="pre">_PROFITABLE_DIMS</span></code> allow-list (currently
+<code class="docutils literal notranslate"><span class="pre">{320}</span></code>) fuses only the shape that beats eager and falls back to the original <code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">+</span> <span class="pre">FeedForward</span></code>
+everywhere else. This makes the patch a <strong>strict non-regression vs eager</strong> – it wins the <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>
+blocks and matches eager on the rest – rather than a kernel that helps one shape and hurts two.</p>
+<p>This is the roofline thesis expressed as a dispatch rule: <em>fuse where the shape leans memory-bound
+(``dim = 320``, where the avoided proj round-trip pays for the slower GEMM), defer to cuBLAS/eager where
+it is compute-bound.</em> It is damage-avoidance, not a new win: the gate cannot make the hand kernel
+competitive on the compute-bound shapes, so the end-to-end result still does not beat <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>
+(which fuses the whole graph and captures it into CUDA graphs) – it only stops the fused path from
+paying for a kernel that loses.</p>
+</section>
+</section>
+</section>
+<section id="end-to-end-does-fusion-beat-the-baseline">
+<h2>End-to-end: does fusion beat the baseline?<a class="headerlink" href="#end-to-end-does-fusion-beat-the-baseline" title="Link to this heading"></a></h2>
+<p>Patching each fused kernel into the full SD-Turbo U-Net and timing one generation gives the
+whole-model picture. Both patches were first verified to be image-equivalent to the baseline (the
+FFN’s tanh-GELU approximation gives a slightly larger but still visually identical difference).</p>
+<table class="docutils align-default" id="id10">
+<caption><span class="caption-text">End-to-end latency, 1-step generation</span><a class="headerlink" href="#id10" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Variant</p></th>
+<th class="head"><p>Median (ms)</p></th>
+<th class="head"><p>vs baseline</p></th>
+<th class="head"><p>vs torch.compile</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Baseline (eager)</p></td>
+<td><p>42.58</p></td>
+<td><p>1.00x</p></td>
+<td><p>0.93x</p></td>
+</tr>
+<tr class="row-odd"><td><p>Fused ResNet (GN + SiLU)</p></td>
+<td><p>41.99</p></td>
+<td><p>1.01x</p></td>
+<td><p>0.94x</p></td>
+</tr>
+<tr class="row-even"><td><p>Fused FFN (LN + GEGLU)</p></td>
+<td><p>41.80</p></td>
+<td><p>1.02x</p></td>
+<td><p>0.95x</p></td>
+</tr>
+<tr class="row-odd"><td><p>Fused Both</p></td>
+<td><p>41.86</p></td>
+<td><p>1.02x</p></td>
+<td><p>0.95x</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></td>
+<td><p>39.62</p></td>
+<td><p>1.07x</p></td>
+<td><p>1.00x</p></td>
+</tr>
+</tbody>
+</table>
+<p>With the profitability gates active (fuse GN only on the beat-eager shapes, FFN only on <code class="docutils literal notranslate"><span class="pre">dim</span> <span class="pre">=</span> <span class="pre">320</span></code>),
+every fused variant lands within ~1 - 2 % of the eager baseline – a statistical <strong>tie</strong>, i.e. a
+non-regression. The gates are doing exactly their job: <em>without</em> them the fused FFN regresses to <strong>0.89x</strong>
+(adding ~5 ms by running the losing compute-bound shapes), and the gate removes precisely that.</p>
+<p>The 1 - 2 % spread is within run-to-run noise, so the per-kernel wins measured in isolation (GN beating
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> by 1.2 - 2x on the real batch-1 shapes; the FFN swizzle at 1.04x on <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>) do
+<strong>not</strong> surface end to end. The reason is Amdahl: GroupNorm and the FFN are a small fraction of the ~42 ms
+step – convolutions, attention, and the VAE dominate – so even a 2x kernel moves the whole-model number
+by ~1 %, below the noise floor. End-to-end is the wrong instrument to resolve these kernels; the per-kernel
+benchmarks are where their effect is visible and outside noise.</p>
+<p>The decisive point is <em>why</em>, in isolation, GN can beat the baseline and the FFN cannot. <strong>The eager
+baseline is not naive:</strong> it already dispatches matmuls and convolutions to cuBLAS / cuDNN, and is only
+inefficient about the small memory-bound glue (norms, activations), which it runs as separate kernels.</p>
+<ul class="simple">
+<li><p><strong>GroupNorm + SiLU is memory-bound</strong> – the baseline runs it as ~4 scattered kernels with no cuBLAS
+involved, so fusing them into 2 kernels beats/ties the baseline.</p></li>
+<li><p><strong>The FFN is compute-bound</strong> – the baseline runs its matmuls on cuBLAS, so beating it requires
+replacing cuBLAS with our own matmul (~32 % of peak). Fusing away the memory passes cannot offset a
+matmul 2 - 4x slower, so on the compute-bound shapes the fused FFN is <em>slower</em> – which is why the gate
+defers them to eager rather than regressing.</p></li>
+</ul>
+<p>In one sentence: <strong>fusion beats the eager baseline only where the baseline is inefficient (memory-bound
+ops); for a compute-bound op the baseline already uses cuBLAS, so “beating the baseline” means “beating
+cuBLAS”, which a hand-written tile kernel does not.</strong> The only <strong>robust</strong> end-to-end winner is
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> (1.07x), which pairs cuBLAS/cuDNN with CUDA graphs (<code class="docutils literal notranslate"><span class="pre">mode=&quot;reduce-overhead&quot;</span></code>) to
+remove the per-launch overhead the eager and patched pipelines still pay – a CUDA-graph capture of the
+fused pipeline is the natural next step to close that gap.</p>
 </section>
 </section>
 <section id="test-execution">
 <h1>Test Execution<a class="headerlink" href="#test-execution" title="Link to this heading"></a></h1>
-<div class="literal-block-wrapper docutils container" id="id7">
-<div class="code-block-caption"><span class="caption-text">Test Execution</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text">Test Execution</span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">PYTHONPATH</span><span class="o">=</span>src/diffusion:test/diffusion
 python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py<span class="w"> </span>-v
 </pre></div>
