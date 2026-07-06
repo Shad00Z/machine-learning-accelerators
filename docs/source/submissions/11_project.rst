@@ -28,13 +28,14 @@ That means we are optimizing the diffusion model in regards to memory bandwidth.
 Milestones
 ----------
 
-To follow a clear plan for these three weeks we came up with five milestones.
+To follow a clear plan for these three weeks we came up with six milestones.
 
 0. Set up the environment and install required dependencies.
 1. Inspect SD-Turbo model, identify fusion candidates, reason about tiling approaches, and build a roofline model.
 2. Implement and optimize fused GroupNorm + SiLU kernel (+ verify correctness via ``torch.allclose`` per block and benchmark).
 3. Implement and optimize fused LayerNorm + GEGLU FFN kernel (+ verify correctness via ``torch.allclose`` per block and benchmark).
 4. Patch both kernels into SD-Turbo and verify end-to-end image equivalence.
+5. Build a Gradio UI for running the optimized model on the DGX Spark.
 
 In regards to benchmarking we plan to:
 
@@ -657,6 +658,16 @@ cuBLAS", which a hand-written tile kernel does not.** The only **robust** end-to
 ``torch.compile`` (1.07x), which pairs cuBLAS/cuDNN with CUDA graphs (``mode="reduce-overhead"``) to
 remove the per-launch overhead the eager and patched pipelines still pay -- a CUDA-graph capture of the
 fused pipeline is the natural next step to close that gap.
+
+
+Milestone 5: Gradio UI
+----------------------
+
+A simple Gradio interface wraps the optimized pipeline, allowing interactive text-to-image
+generation with the fused kernels on the DGX Spark.
+
+.. image:: ../_static/gradio_ui.png
+   :alt: Gradio UI screenshot
 
 
 Test Execution
