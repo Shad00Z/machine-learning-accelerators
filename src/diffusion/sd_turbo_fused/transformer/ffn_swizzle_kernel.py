@@ -3,6 +3,7 @@ Swizzled variant of the fused FFN kernels (L2 block swizzle, GROUP_M=8).
 """
 import cuda.tile as ct
 import torch
+import torch.nn.functional as F
 
 from sd_turbo_fused.transformer.ffn_kernel import best_ffn_tile
 
@@ -97,14 +98,13 @@ def launch_ffn_swizzle(x, ln_weight, ln_bias, eps, w1, b1, w2, b2, tM=None, tN=N
     if tM is None or tN is None or tK is None:
         tM, tN, tK = best_ffn_tile(dim, M, inner)
     w1t = w1.t().contiguous()
-    w2t = w2.t().contiguous()
     gated = torch.empty((M, inner), dtype=x.dtype, device=x.device)
-    out2d = torch.empty((M, dim),   dtype=x.dtype, device=x.device)
     s = torch.cuda.current_stream()
 
     gridA = (((M + tM - 1) // tM) * ((inner + tN - 1) // tN), 1, 1)
     ct.launch(s, gridA, ffn_mm1_geglu_sw,
               (x2d, w1t, b1, ln_weight, ln_bias, gated, tM, tN, tK, float(eps)))
-    gridB = (((M + tM - 1) // tM) * ((dim + tN - 1) // tN), 1, 1)
-    ct.launch(s, gridB, ffn_mm2_sw, (gated, w2t, b2, out2d, tM, tN, tK))
+
+    # mm2: plain matmul
+    out2d = F.linear(gated, w2, b2)
     return out2d.reshape(B, T, dim)

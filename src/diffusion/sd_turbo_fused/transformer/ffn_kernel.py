@@ -1,5 +1,6 @@
 import cuda.tile as ct
 import torch
+import torch.nn.functional as F
 ConstInt = ct.Constant[int]
 
 DEFAULT_FFN_TILE = (64, 64, 64)
@@ -123,13 +124,8 @@ def launch_ffn_kernel(x, ln_weight, ln_bias, eps, w1, b1, w2, b2, tM=None, tN=No
     ct.launch(torch.cuda.current_stream(), gridA, ffn_mm1_geglu,
               (flatten_2d, w1_transpose, b1, ln_weight, ln_bias, gated, tM, tN, tK, float(eps)))
     
-    # Pass 2
-    w2_transpose = w2.t().contiguous()
-    out2d = torch.empty((M, dim),   dtype=x.dtype, device=x.device)
-
-    gridB = (((M + tM - 1) // tM) * ((dim + tN - 1) // tN), 1, 1)
-    ct.launch(torch.cuda.current_stream(), gridB, ffn_mm2, 
-              (gated, w2_transpose, b2, out2d, tM, tN, tK))
+    # Pass 2: plain matmul
+    out2d = F.linear(gated, w2, b2)
 
     return out2d.reshape(B, T, dim)
 

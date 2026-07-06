@@ -8,6 +8,7 @@ Similar approach as ffn_gemm_split_kernel, but splits mm1 into two halfes:
 """
 import cuda.tile as ct
 import torch
+import torch.nn.functional as F
 
 from sd_turbo_fused.transformer.ffn_kernel import ffn_mm2
 
@@ -98,10 +99,8 @@ def launch_ffn_split(x, ln_weight, ln_bias, eps, w1, b1, w2, b2, tM=64, tN=64, t
     inner = Nfull // 2
 
     w1t = w1.t().contiguous()
-    w2t = w2.t().contiguous()
     hidden = torch.empty((M, inner), dtype=x.dtype, device=x.device)
     gated  = torch.empty((M, inner), dtype=x.dtype, device=x.device)
-    out2d  = torch.empty((M, dim),   dtype=x.dtype, device=x.device)
     s = torch.cuda.current_stream()
 
     gridA = (((M + tM - 1) // tM) * ((inner + tN - 1) // tN), 1, 1)
@@ -110,6 +109,6 @@ def launch_ffn_split(x, ln_weight, ln_bias, eps, w1, b1, w2, b2, tM=64, tN=64, t
     ct.launch(s, gridA, ffn_gate_geglu,
               (x2d, w1t, b1, ln_weight, ln_bias, hidden, gated, tM, tN, tK, float(eps)))
 
-    gridB = (((M + tM - 1) // tM) * ((dim + tN - 1) // tN), 1, 1)
-    ct.launch(s, gridB, ffn_mm2, (gated, w2t, b2, out2d, tM, tN, tK))
+    # mm2: plain matmul
+    out2d = F.linear(gated, w2, b2)
     return out2d.reshape(B, T, dim)
