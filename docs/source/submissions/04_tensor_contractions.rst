@@ -134,26 +134,27 @@ d) cuTile Kernel: GEMM Dimensions ``xyzl``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In order for us to use the dimensions ``xyzl`` as GEMM dimensions, we switch back to the grid from :ref:`Task 1b) <task_1b>`.
-Further, we prepare the tensors ``A`` and ``B``. 
-
-For tensor ``A`` we perform a permutation to change the dimensionality to ``eabklxy -> eabkxly`` and then we reshape the tensor accordingly.
-On the other hand, tensor ``B`` can be directly reshaped. 
-
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
-    :language: py
-    :linenos:
-    :lines: 163-183
-    :caption: `Permute and reshape for A and B`
-
 We also switch back to the :ref:`block ID computation <1b_bid>` from Task 1b). 
-What changes is the way our kernel computes, as we combine the ``l`` and ``y`` dimension to ``ly``.
+
+Inside the kernel we load tiles that span the full ``l`` dimension at once (using ``tL`` as a compile-time constant tile size).
+For tensor ``A`` (shape ``eabklxy``), the ``l`` dimension lies between ``k`` and ``x``, so the loaded tile has shape ``(1, 1, 1, 1, tL, tM, tK)``.
+We then permute the tile to swap ``l`` and ``x/M``, bringing the M dimension before ``l`` and then reshape so that ``l`` and ``y`` are merged into a single K dimension.
+For tensor ``B`` (shape ``ecklyz``), ``l`` and ``y`` are already adjacent, so only a reshape is needed.
 By combining them we essentially compute a ``xyzl`` GEMM.
 
 .. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
     :language: py
     :linenos:
-    :lines: 141-155
-    :caption: `xyzl GEMM`
+    :lines: 143-159
+    :caption: `xyzl GEMM with tile permutation`
+
+The launch function passes the original tensors directly and provides ``tL`` (rounded up to the next power of two, with out-of-bounds accesses handled by ``PaddingMode.ZERO``) as an additional compile-time constant.
+
+.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+    :language: py
+    :linenos:
+    :lines: 163-172
+    :caption: `Grid creation and kernel launch`
 
 Similarly to `Task 1c) <1c_bench>` we could use the same dimension configuration to outperform the kernel from Task 1d) with the kernel from Task 1b).
 

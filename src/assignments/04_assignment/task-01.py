@@ -117,10 +117,10 @@ def launch_tile_contraction_klb(A, B, C, tM, tN, tK):
 # ===========================================================================
 
 @ct.kernel
-def tile_contraction_xyzl(A: torch.tensor, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt):
+def tile_contraction_xyzl(A, B, C, tM: ConstInt, tN: ConstInt, tK: ConstInt, tL: ConstInt):
     bid = ct.bid(0)
     
-    # Indices C: Right to left
+    # Indices C: Right to left (eabcxz)
     z = bid % ct.cdiv(C.shape[5], tN)
     bid = bid // ct.cdiv(C.shape[5], tN)
     
@@ -141,13 +141,17 @@ def tile_contraction_xyzl(A: torch.tensor, B, C, tM: ConstInt, tN: ConstInt, tK:
     acc = ct.zeros((tM, tN), dtype=torch.float32)
     
     for k in range(A.shape[3]):
-        for ly in range(A.shape[5]):
-            tile_A = ct.load(A, index=(e, a, b, k, x, ly), shape=(1, 1, 1, 1, tM, tK), padding_mode=ct.PaddingMode.ZERO)
-            tile_B = ct.load(B, index=(e, c, k, ly, z),    shape=(1, 1, 1, tK, tN),    padding_mode=ct.PaddingMode.ZERO)
+        for y in range(ct.cdiv(A.shape[6], tK)):
+            tile_A = ct.load(A, index=(e, a, b, k, 0, x, y), shape=(1, 1, 1, 1, tL, tM, tK), padding_mode=ct.PaddingMode.ZERO)
+            tile_B = ct.load(B, index=(e, c, k, 0, y, z),    shape=(1, 1, 1, tL, tK, tN),    padding_mode=ct.PaddingMode.ZERO)
             
-            # Reshape due to rank mismatch
-            r_tile_A = ct.reshape(tile_A, (tM, tK))
-            r_tile_B = ct.reshape(tile_B, (tK, tN))
+            # Permute tile_A: swap l (dim 4) and x/M (dim 5)
+            # (1, 1, 1, 1, tL, tM, tK) -> (1, 1, 1, 1, tM, tL, tK)
+            p_tile_A = ct.permute(tile_A, (0, 1, 2, 3, 5, 4, 6))
+            
+            # Reshape to merge l and y into K dimension
+            r_tile_A = ct.reshape(p_tile_A, (tM, tL * tK))
+            r_tile_B = ct.reshape(tile_B, (tL * tK, tN))
             
             acc = ct.mma(r_tile_A, r_tile_B, acc)
             
@@ -160,27 +164,12 @@ def launch_tile_contraction_xyzl(A, B, C, tM, tN, tK):
     # eabcxz
     grid = (C.shape[0] * C.shape[1] * C.shape[2] * C.shape[3] * ct.cdiv(C.shape[4], tM) * ct.cdiv(C.shape[5], tN), 1, 1)
     
-    # eabklxy -> eabkxly
-    p_A = torch.permute(A, (0, 1, 2, 3, 5, 4, 6)).contiguous()
-    # Reshape A
-    r_A = p_A.reshape(A.shape[0],                # e
-                      A.shape[1],                # a
-                      A.shape[2],                # b
-                      A.shape[3],                # k
-                      A.shape[5],                # x
-                      A.shape[4] * A.shape[6])   # l * y
-    
-    # Reshape B
-    r_B = B.reshape(B.shape[0],                # e
-                    B.shape[1],                # c
-                    B.shape[2],                # k
-                    B.shape[3] * B.shape[4],   # l * y
-                    B.shape[5])                # z
+    tL = next_power_of_two(A.shape[4])
 
     ct.launch(torch.cuda.current_stream(),
               grid,
               tile_contraction_xyzl,
-              (r_A, r_B, C, tM, tN, tK))
+              (A, B, C, tM, tN, tK, tL))
 
 # ===========================================================================
 # Task 1e: GEMM with exyz
