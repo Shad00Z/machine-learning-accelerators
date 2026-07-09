@@ -238,3 +238,18 @@ If we consider the largest tile-shapes (``tM=128``), ``k=4096``, and ``FP16`` we
 .. math::
 
     16 \times 4096 \times 128 \times 2 \approx 16 \text{MiB}
+
+``GROUP_SIZE_M = 4`` and ``8``
+""""""""""""""""""""""""""""""
+
+The optimal ``GROUP_SIZE_M`` is not a single fixed value but depends on the problem size, which is exactly why we compared ``4`` and ``8`` instead of committing to one value.
+The purpose of block swizzling is to keep the working set of a row-group and its corresponding column-group resident in the ``24 MiB`` L2 cache so that the tiles of ``A`` and ``B`` are reused across a ``mn_block_group`` instead of being re-fetched from DRAM.
+This gives us an upper bound on a useful ``GROUP_SIZE_M``: the working set grows roughly linearly with ``GROUP_SIZE_M`` (:math:`GROUP\_SIZE\_M \times tM \times K \times dtype\_bytes` for the ``A`` row-group), so the group size must be small enough to stay below the L2 capacity for the given ``M``, ``K`` and tile shape.
+
+For our two settings this means:
+
+* For the small matrices (``256``, ``512``, ``2048``) the whole working set already fits comfortably in L2 for both ``4`` and ``8``, so there is almost nothing to gain from swizzling, which matches the observation that the results barely change compared to task 2. Here a small ``GROUP_SIZE_M`` (or even ``1``) is sufficient.
+* For the large ``8192 x 8192 x 4096`` case the DRAM traffic dominates. Increasing ``GROUP_SIZE_M`` from ``4`` to ``8`` measurably improves throughput (up to :math:`\approx 17` TFLOPS for small ``tM``), because more of the reuse is captured in L2 while the working set still stays under ``24 MiB``. Pushing to ``16`` would exceed the L2 capacity for the largest tiles (see the estimate above) and is therefore expected to regress.
+
+In short, ``GROUP_SIZE_M`` should be chosen as large as possible while keeping the row-group's working set inside L2, and this bound scales with the matrix and tile dimensions.
+Choosing it per matrix size, a small group for matrices that already fit in L2 and a larger group (bounded by the L2 estimate) for the large, DRAM-bound case, is therefore preferable to a single global constant, and ``4``/``8`` are the two representative points we used to demonstrate this trade-off.
