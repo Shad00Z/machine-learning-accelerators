@@ -321,7 +321,7 @@ The launch kernel creates the grid according to the output tensor ``c * m1 * n1 
 .. literalinclude:: ../../../src/assignments/assignment_05/task-04.py
     :language: py
     :linenos:
-    :lines: 98-110
+    :lines: 105-117
     :caption: `Launch function`
 
 The kernel itself calculates the block IDs according to the shape of the output tensor. 
@@ -329,7 +329,7 @@ The kernel itself calculates the block IDs according to the shape of the output 
 .. literalinclude:: ../../../src/assignments/assignment_05/task-04.py
     :language: py
     :linenos:
-    :lines: 66-80
+    :lines: 73-87
     :caption: `BID calculation`
 
 Then we load the tiles and calculate our batched matrix multiplication.
@@ -337,7 +337,7 @@ Then we load the tiles and calculate our batched matrix multiplication.
 .. literalinclude:: ../../../src/assignments/assignment_05/task-04.py
     :language: py
     :linenos:
-    :lines: 83-94
+    :lines: 89-99
     :caption: `Batched Matrix Multiplication`
 
 The last thing we do is to compare the correctnes of our kernel against ``torch.allclose``. 
