@@ -143,7 +143,7 @@ For instructions where there is no direct indication, we thought about the most 
        | ``x1`` destination vector register
        | ``[p1, #0]`` pointer register and byte offset
    * - ``vmov bmhl2, bmhh4``
-     - V
+     - M
      - | ``vmov`` vector move
        | ``bmhl2`` destination acc register (lower half)
        | ``bmhh4`` source acc register (upper half)
@@ -212,8 +212,8 @@ Hints:
      - scalar / scalar
      - ``r0``, ``r6``
    * - M
-     - pointer / pointer
-     - ``p0``, ``p6``
+     - pointer / pointer, accumulator / accumulator
+     - ``p0``, ``p6``, ``bmhl2``, ``bmhh4``
    * - XM
      - scalar + pointer / scalar + pointer
      - ``r0``, ``p0``
