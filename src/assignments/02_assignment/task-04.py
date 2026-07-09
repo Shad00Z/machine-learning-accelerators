@@ -9,6 +9,13 @@ ConstInt = ct.Constant[int]
 # Task 4: Benchmarking Bandwidth
 # ===========================================================================
 
+def next_power_of_two(n: int) -> int:
+    p = 1
+    while p < n:
+        p *= 2
+    return p
+
+
 @ct.kernel
 def copy_matrix_kernel(A, B, tM: ConstInt, tN: ConstInt):
     m = ct.bid(0)
@@ -28,8 +35,9 @@ def copy_matrix(A, tM, tN):
     num_cols = A.shape[1]
 
     assert tM > 0 and tN > 0, "Tile dimensions must be positive"
-    assert (tM & (tM - 1)) == 0 and (tN & (tN - 1)) == 0, "Tile dimensions must be powers of 2"
-    
+    tM = next_power_of_two(tM)
+    tN = next_power_of_two(tN)
+
     grid = (ct.cdiv(num_rows, tM), ct.cdiv(num_cols, tN), 1)
     B = torch.empty_like(A)
 
@@ -59,8 +67,8 @@ def bench_copy_matrix():
     Ns = []
     bandwidths = []
 
-    for N in [16, 32, 64, 128]:
-        tN = N
+    for N in range(16, 2048 + 1, 16):
+        tN = next_power_of_two(N)
         grid = (ct.cdiv(M, tM), ct.cdiv(N, tN), 1)
 
         A = torch.randn(M, N, device="cuda")
@@ -80,10 +88,10 @@ def bench_copy_matrix():
         Ns.append(N)
         bandwidths.append(bw)
 
-        print(f"  M={M:4}, N={N:3}, tM={tM:2}, tN={tN:3}: {bw:.4f} GB/s")
+        print(f"  M={M:4}, N={N:4}, tM={tM:2}, tN={tN:4}: {bw:.4f} GB/s")
 
     plt.figure(figsize=(7, 4))
-    plt.plot(Ns, bandwidths, marker="o")
+    plt.plot(Ns, bandwidths, marker="o", markersize=3)
     plt.title("copy_matrix bandwidth vs N")
     plt.xlabel("N")
     plt.ylabel("Bandwidth (GB/s)")

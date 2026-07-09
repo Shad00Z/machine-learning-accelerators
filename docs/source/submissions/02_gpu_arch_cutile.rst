@@ -112,27 +112,36 @@ We obtained the following results on the DGX Spark:
 We can see that the kernel that tiles over the K and L dimensions performs on par with PyTorch's built-in addition operation, 
 while the kernel that tiles over the M and N dimensions is significantly slower.
 We can assume that PyTorch uses a similar tiling strategy as the first kernel, which is why it achieves similar performance.
-The second kernel, on the other hand, shows that tiling over the M and N dimensions is not as efficient for this particular operation, 
-likely due to less optimal memory access patterns and reduced parallelism.
+
+The performance difference is explained by the memory access pattern.
+The tensors are stored in row-major (C-contiguous) order, so the last dimension (L) is the fastest-varying dimension with stride 1, followed by K, N and M.
+The KL-tiling kernel loads a tile spanning the two innermost dimensions (K, L) for a fixed (M, N).
+These elements are contiguous in memory, so the loads and stores are fully coalesced: consecutive threads access consecutive memory addresses, and the hardware can service them with a minimal number of wide memory transactions.
+The MN-tiling kernel instead loads a tile spanning the two outermost dimensions (M, N) for a fixed (K, L).
+Consecutive elements within such a tile are separated by a stride of ``K * L`` (along N) and ``N * K * L`` (along M).
+The accesses are therefore strided and uncoalesced, so each requested element pulls in a separate, mostly unused cache line, which wastes a large fraction of the available memory bandwidth and explains the roughly 3.5x slowdown.
+Note that the total amount of work and the number of tiles is the same in both cases, so the slowdown is caused by the uncoalesced (and thus less parallel-friendly) memory transactions rather than by a lower degree of parallelism.
 
 Task 4: Benchmarking Bandwidth
 ------------------------------
 
-The goal of this task was to benchmark the bandwidth of the GPU by copying tensors of sizes `16, 32, 64 and 128`.
+The goal of this task was to benchmark the bandwidth of the GPU by copying tensors over a range of column sizes `N` (from 16 up to 2048).
 Since we only do a copy operation, the kernel is rather simple:
 
 .. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
     :language: py
     :linenos:
-    :lines: 12-23
+    :lines: 19-30
     :caption: `Kernel for copying a tensor from input to output.`
 
-The kernel is launched using a simple utility function as well, without any manual padding:
+The kernel is launched using a simple utility function.
+Since cuTile requires power-of-two tile shapes, the requested tile sizes are rounded up to the next power of two, while partial tiles at the matrix borders are handled by the zero padding mode.
+This way the kernel supports arbitrary (non-power-of-two) tile and matrix sizes:
 
 .. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
     :language: py
     :linenos:
-    :lines: 26-41
+    :lines: 33-49
     :caption: `Launching the copy kernel.`
 
 Next, we define a test function to verify the correctness of the copy kernel by comparing its output with the input tensor:
@@ -140,16 +149,16 @@ Next, we define a test function to verify the correctness of the copy kernel by 
 .. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
     :language: py
     :linenos:
-    :lines: 44-51
+    :lines: 52-59
     :caption: `Testing the copy kernel by comparing its output with the input tensor.`
 
 Lastly, we benchmark the bandwidth of the GPU by copying tensors of varying sizes and measuring the time taken for each copy operation.
-Furthermore, we collect the achieved bandwidth in GB/s for each tensor size and plot the results:
+We sweep the full range of `N` from 16 up to 2048 in steps of 16, collect the achieved bandwidth in GB/s for each tensor size and plot the results:
 
 .. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
     :language: py
     :linenos:
-    :lines: 54-92
+    :lines: 62-100
     :caption: `Benchmarking the bandwidth of the GPU by copying tensors of varying sizes and plotting the results.`
 
 The generated plot shows the achieved bandwidth in GB/s for different tensor sizes:
