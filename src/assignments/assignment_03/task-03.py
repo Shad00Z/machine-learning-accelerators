@@ -175,7 +175,7 @@ def main():
     # Task 3b)
     for m, n, k in matrix_shapes:
         tileShapeThroughput(m, n, k, f"task3_{m}_tile_shapes.csv")
-        heatmap(m, f"src/assignments/03_assignment/resources-03/task3_{m}_tile_shapes.csv" ,f"task3_{m}_tile_shapes.png")
+        heatmap(m, f"src/assignments/assignment_03/resources-03/task3_{m}_tile_shapes.csv" ,f"task3_{m}_tile_shapes.png")
         
     # For Task 4
     tileShapeThroughput(8192, 8192, 4096, "task3_8192_tile_shapes.csv")

@@ -6,7 +6,7 @@ Task 1: FP32 vs FP16 Performance
 
 Our ``FP16`` and ``FP32`` kernels are implemented equally:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-01.py
     :language: py
     :linenos:
     :lines: 14-24
@@ -14,7 +14,7 @@ Our ``FP16`` and ``FP32`` kernels are implemented equally:
 
 However, the data types for the input matrices differ between the two kernels:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-01.py
     :language: py
     :linenos:
     :lines: 44-50
@@ -39,7 +39,7 @@ Implementing the matrix multiplication kernel using ``ct.mma``, we followed the 
 1. The two input matrices ``A`` and ``B`` are created with dimensions in the range from ``1`` to ``4096``.
 2. Our grid depends on the amount of tiles for the ``n`` and ``m`` dimension.
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-02.py
     :language: py
     :linenos:
     :lines: 53
@@ -50,7 +50,7 @@ Implementing the matrix multiplication kernel using ``ct.mma``, we followed the 
 
 .. _simple_matmul_kernel:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-02.py
     :language: py
     :linenos:
     :lines: 13-31
@@ -64,7 +64,7 @@ Task 3: Benchmarking the Matrix Multiplication Kernel
 Benchmarking the matrix multiplication kernel has been approached via a loop over the different matrix sizes and the different tile shapes.
 The results for the different squared matrices can be found in ``task3_matrix_sizes.png``.
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_matrix_sizes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_matrix_sizes.png
     :alt: Throughput Plot
 
 These measurements show that the peak computational throughput can be achieved with matrices around a squared size of ``2048`` for a fixed tile shape of ``(64, 64, 64)``.
@@ -74,13 +74,13 @@ This indicates that these fixed tile shapes can be useful for smaller matrix siz
 In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256``, ``512`` and the ``2048`` matrices.
 It can be clearly seen that the throughput for the larger matrices is significantly higher.
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_256_tile_shapes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_256_tile_shapes.png
     :alt: Throughput Plot for ``256`` x ``256`` matrices
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_512_tile_shapes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_512_tile_shapes.png
     :alt: Throughput Plot for ``512`` x ``512`` matrices
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_2048_tile_shapes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_2048_tile_shapes.png
     :alt: Throughput Plot for ``2048`` x ``2048`` matrices
 
 .. _benchmarking_results:
@@ -128,7 +128,7 @@ The important part for this task was to recalculate the block IDs for ``m`` and 
 
 .. _swizzled_matmul_kernel:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-04.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-04.py
     :language: py
     :linenos:
     :lines: 13-48

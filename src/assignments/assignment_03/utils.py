@@ -14,7 +14,7 @@ def next_power_of_two(n: int) -> int:
 
 
 def heatmap(m):
-    df = pd.read_csv(f"src/assignments/03_assignment/task4_nv_{m}_tile_shapes.csv")
+    df = pd.read_csv(f"src/assignments/assignment_03/task4_nv_{m}_tile_shapes.csv")
     
     tK = 64
     heatmap_data = (

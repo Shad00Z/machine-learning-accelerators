@@ -22,7 +22,7 @@ b) cuTile Kernel: Sequentialize over ``k`` and ``l``
 We create three tensors ``A``, ``B``, and ``C`` with random dimension sizes and values. 
 For that we use a ``tensor_initialization()`` function that creates these tensors for us:
 
-.. literalinclude:: ../../../src/assignments/04_assignment/utils.py
+.. literalinclude:: ../../../src/assignments/assignment_04/utils.py
     :language: py
     :linenos:
     :lines: 13-48
@@ -34,7 +34,7 @@ As this procedure is wrapped inside a ``while``-loop we guarantee to be within t
 
 The actual task was solved by creating a ``1D``-grid over the whole ``C`` tensor.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 54-61
@@ -44,7 +44,7 @@ Based on this grid it was then possible to retrieve the block IDs of the respect
 
 .. _1b_bid:
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 17-33
@@ -66,7 +66,7 @@ We repeat this for every single index, going from left to right:
 
 After retrieving these indices we set up our **GEMM**:
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 37-51
@@ -83,7 +83,7 @@ c) cuTile Kernel: Sequentialize over ``k``, ``l`` and ``b``
 
 To additionally sequentialize the we first changed the grid by extracting the ``b`` dimension from the calculation.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 106-113
@@ -91,7 +91,7 @@ To additionally sequentialize the we first changed the grid by extracting the ``
 
 Reducing the grid dimension also means that we need to change the index calculation, as we don't need to calculate the ``b`` block ID any more.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 71-84
@@ -99,7 +99,7 @@ Reducing the grid dimension also means that we need to change the index calculat
 
 In regards to the computation we add a new loop for the ``b`` dimension and also move the creation of the ``acc`` tile inside that loop.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 86-101
@@ -142,7 +142,7 @@ We then permute the tile to swap ``l`` and ``x/M``, bringing the M dimension bef
 For tensor ``B`` (shape ``ecklyz``), ``l`` and ``y`` are already adjacent, so only a reshape is needed.
 By combining them we essentially compute a ``xyzl`` GEMM.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 143-159
@@ -150,7 +150,7 @@ By combining them we essentially compute a ``xyzl`` GEMM.
 
 The launch function passes the original tensors directly and provides ``tL`` (rounded up to the next power of two, with out-of-bounds accesses handled by ``PaddingMode.ZERO``) as an additional compile-time constant.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 163-172
@@ -181,7 +181,7 @@ e) cuTile Kernel: 3D GEMM Kernel using ``exyz``
 
 Creating a 3D ``exyz`` GEMM kernel we first permuted our tensors by moving the ``e`` dimension closer to the right:
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 232-238
@@ -190,7 +190,7 @@ Creating a 3D ``exyz`` GEMM kernel we first permuted our tensors by moving the `
 Secondly, we introduced a new tile size called ``tC`` which is used for tiling the ``e`` dimension.
 Therefore, our grid changed as well.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 240-246
@@ -198,7 +198,7 @@ Therefore, our grid changed as well.
 
 Inside the kernel we adjust the block ID calculation slightly, because of the positioning of dimension ``e`` and the new tile shape ``tC``. 
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 193-209
@@ -206,7 +206,7 @@ Inside the kernel we adjust the block ID calculation slightly, because of the po
 
 To perform a correct 3D GEMM we also change the indices and shapes for the tiles of ``A``, ``B``, ``acc`` and ``C``.
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 211-226
@@ -214,7 +214,7 @@ To perform a correct 3D GEMM we also change the indices and shapes for the tiles
 
 The last thing is to bring the output matrix ``C`` back into its normal shape. 
 
-.. literalinclude:: ../../../src/assignments/04_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_04/task-01.py
     :language: py
     :linenos:
     :lines: 248-249
@@ -492,7 +492,7 @@ For the first benchmark, we swept over the ``n`` dimension, while keeping the ot
 
 Here, we achieved the following results:
 
-.. image:: ../../../src/assignments/04_assignment/task3_n_throughput.png
+.. image:: ../../../src/assignments/assignment_04/task3_n_throughput.png
     :alt: Throughput Plot for the sweep over N
 
 Within each constant ``tN`` segment the achieved TFLOPS grows roughly linearly with ``n``.
@@ -529,7 +529,7 @@ For the second benchmark, we swept over the ``k`` dimension, while keeping the o
 
 Here, we achieved the following results:
 
-.. image:: ../../../src/assignments/04_assignment/task3_k_throughput.png
+.. image:: ../../../src/assignments/assignment_04/task3_k_throughput.png
     :alt: Throughput Plot for the sweep over K
 
 For the most part, the FLOPs increase linearly with the size of the ``k`` dimension,
