@@ -127,6 +127,10 @@ The last step is to make the configuration executable.
     m1, m2 = 12, 128
     opt.split_dim(4, m1, m2)
     opt.make_executable()
+    # Interleave PAR M and PAR N dimensions for L2-optimal ordering.
+    # After make_executable the PAR order is [a(M), c(M), x_outer(M), b(N), y_outer(N)].
+    # Reorder to [a(M), b(N), c(M), x_outer(M), y_outer(N)].
+    opt.permute_dims([0, 3, 1, 2, 4, 5, 6, 7, 8])
 
 b) Resulting optimizer Config
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -142,12 +146,12 @@ The resulting optimized config for the einsum string looks as follows:
       prim_main  = PrimType.GEMM
       prim_last  = LastType.NONE
       prim_first = FirstType.ZERO
-      dim_types  = ['M', 'M', 'M', 'N', 'N', 'K', 'K', 'M', 'N']
+      dim_types  = ['M', 'N', 'M', 'M', 'N', 'K', 'K', 'M', 'N']
       exec_types = ['PAR', 'PAR', 'PAR', 'PAR', 'PAR', 'SEQ', 'PRIM', 'PRIM', 'PRIM']
-      dim_sizes  = [4, 3, 12, 4, 9, 64, 64, 128, 128]
-      strides[0] = [18874368, 6291456, 128, 0, 0, 98304, 1536, 1, 0]
-      strides[1] = [0, 0, 0, 4718592, 128, 73728, 1152, 0, 1]
-      strides[2] = [21233664, 1769472, 128, 5308416, 196608, 0, 0, 1, 1536]
+      dim_sizes  = [4, 4, 3, 12, 9, 64, 64, 128, 128]
+      strides[0] = [18874368, 0, 6291456, 128, 0, 98304, 1536, 1, 0]
+      strides[1] = [0, 4718592, 0, 0, 128, 73728, 1152, 0, 1]
+      strides[2] = [21233664, 5308416, 1769472, 128, 196608, 0, 0, 1, 1536]
     )
 
 .. _task_4:

@@ -57,7 +57,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#task-4-l2-cache-optimization-via-block-swizzling">Task 4: L2 Cache Optimization via Block Swizzling</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#a">a)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#b">b)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#additional">Additional</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#additional">Additional</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#group-size-m-4-and-8"><code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span> <span class="pre">=</span> <span class="pre">4</span></code> and <code class="docutils literal notranslate"><span class="pre">8</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -70,7 +73,8 @@
 <li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
 <li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html#test-execution">Test Execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html">OLD: Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html#test-execution">Test Execution</a></li>
 </ul>
 
         </div>
@@ -370,6 +374,19 @@ Therefore, the DRAM traffic is reduced.</p>
 If we consider the largest tile-shapes (<code class="docutils literal notranslate"><span class="pre">tM=128</span></code>), <code class="docutils literal notranslate"><span class="pre">k=4096</span></code>, and <code class="docutils literal notranslate"><span class="pre">FP16</span></code> we quickly approach the L2 capacity limit:</p>
 <div class="math notranslate nohighlight">
 \[16 \times 4096 \times 128 \times 2 \approx 16 \text{MiB}\]</div>
+<section id="group-size-m-4-and-8">
+<h4><code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span> <span class="pre">=</span> <span class="pre">4</span></code> and <code class="docutils literal notranslate"><span class="pre">8</span></code><a class="headerlink" href="#group-size-m-4-and-8" title="Link to this heading"></a></h4>
+<p>The optimal <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span></code> is not a single fixed value but depends on the problem size, which is exactly why we compared <code class="docutils literal notranslate"><span class="pre">4</span></code> and <code class="docutils literal notranslate"><span class="pre">8</span></code> instead of committing to one value.
+The purpose of block swizzling is to keep the working set of a row-group and its corresponding column-group resident in the <code class="docutils literal notranslate"><span class="pre">24</span> <span class="pre">MiB</span></code> L2 cache so that the tiles of <code class="docutils literal notranslate"><span class="pre">A</span></code> and <code class="docutils literal notranslate"><span class="pre">B</span></code> are reused across a <code class="docutils literal notranslate"><span class="pre">mn_block_group</span></code> instead of being re-fetched from DRAM.
+This gives us an upper bound on a useful <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span></code>: the working set grows roughly linearly with <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span></code> (<span class="math notranslate nohighlight">\(GROUP\_SIZE\_M \times tM \times K \times dtype\_bytes\)</span> for the <code class="docutils literal notranslate"><span class="pre">A</span></code> row-group), so the group size must be small enough to stay below the L2 capacity for the given <code class="docutils literal notranslate"><span class="pre">M</span></code>, <code class="docutils literal notranslate"><span class="pre">K</span></code> and tile shape.</p>
+<p>For our two settings this means:</p>
+<ul class="simple">
+<li><p>For the small matrices (<code class="docutils literal notranslate"><span class="pre">256</span></code>, <code class="docutils literal notranslate"><span class="pre">512</span></code>, <code class="docutils literal notranslate"><span class="pre">2048</span></code>) the whole working set already fits comfortably in L2 for both <code class="docutils literal notranslate"><span class="pre">4</span></code> and <code class="docutils literal notranslate"><span class="pre">8</span></code>, so there is almost nothing to gain from swizzling, which matches the observation that the results barely change compared to task 2. Here a small <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span></code> (or even <code class="docutils literal notranslate"><span class="pre">1</span></code>) is sufficient.</p></li>
+<li><p>For the large <code class="docutils literal notranslate"><span class="pre">8192</span> <span class="pre">x</span> <span class="pre">8192</span> <span class="pre">x</span> <span class="pre">4096</span></code> case the DRAM traffic dominates. Increasing <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span></code> from <code class="docutils literal notranslate"><span class="pre">4</span></code> to <code class="docutils literal notranslate"><span class="pre">8</span></code> measurably improves throughput (up to <span class="math notranslate nohighlight">\(\approx 17\)</span> TFLOPS for small <code class="docutils literal notranslate"><span class="pre">tM</span></code>), because more of the reuse is captured in L2 while the working set still stays under <code class="docutils literal notranslate"><span class="pre">24</span> <span class="pre">MiB</span></code>. Pushing to <code class="docutils literal notranslate"><span class="pre">16</span></code> would exceed the L2 capacity for the largest tiles (see the estimate above) and is therefore expected to regress.</p></li>
+</ul>
+<p>In short, <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span></code> should be chosen as large as possible while keeping the row-group’s working set inside L2, and this bound scales with the matrix and tile dimensions.
+Choosing it per matrix size, a small group for matrices that already fit in L2 and a larger group (bounded by the L2 estimate) for the large, DRAM-bound case, is therefore preferable to a single global constant, and <code class="docutils literal notranslate"><span class="pre">4</span></code>/<code class="docutils literal notranslate"><span class="pre">8</span></code> are the two representative points we used to demonstrate this trade-off.</p>
+</section>
 </section>
 </section>
 </section>

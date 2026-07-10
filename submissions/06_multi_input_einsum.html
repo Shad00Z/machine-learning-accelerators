@@ -91,7 +91,8 @@
 <li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
 <li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html#test-execution">Test Execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html">OLD: Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html#test-execution">Test Execution</a></li>
 </ul>
 
         </div>
@@ -243,6 +244,10 @@ The last step is to make the configuration executable.</p>
 <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span> <span class="o">=</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">128</span>
 <span class="n">opt</span><span class="o">.</span><span class="n">split_dim</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">)</span>
 <span class="n">opt</span><span class="o">.</span><span class="n">make_executable</span><span class="p">()</span>
+<span class="c1"># Interleave PAR M and PAR N dimensions for L2-optimal ordering.</span>
+<span class="c1"># After make_executable the PAR order is [a(M), c(M), x_outer(M), b(N), y_outer(N)].</span>
+<span class="c1"># Reorder to [a(M), b(N), c(M), x_outer(M), y_outer(N)].</span>
+<span class="n">opt</span><span class="o">.</span><span class="n">permute_dims</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">])</span>
 </pre></div>
 </div>
 </section>
@@ -254,12 +259,12 @@ The last step is to make the configuration executable.</p>
   prim_main  = PrimType.GEMM
   prim_last  = LastType.NONE
   prim_first = FirstType.ZERO
-  dim_types  = [&#39;M&#39;, &#39;M&#39;, &#39;M&#39;, &#39;N&#39;, &#39;N&#39;, &#39;K&#39;, &#39;K&#39;, &#39;M&#39;, &#39;N&#39;]
+  dim_types  = [&#39;M&#39;, &#39;N&#39;, &#39;M&#39;, &#39;M&#39;, &#39;N&#39;, &#39;K&#39;, &#39;K&#39;, &#39;M&#39;, &#39;N&#39;]
   exec_types = [&#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;SEQ&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;]
-  dim_sizes  = [4, 3, 12, 4, 9, 64, 64, 128, 128]
-  strides[0] = [18874368, 6291456, 128, 0, 0, 98304, 1536, 1, 0]
-  strides[1] = [0, 0, 0, 4718592, 128, 73728, 1152, 0, 1]
-  strides[2] = [21233664, 1769472, 128, 5308416, 196608, 0, 0, 1, 1536]
+  dim_sizes  = [4, 4, 3, 12, 9, 64, 64, 128, 128]
+  strides[0] = [18874368, 0, 6291456, 128, 0, 98304, 1536, 1, 0]
+  strides[1] = [0, 4718592, 0, 0, 128, 73728, 1152, 0, 1]
+  strides[2] = [21233664, 5308416, 1769472, 128, 196608, 0, 0, 1, 1536]
 )
 </pre></div>
 </div>

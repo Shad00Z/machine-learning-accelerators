@@ -64,7 +64,8 @@
 <li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
 <li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html#test-execution">Test Execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html">OLD: Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html#test-execution">Test Execution</a></li>
 </ul>
 
         </div>
@@ -332,13 +333,19 @@ For measuring the time per kernel execution, we use <cite>triton.testing.do_benc
 </div>
 <p>We can see that the kernel that tiles over the K and L dimensions performs on par with PyTorch’s built-in addition operation,
 while the kernel that tiles over the M and N dimensions is significantly slower.
-We can assume that PyTorch uses a similar tiling strategy as the first kernel, which is why it achieves similar performance.
-The second kernel, on the other hand, shows that tiling over the M and N dimensions is not as efficient for this particular operation,
-likely due to less optimal memory access patterns and reduced parallelism.</p>
+We can assume that PyTorch uses a similar tiling strategy as the first kernel, which is why it achieves similar performance.</p>
+<p>The performance difference is explained by the memory access pattern.
+The tensors are stored in row-major (C-contiguous) order, so the last dimension (L) is the fastest-varying dimension with stride 1, followed by K, N and M.
+The KL-tiling kernel loads a tile spanning the two innermost dimensions (K, L) for a fixed (M, N).
+These elements are contiguous in memory, so the loads and stores are fully coalesced: consecutive threads access consecutive memory addresses, and the hardware can service them with a minimal number of wide memory transactions.
+The MN-tiling kernel instead loads a tile spanning the two outermost dimensions (M, N) for a fixed (K, L).
+Consecutive elements within such a tile are separated by a stride of <code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">*</span> <span class="pre">L</span></code> (along N) and <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">*</span> <span class="pre">K</span> <span class="pre">*</span> <span class="pre">L</span></code> (along M).
+The accesses are therefore strided and uncoalesced, so each requested element pulls in a separate, mostly unused cache line, which wastes a large fraction of the available memory bandwidth and explains the roughly 3.5x slowdown.
+Note that the total amount of work and the number of tiles is the same in both cases, so the slowdown is caused by the uncoalesced (and thus less parallel-friendly) memory transactions rather than by a lower degree of parallelism.</p>
 </section>
 <section id="task-4-benchmarking-bandwidth">
 <h2>Task 4: Benchmarking Bandwidth<a class="headerlink" href="#task-4-benchmarking-bandwidth" title="Link to this heading"></a></h2>
-<p>The goal of this task was to benchmark the bandwidth of the GPU by copying tensors of sizes <cite>16, 32, 64 and 128</cite>.
+<p>The goal of this task was to benchmark the bandwidth of the GPU by copying tensors over a range of column sizes <cite>N</cite> (from 16 up to 2048).
 Since we only do a copy operation, the kernel is rather simple:</p>
 <div class="literal-block-wrapper docutils container" id="id9">
 <div class="code-block-caption"><span class="caption-text"><cite>Kernel for copying a tensor from input to output.</cite></span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
@@ -357,7 +364,9 @@ Since we only do a copy operation, the kernel is rather simple:</p>
 </pre></div>
 </div>
 </div>
-<p>The kernel is launched using a simple utility function as well, without any manual padding:</p>
+<p>The kernel is launched using a simple utility function.
+Since cuTile requires power-of-two tile shapes, the requested tile sizes are rounded up to the next power of two, while partial tiles at the matrix borders are handled by the zero padding mode.
+This way the kernel supports arbitrary (non-power-of-two) tile and matrix sizes:</p>
 <div class="literal-block-wrapper docutils container" id="id10">
 <div class="code-block-caption"><span class="caption-text"><cite>Launching the copy kernel.</cite></span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">copy_matrix</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">):</span>
@@ -365,17 +374,18 @@ Since we only do a copy operation, the kernel is rather simple:</p>
 <span class="linenos"> 3</span>    <span class="n">num_cols</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 <span class="linenos"> 4</span>
 <span class="linenos"> 5</span>    <span class="k">assert</span> <span class="n">tM</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">tN</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Tile dimensions must be positive&quot;</span>
-<span class="linenos"> 6</span>    <span class="k">assert</span> <span class="p">(</span><span class="n">tM</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">tM</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="p">(</span><span class="n">tN</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">tN</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Tile dimensions must be powers of 2&quot;</span>
-<span class="linenos"> 7</span>    
-<span class="linenos"> 8</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_cols</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
-<span class="linenos"> 9</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
-<span class="linenos">10</span>
-<span class="linenos">11</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
-<span class="linenos">12</span>              <span class="n">grid</span><span class="p">,</span>
-<span class="linenos">13</span>              <span class="n">copy_matrix_kernel</span><span class="p">,</span>
-<span class="linenos">14</span>              <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
-<span class="linenos">15</span>    
-<span class="linenos">16</span>    <span class="k">return</span> <span class="n">B</span>
+<span class="linenos"> 6</span>    <span class="n">tM</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">tM</span><span class="p">)</span>
+<span class="linenos"> 7</span>    <span class="n">tN</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">tN</span><span class="p">)</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span>    <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_rows</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">num_cols</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+<span class="linenos">10</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+<span class="linenos">11</span>
+<span class="linenos">12</span>    <span class="n">ct</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">(),</span>
+<span class="linenos">13</span>              <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">14</span>              <span class="n">copy_matrix_kernel</span><span class="p">,</span>
+<span class="linenos">15</span>              <span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">))</span>
+<span class="linenos">16</span>    
+<span class="linenos">17</span>    <span class="k">return</span> <span class="n">B</span>
 </pre></div>
 </div>
 </div>
@@ -394,7 +404,7 @@ Since we only do a copy operation, the kernel is rather simple:</p>
 </div>
 </div>
 <p>Lastly, we benchmark the bandwidth of the GPU by copying tensors of varying sizes and measuring the time taken for each copy operation.
-Furthermore, we collect the achieved bandwidth in GB/s for each tensor size and plot the results:</p>
+We sweep the full range of <cite>N</cite> from 16 up to 2048 in steps of 16, collect the achieved bandwidth in GB/s for each tensor size and plot the results:</p>
 <div class="literal-block-wrapper docutils container" id="id12">
 <div class="code-block-caption"><span class="caption-text"><cite>Benchmarking the bandwidth of the GPU by copying tensors of varying sizes and plotting the results.</cite></span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
 <div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">bench_copy_matrix</span><span class="p">():</span>
@@ -405,8 +415,8 @@ Furthermore, we collect the achieved bandwidth in GB/s for each tensor size and 
 <span class="linenos"> 6</span>    <span class="n">Ns</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="linenos"> 7</span>    <span class="n">bandwidths</span> <span class="o">=</span> <span class="p">[]</span>
 <span class="linenos"> 8</span>
-<span class="linenos"> 9</span>    <span class="k">for</span> <span class="n">N</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">16</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="mi">128</span><span class="p">]:</span>
-<span class="linenos">10</span>        <span class="n">tN</span> <span class="o">=</span> <span class="n">N</span>
+<span class="linenos"> 9</span>    <span class="k">for</span> <span class="n">N</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">2048</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">16</span><span class="p">):</span>
+<span class="linenos">10</span>        <span class="n">tN</span> <span class="o">=</span> <span class="n">next_power_of_two</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
 <span class="linenos">11</span>        <span class="n">grid</span> <span class="o">=</span> <span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">tM</span><span class="p">),</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
 <span class="linenos">12</span>
 <span class="linenos">13</span>        <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
@@ -426,10 +436,10 @@ Furthermore, we collect the achieved bandwidth in GB/s for each tensor size and 
 <span class="linenos">27</span>        <span class="n">Ns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
 <span class="linenos">28</span>        <span class="n">bandwidths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bw</span><span class="p">)</span>
 <span class="linenos">29</span>
-<span class="linenos">30</span>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  M=</span><span class="si">{</span><span class="n">M</span><span class="si">:</span><span class="s2">4</span><span class="si">}</span><span class="s2">, N=</span><span class="si">{</span><span class="n">N</span><span class="si">:</span><span class="s2">3</span><span class="si">}</span><span class="s2">, tM=</span><span class="si">{</span><span class="n">tM</span><span class="si">:</span><span class="s2">2</span><span class="si">}</span><span class="s2">, tN=</span><span class="si">{</span><span class="n">tN</span><span class="si">:</span><span class="s2">3</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">bw</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> GB/s&quot;</span><span class="p">)</span>
+<span class="linenos">30</span>        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  M=</span><span class="si">{</span><span class="n">M</span><span class="si">:</span><span class="s2">4</span><span class="si">}</span><span class="s2">, N=</span><span class="si">{</span><span class="n">N</span><span class="si">:</span><span class="s2">4</span><span class="si">}</span><span class="s2">, tM=</span><span class="si">{</span><span class="n">tM</span><span class="si">:</span><span class="s2">2</span><span class="si">}</span><span class="s2">, tN=</span><span class="si">{</span><span class="n">tN</span><span class="si">:</span><span class="s2">4</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">bw</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> GB/s&quot;</span><span class="p">)</span>
 <span class="linenos">31</span>
 <span class="linenos">32</span>    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
-<span class="linenos">33</span>    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">bandwidths</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">)</span>
+<span class="linenos">33</span>    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">Ns</span><span class="p">,</span> <span class="n">bandwidths</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
 <span class="linenos">34</span>    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;copy_matrix bandwidth vs N&quot;</span><span class="p">)</span>
 <span class="linenos">35</span>    <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s2">&quot;N&quot;</span><span class="p">)</span>
 <span class="linenos">36</span>    <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s2">&quot;Bandwidth (GB/s)&quot;</span><span class="p">)</span>

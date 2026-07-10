@@ -85,7 +85,8 @@
 <li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
 <li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html#test-execution">Test Execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html">OLD: Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html#test-execution">Test Execution</a></li>
 </ul>
 
         </div>
@@ -270,7 +271,7 @@ For instructions where there is no direct indication, we thought about the most 
 </td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vmov</span> <span class="pre">bmhl2,</span> <span class="pre">bmhh4</span></code></p></td>
-<td><p>V</p></td>
+<td><p>M</p></td>
 <td><div class="line-block">
 <div class="line"><code class="docutils literal notranslate"><span class="pre">vmov</span></code> vector move</div>
 <div class="line"><code class="docutils literal notranslate"><span class="pre">bmhl2</span></code> destination acc register (lower half)</div>
@@ -375,8 +376,8 @@ For instructions where there is no direct indication, we thought about the most 
 <td><p><code class="docutils literal notranslate"><span class="pre">r0</span></code>, <code class="docutils literal notranslate"><span class="pre">r6</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>M</p></td>
-<td><p>pointer / pointer</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">p0</span></code>, <code class="docutils literal notranslate"><span class="pre">p6</span></code></p></td>
+<td><p>pointer / pointer, accumulator / accumulator</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">p0</span></code>, <code class="docutils literal notranslate"><span class="pre">p6</span></code>, <code class="docutils literal notranslate"><span class="pre">bmhl2</span></code>, <code class="docutils literal notranslate"><span class="pre">bmhh4</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>XM</p></td>
 <td><p>scalar + pointer / scalar + pointer</p></td>

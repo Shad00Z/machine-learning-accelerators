@@ -8,7 +8,7 @@ Task 1: Dot Product
 
 To calculate the dot product of two vectors for variable length, one simply needs to loop over the single shared dimension.
 
-.. literalinclude:: ../../../src/assignments/01_assignment/assignment_01.py
+.. literalinclude:: ../../../src/assignments/assignment_01/assignment_01.py
     :language: py
     :linenos:
     :lines: 16-17
@@ -22,7 +22,7 @@ Task 2: Matrix-Matrix Multiplication
 Calculating a matrix-matrix multiplication simply adds another dimension to the calculation.
 Therefore, calculating the matrix-matrix multiplication using loops can be simply done by adding two more loops for the ``m`` and ``n`` dimensions.
 
-.. literalinclude:: ../../../src/assignments/01_assignment/assignment_01.py
+.. literalinclude:: ../../../src/assignments/assignment_01/assignment_01.py
     :language: py
     :linenos:
     :lines: 36-39
@@ -30,7 +30,7 @@ Therefore, calculating the matrix-matrix multiplication using loops can be simpl
 
 Reusing the dot product calculation from :ref:`Task 1<dot-product>` can be achieved by replacing the innermost loop by the function call to the ``dot_product`` function.
 
-.. literalinclude:: ../../../src/assignments/01_assignment/assignment_01.py
+.. literalinclude:: ../../../src/assignments/assignment_01/assignment_01.py
     :language: py
     :linenos:
     :lines: 54-57
@@ -42,7 +42,7 @@ Task 3: Einsum
 In order to properly calculate the einsum expression, we need one loop for each dimension.
 The loops have been ordered according to their indices. The further an index is on the right, the further it is nested.
 
-.. literalinclude:: ../../../src/assignments/01_assignment/assignment_01.py
+.. literalinclude:: ../../../src/assignments/assignment_01/assignment_01.py
     :language: py
     :linenos:
     :lines: 77-84
@@ -51,7 +51,7 @@ The loops have been ordered according to their indices. The further an index is 
 The nesting depth of the first calculation can be reduced by invoking the ``matmul_dot`` function from :ref:`Task 2<mat-mat-mul>`.
 We selected the innermost dimensions of the matrices ``A`` and ``B`` to pass to the ``matmul_dot`` function.
 
-.. literalinclude:: ../../../src/assignments/01_assignment/assignment_01.py
+.. literalinclude:: ../../../src/assignments/assignment_01/assignment_01.py
     :language: py
     :linenos:
     :lines: 101-105

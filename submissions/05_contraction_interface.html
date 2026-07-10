@@ -78,7 +78,8 @@
 <li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
 <li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html#test-execution">Test Execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html">OLD: Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html#test-execution">Test Execution</a></li>
 </ul>
 
         </div>
@@ -364,16 +365,16 @@ Afterwards we multiply the size of the respective tensor (e.g. the rightmost) wi
 <p>The last step is to calculate the strides for the new dimensions and store them in the config object.</p>
 <div class="literal-block-wrapper docutils container" id="id12">
 <div class="code-block-caption"><span class="caption-text"><cite>Split dimension: Stride calculation</cite></span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="c1"># Replace the original entry with [outer, inner] at the same position.</span>
-<span class="linenos"> 2</span>        <span class="k">for</span> <span class="n">per_dim</span><span class="p">,</span> <span class="n">outer_val</span><span class="p">,</span> <span class="n">inner_val</span> <span class="ow">in</span> <span class="p">[</span>
-<span class="linenos"> 3</span>            <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">,</span>  <span class="n">orig_type</span><span class="p">,</span>   <span class="n">orig_type</span><span class="p">),</span>
-<span class="linenos"> 4</span>            <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">,</span> <span class="n">orig_exec</span><span class="p">,</span>   <span class="n">orig_exec</span><span class="p">),</span>
-<span class="linenos"> 5</span>            <span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="p">,</span>  <span class="n">outer_size</span><span class="p">,</span>  <span class="n">inner_size</span><span class="p">),</span>
-<span class="linenos"> 6</span>        <span class="p">]:</span>
-<span class="linenos"> 7</span>            <span class="c1"># remove the original dim_id entry</span>
-<span class="linenos"> 8</span>            <span class="n">per_dim</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id</span><span class="p">)</span>
-<span class="linenos"> 9</span>            <span class="n">per_dim</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim_id</span><span class="p">,</span> <span class="n">inner_val</span><span class="p">)</span>  <span class="c1"># inserts inner at dim_id</span>
-<span class="linenos">10</span>            <span class="n">per_dim</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim_id</span><span class="p">,</span> <span class="n">outer_val</span><span class="p">)</span>  <span class="c1"># outer pushes inner to dim_id+1</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="k">for</span> <span class="n">t_strides</span> <span class="ow">in</span> <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span><span class="p">:</span>
+<span class="linenos"> 2</span>            <span class="n">orig_stride</span> <span class="o">=</span> <span class="n">t_strides</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id</span><span class="p">)</span>
+<span class="linenos"> 3</span>            <span class="k">if</span> <span class="n">orig_stride</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<span class="linenos"> 4</span>                <span class="c1"># Dimension was not in this tensor, so both new dims are also not in this tensor</span>
+<span class="linenos"> 5</span>                <span class="n">t_strides</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># inner</span>
+<span class="linenos"> 6</span>                <span class="n">t_strides</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># outer</span>
+<span class="linenos"> 7</span>            <span class="k">else</span><span class="p">:</span>
+<span class="linenos"> 8</span>                <span class="c1"># Row-major: outer stride = orig * inner_size, inner = orig.</span>
+<span class="linenos"> 9</span>                <span class="n">t_strides</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim_id</span><span class="p">,</span> <span class="n">orig_stride</span><span class="p">)</span>               <span class="c1"># inner</span>
+<span class="linenos">10</span>                <span class="n">t_strides</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dim_id</span><span class="p">,</span> <span class="n">orig_stride</span> <span class="o">*</span> <span class="n">inner_size</span><span class="p">)</span>  <span class="c1"># outer</span>
 </pre></div>
 </div>
 </div>
@@ -414,37 +415,51 @@ Afterwards we multiply the size of the respective tensor (e.g. the rightmost) wi
 <span class="linenos">13</span>                <span class="n">a_is_outer_dim</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="linenos">14</span>            <span class="k">elif</span> <span class="n">stride_b</span> <span class="o">==</span> <span class="n">stride_a</span> <span class="o">*</span> <span class="n">size_a</span><span class="p">:</span>
 <span class="linenos">15</span>                <span class="n">b_is_outer_dim</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="linenos">16</span>            <span class="k">else</span><span class="p">:</span>
+<span class="linenos">17</span>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">18</span>                    <span class="sa">f</span><span class="s2">&quot;Dimensions </span><span class="si">{</span><span class="n">dim_id_a</span><span class="si">}</span><span class="s2"> (stride=</span><span class="si">{</span><span class="n">stride_a</span><span class="si">}</span><span class="s2">, size=</span><span class="si">{</span><span class="n">size_a</span><span class="si">}</span><span class="s2">) and &quot;</span>
+<span class="linenos">19</span>                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim_id_b</span><span class="si">}</span><span class="s2"> (stride=</span><span class="si">{</span><span class="n">stride_b</span><span class="si">}</span><span class="s2">, size=</span><span class="si">{</span><span class="n">size_b</span><span class="si">}</span><span class="s2">) are not &quot;</span>
+<span class="linenos">20</span>                    <span class="sa">f</span><span class="s2">&quot;memory-contiguous in tensor </span><span class="si">{</span><span class="n">tensor_id</span><span class="si">}</span><span class="s2">.&quot;</span>
+<span class="linenos">21</span>                <span class="p">)</span>
+<span class="linenos">22</span>        <span class="k">if</span> <span class="n">a_is_outer_dim</span> <span class="ow">and</span> <span class="n">b_is_outer_dim</span><span class="p">:</span>
+<span class="linenos">23</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">24</span>                <span class="sa">f</span><span class="s2">&quot;Dimensions </span><span class="si">{</span><span class="n">dim_id_a</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">dim_id_b</span><span class="si">}</span><span class="s2"> have inconsistent relative order &quot;</span>
+<span class="linenos">25</span>                <span class="sa">f</span><span class="s2">&quot;across tensors: some tensors have </span><span class="si">{</span><span class="n">dim_id_a</span><span class="si">}</span><span class="s2"> as outer, others have &quot;</span>
+<span class="linenos">26</span>                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim_id_b</span><span class="si">}</span><span class="s2"> as outer.&quot;</span>
+<span class="linenos">27</span>            <span class="p">)</span>
 </pre></div>
 </div>
 </div>
 <p>After this check we calculate the new stride for the fused dimension.</p>
 <div class="literal-block-wrapper docutils container" id="id15">
 <div class="code-block-caption"><span class="caption-text"><cite>Fuse dimensions: Stride calculation</cite></span><a class="headerlink" href="#id15" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>                    <span class="sa">f</span><span class="s2">&quot;Dimensions </span><span class="si">{</span><span class="n">dim_id_a</span><span class="si">}</span><span class="s2"> (stride=</span><span class="si">{</span><span class="n">stride_a</span><span class="si">}</span><span class="s2">, size=</span><span class="si">{</span><span class="n">size_a</span><span class="si">}</span><span class="s2">) and &quot;</span>
-<span class="linenos"> 2</span>                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim_id_b</span><span class="si">}</span><span class="s2"> (stride=</span><span class="si">{</span><span class="n">stride_b</span><span class="si">}</span><span class="s2">, size=</span><span class="si">{</span><span class="n">size_b</span><span class="si">}</span><span class="s2">) are not &quot;</span>
-<span class="linenos"> 3</span>                    <span class="sa">f</span><span class="s2">&quot;memory-contiguous in tensor </span><span class="si">{</span><span class="n">tensor_id</span><span class="si">}</span><span class="s2">.&quot;</span>
-<span class="linenos"> 4</span>                <span class="p">)</span>
-<span class="linenos"> 5</span>        <span class="k">if</span> <span class="n">a_is_outer_dim</span> <span class="ow">and</span> <span class="n">b_is_outer_dim</span><span class="p">:</span>
-<span class="linenos"> 6</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="linenos"> 7</span>                <span class="sa">f</span><span class="s2">&quot;Dimensions </span><span class="si">{</span><span class="n">dim_id_a</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">dim_id_b</span><span class="si">}</span><span class="s2"> have inconsistent relative order &quot;</span>
-<span class="linenos"> 8</span>                <span class="sa">f</span><span class="s2">&quot;across tensors: some tensors have </span><span class="si">{</span><span class="n">dim_id_a</span><span class="si">}</span><span class="s2"> as outer, others have &quot;</span>
-<span class="linenos"> 9</span>                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dim_id_b</span><span class="si">}</span><span class="s2"> as outer.&quot;</span>
-<span class="linenos">10</span>            <span class="p">)</span>
-<span class="linenos">11</span>
-<span class="linenos">12</span>        <span class="c1"># Step 2: update strides</span>
-<span class="linenos">13</span>        <span class="k">for</span> <span class="n">strides</span> <span class="ow">in</span> <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span><span class="p">:</span>
-<span class="linenos">14</span>            <span class="n">stride_a</span> <span class="o">=</span> <span class="n">strides</span><span class="p">[</span><span class="n">dim_id_a</span><span class="p">]</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="c1"># Step 2: update strides</span>
+<span class="linenos"> 2</span>        <span class="k">for</span> <span class="n">strides</span> <span class="ow">in</span> <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span><span class="p">:</span>
+<span class="linenos"> 3</span>            <span class="n">stride_a</span> <span class="o">=</span> <span class="n">strides</span><span class="p">[</span><span class="n">dim_id_a</span><span class="p">]</span>
+<span class="linenos"> 4</span>            <span class="n">stride_b</span> <span class="o">=</span> <span class="n">strides</span><span class="p">[</span><span class="n">dim_id_b</span><span class="p">]</span>
+<span class="linenos"> 5</span>            <span class="k">if</span> <span class="n">stride_a</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">stride_b</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<span class="linenos"> 6</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="linenos"> 7</span>            <span class="k">elif</span> <span class="n">stride_a</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<span class="linenos"> 8</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="n">stride_b</span>
+<span class="linenos"> 9</span>            <span class="k">elif</span> <span class="n">stride_b</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+<span class="linenos">10</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="n">stride_a</span>
+<span class="linenos">11</span>            <span class="k">else</span><span class="p">:</span>
+<span class="linenos">12</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">stride_a</span><span class="p">,</span> <span class="n">stride_b</span><span class="p">)</span>
+<span class="linenos">13</span>
+<span class="linenos">14</span>            <span class="n">strides</span><span class="p">[</span><span class="n">dim_id_a</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_stride</span>  <span class="c1"># keep a</span>
+<span class="linenos">15</span>            <span class="n">strides</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id_b</span><span class="p">)</span>          <span class="c1"># remove b</span>
 </pre></div>
 </div>
 </div>
 <p>Finally we store the fused dimension and the stride at the respective position and remove the previous indices.</p>
 <div class="literal-block-wrapper docutils container" id="id16">
 <div class="code-block-caption"><span class="caption-text"><cite>Fuse dimensions: Storing the new dimension</cite></span><a class="headerlink" href="#id16" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="mi">0</span>
-<span class="linenos">2</span>            <span class="k">elif</span> <span class="n">stride_a</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-<span class="linenos">3</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="n">stride_b</span>
-<span class="linenos">4</span>            <span class="k">elif</span> <span class="n">stride_b</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-<span class="linenos">5</span>                <span class="n">new_stride</span> <span class="o">=</span> <span class="n">stride_a</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>        <span class="c1"># Step 3: update per-dimension lists</span>
+<span class="linenos">2</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="p">[</span><span class="n">dim_id_a</span><span class="p">]</span> <span class="o">=</span> <span class="n">size_a</span> <span class="o">*</span> <span class="n">size_b</span>
+<span class="linenos">3</span>        <span class="c1"># remove dim_id_b entries (keep dim_id_a&#39;s type and exec)</span>
+<span class="linenos">4</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id_b</span><span class="p">)</span>
+<span class="linenos">5</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id_b</span><span class="p">)</span>
+<span class="linenos">6</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id_b</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -455,20 +470,26 @@ Afterwards we multiply the size of the respective tensor (e.g. the rightmost) wi
 That means the <code class="docutils literal notranslate"><span class="pre">i-th</span></code> entry of the result comes from the position <code class="docutils literal notranslate"><span class="pre">permutation[i]</span></code> in the original.</p>
 <div class="literal-block-wrapper docutils container" id="id17">
 <div class="code-block-caption"><span class="caption-text"><cite>Permute dimensions</cite></span><a class="headerlink" href="#id17" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dim_id_b</span><span class="p">)</span>
-<span class="linenos"> 2</span>
-<span class="linenos"> 3</span>    <span class="c1"># -----------------------------------------------------------------------</span>
-<span class="linenos"> 4</span>    <span class="c1"># Task 3c – permute_dims</span>
-<span class="linenos"> 5</span>    <span class="c1"># -----------------------------------------------------------------------</span>
-<span class="linenos"> 6</span>
-<span class="linenos"> 7</span>    <span class="k">def</span> <span class="nf">permute_dims</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">permutation</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]):</span>
-<span class="linenos"> 8</span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Reorder all per-dimension lists according to *permutation*.</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="k">def</span> <span class="nf">permute_dims</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">permutation</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]):</span>
+<span class="linenos"> 2</span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Reorder all per-dimension lists according to *permutation*.</span>
+<span class="linenos"> 3</span>
+<span class="linenos"> 4</span><span class="sd">        Follows torch.permute semantics: the i-th entry of the result comes</span>
+<span class="linenos"> 5</span><span class="sd">        from position permutation[i] in the original.</span>
+<span class="linenos"> 6</span><span class="sd">        &quot;&quot;&quot;</span>
+<span class="linenos"> 7</span>        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span>
+<span class="linenos"> 8</span>        <span class="n">ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="p">)</span>
 <span class="linenos"> 9</span>
-<span class="linenos">10</span><span class="sd">        Follows torch.permute semantics: the i-th entry of the result comes</span>
-<span class="linenos">11</span><span class="sd">        from position permutation[i] in the original.</span>
-<span class="linenos">12</span><span class="sd">        &quot;&quot;&quot;</span>
-<span class="linenos">13</span>        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span>
-<span class="linenos">14</span>        <span class="n">ndim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="p">)</span>
+<span class="linenos">10</span>        <span class="c1"># Check that permutation is valid</span>
+<span class="linenos">11</span>        <span class="k">if</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">permutation</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">ndim</span><span class="p">)):</span>
+<span class="linenos">12</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">13</span>                <span class="sa">f</span><span class="s2">&quot;permutation must be a permutation of [0, </span><span class="si">{</span><span class="n">ndim</span><span class="si">}</span><span class="s2">), got </span><span class="si">{</span><span class="n">permutation</span><span class="si">}</span><span class="s2">&quot;</span>
+<span class="linenos">14</span>            <span class="p">)</span>
+<span class="linenos">15</span>
+<span class="linenos">16</span>        <span class="c1"># Reorder all per-dimension lists according to the permutation</span>
+<span class="linenos">17</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">permutation</span><span class="p">]</span>
+<span class="linenos">18</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">permutation</span><span class="p">]</span>
+<span class="linenos">19</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">permutation</span><span class="p">]</span>
+<span class="linenos">20</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="p">[[</span><span class="n">t</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">permutation</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span><span class="p">]</span>
 </pre></div>
 </div>
 </div>
@@ -482,63 +503,58 @@ For the <code class="docutils literal notranslate"><span class="pre">PRIM</span>
 We select a dimension for each of the dimension types <code class="docutils literal notranslate"><span class="pre">M</span></code>, <code class="docutils literal notranslate"><span class="pre">N</span></code>, and <code class="docutils literal notranslate"><span class="pre">K</span></code>.</p>
 <div class="literal-block-wrapper docutils container" id="id18">
 <div class="code-block-caption"><span class="caption-text"><cite>Exec types: PRIM selection</cite></span><a class="headerlink" href="#id18" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="c1"># -----------------------------------------------------------------------</span>
-<span class="linenos"> 2</span>
-<span class="linenos"> 3</span>    <span class="k">def</span> <span class="nf">make_executable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="linenos"> 4</span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign exec types and permute dimensions for cuTile execution.</span>
-<span class="linenos"> 5</span>
-<span class="linenos"> 6</span><span class="sd">        Strategy:</span>
-<span class="linenos"> 7</span><span class="sd">        - PRIM: one M (smallest stride in input 0), one N (smallest stride</span>
-<span class="linenos"> 8</span><span class="sd">                in input 1), one K (smallest stride in input 0).</span>
-<span class="linenos"> 9</span><span class="sd">        - PAR:  all remaining M, N, C dimensions.</span>
-<span class="linenos">10</span><span class="sd">        - SEQ:  all remaining K dimensions.</span>
-<span class="linenos">11</span><span class="sd">        Then permute to [PAR..., SEQ..., PRIM...] and call verify().</span>
-<span class="linenos">12</span><span class="sd">        &quot;&quot;&quot;</span>
-<span class="linenos">13</span>        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span>
-<span class="linenos">14</span>
-<span class="linenos">15</span>        <span class="c1"># Step 1: reset any existing exec_types to SEQ</span>
-<span class="linenos">16</span>        <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">ExecType</span><span class="o">.</span><span class="n">SEQ</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_sizes</span><span class="p">)</span>
-<span class="linenos">17</span>
-<span class="linenos">18</span>        <span class="k">def</span> <span class="nf">_pick_prim</span><span class="p">(</span><span class="n">dim_type</span><span class="p">:</span> <span class="n">DimType</span><span class="p">,</span> <span class="n">tensor_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="linenos">19</span><span class="w">            </span><span class="sd">&quot;&quot;&quot;Picks the candidate with the smallest non-zero stride in tensor *tensor_idx*.</span>
-<span class="linenos">20</span><span class="sd">            &quot;&quot;&quot;</span>
-<span class="linenos">21</span>            <span class="n">best_idx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
-<span class="linenos">22</span>            <span class="n">best_stride</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
-<span class="linenos">23</span>            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">dt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">):</span>
-<span class="linenos">24</span>                <span class="k">if</span> <span class="n">dt</span> <span class="o">!=</span> <span class="n">dim_type</span><span class="p">:</span>
-<span class="linenos">25</span>                    <span class="c1"># wrong dim_type, skip</span>
-<span class="linenos">26</span>                    <span class="k">continue</span>
-<span class="linenos">27</span>                <span class="n">stride</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span><span class="p">[</span><span class="n">tensor_idx</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
-<span class="linenos">28</span>                <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">stride</span> <span class="o">&lt;</span> <span class="n">best_stride</span><span class="p">:</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="k">def</span> <span class="nf">_pick_prim</span><span class="p">(</span><span class="n">dim_type</span><span class="p">:</span> <span class="n">DimType</span><span class="p">,</span> <span class="n">tensor_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="linenos"> 2</span><span class="w">            </span><span class="sd">&quot;&quot;&quot;Picks the candidate with the smallest non-zero stride in tensor *tensor_idx*.</span>
+<span class="linenos"> 3</span><span class="sd">            &quot;&quot;&quot;</span>
+<span class="linenos"> 4</span>            <span class="n">best_idx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+<span class="linenos"> 5</span>            <span class="n">best_stride</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+<span class="linenos"> 6</span>            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">dt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">):</span>
+<span class="linenos"> 7</span>                <span class="k">if</span> <span class="n">dt</span> <span class="o">!=</span> <span class="n">dim_type</span><span class="p">:</span>
+<span class="linenos"> 8</span>                    <span class="c1"># wrong dim_type, skip</span>
+<span class="linenos"> 9</span>                    <span class="k">continue</span>
+<span class="linenos">10</span>                <span class="n">stride</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">strides</span><span class="p">[</span><span class="n">tensor_idx</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+<span class="linenos">11</span>                <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">stride</span> <span class="o">&lt;</span> <span class="n">best_stride</span><span class="p">:</span>
+<span class="linenos">12</span>                    <span class="n">best_stride</span> <span class="o">=</span> <span class="n">stride</span>
+<span class="linenos">13</span>                    <span class="n">best_idx</span> <span class="o">=</span> <span class="n">i</span>
+<span class="linenos">14</span>            <span class="k">if</span> <span class="n">best_idx</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+<span class="linenos">15</span>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">16</span>                    <span class="sa">f</span><span class="s2">&quot;No </span><span class="si">{</span><span class="n">dim_type</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> dimension found in config.&quot;</span><span class="p">)</span>
+<span class="linenos">17</span>            <span class="k">return</span> <span class="n">best_idx</span>
+<span class="linenos">18</span>
+<span class="linenos">19</span>        <span class="c1"># Step 2: assign PRIM dims based on the picking strategy</span>
+<span class="linenos">20</span>        <span class="n">prim_m</span> <span class="o">=</span> <span class="n">_pick_prim</span><span class="p">(</span><span class="n">DimType</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># input 0 for M</span>
+<span class="linenos">21</span>        <span class="n">prim_n</span> <span class="o">=</span> <span class="n">_pick_prim</span><span class="p">(</span><span class="n">DimType</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># input 1 for N</span>
+<span class="linenos">22</span>        <span class="n">prim_k</span> <span class="o">=</span> <span class="n">_pick_prim</span><span class="p">(</span><span class="n">DimType</span><span class="o">.</span><span class="n">K</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># input 0 for K</span>
+<span class="linenos">23</span>        <span class="n">prim_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">prim_m</span><span class="p">,</span> <span class="n">prim_n</span><span class="p">,</span> <span class="n">prim_k</span><span class="p">}</span>
 </pre></div>
 </div>
 </div>
 <p>After assigning the <code class="docutils literal notranslate"><span class="pre">PRIM</span></code> execution types, we once again loop over all dimensions and change all dimensions to a <code class="docutils literal notranslate"><span class="pre">PAR</span></code> execution type that aren’t of dimension type <code class="docutils literal notranslate"><span class="pre">K</span></code>.</p>
 <div class="literal-block-wrapper docutils container" id="id19">
 <div class="code-block-caption"><span class="caption-text"><cite>Exec types: PAR assignments</cite></span><a class="headerlink" href="#id19" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>            <span class="k">if</span> <span class="n">best_idx</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-<span class="linenos">2</span>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="linenos">3</span>                    <span class="sa">f</span><span class="s2">&quot;No </span><span class="si">{</span><span class="n">dim_type</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> dimension found in config.&quot;</span><span class="p">)</span>
-<span class="linenos">4</span>            <span class="k">return</span> <span class="n">best_idx</span>
-<span class="linenos">5</span>
-<span class="linenos">6</span>        <span class="c1"># Step 2: assign PRIM dims based on the picking strategy</span>
-<span class="linenos">7</span>        <span class="n">prim_m</span> <span class="o">=</span> <span class="n">_pick_prim</span><span class="p">(</span><span class="n">DimType</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># input 0 for M</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>        <span class="c1"># Step 3: assign exec types</span>
+<span class="linenos">2</span>        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">dt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">):</span>
+<span class="linenos">3</span>            <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">prim_set</span><span class="p">:</span>
+<span class="linenos">4</span>                <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span>
+<span class="linenos">5</span>            <span class="k">elif</span> <span class="n">dt</span> <span class="o">!=</span> <span class="n">DimType</span><span class="o">.</span><span class="n">K</span><span class="p">:</span>
+<span class="linenos">6</span>                <span class="c1"># M, N, C dims that are not PRIM can be PAR</span>
+<span class="linenos">7</span>                <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span>
+<span class="linenos">8</span>            <span class="c1"># else: remaining K dims stay SEQ</span>
 </pre></div>
 </div>
 </div>
 <p>The last step is to move the <code class="docutils literal notranslate"><span class="pre">SEQ</span></code> dimensions to the leftmost positions and the <code class="docutils literal notranslate"><span class="pre">PRIM</span></code> dimensions to the rightmost positions.
 We verify the new execution types with the <a class="reference internal" href="#verification"><span class="std std-ref">verify</span></a> function.</p>
 <div class="literal-block-wrapper docutils container" id="id20">
-<div class="code-block-caption"><span class="caption-text"><cite>Exec types: PAR assignments</cite></span><a class="headerlink" href="#id20" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>        <span class="n">prim_set</span> <span class="o">=</span> <span class="p">{</span><span class="n">prim_m</span><span class="p">,</span> <span class="n">prim_n</span><span class="p">,</span> <span class="n">prim_k</span><span class="p">}</span>
-<span class="linenos">2</span>
-<span class="linenos">3</span>        <span class="c1"># Step 3: assign exec types</span>
-<span class="linenos">4</span>        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">dt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">):</span>
-<span class="linenos">5</span>            <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">prim_set</span><span class="p">:</span>
-<span class="linenos">6</span>                <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span>
-<span class="linenos">7</span>            <span class="k">elif</span> <span class="n">dt</span> <span class="o">!=</span> <span class="n">DimType</span><span class="o">.</span><span class="n">K</span><span class="p">:</span>
-<span class="linenos">8</span>                <span class="c1"># M, N, C dims that are not PRIM can be PAR</span>
-<span class="linenos">9</span>                <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span>
+<div class="code-block-caption"><span class="caption-text"><cite>Exec types: SEQ and PRIM reordering</cite></span><a class="headerlink" href="#id20" title="Link to this code"></a></div>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>        <span class="c1"># Step 4: Permute to order: PAR -&gt; SEQ -&gt; PRIM</span>
+<span class="linenos">2</span>        <span class="n">par_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+<span class="linenos">3</span>            <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span><span class="p">]</span>
+<span class="linenos">4</span>        <span class="n">seq_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+<span class="linenos">5</span>            <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">SEQ</span><span class="p">]</span>
+<span class="linenos">6</span>        <span class="n">prim_ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+<span class="linenos">7</span>            <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span><span class="p">]</span>
+<span class="linenos">8</span>        <span class="bp">self</span><span class="o">.</span><span class="n">permute_dims</span><span class="p">(</span><span class="n">par_ids</span> <span class="o">+</span> <span class="n">seq_ids</span> <span class="o">+</span> <span class="n">prim_ids</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -550,46 +566,54 @@ C tensor: M rightmost</p>
 <h3>e) Verification<a class="headerlink" href="#e-verification" title="Link to this heading"></a></h3>
 <p>The <code class="docutils literal notranslate"><span class="pre">verify</span></code> function checks the executability of the config object.
 We perform several checks in order to guarantee that a config object is executable.</p>
-<p>First, we verify that no dimensiony of type <code class="docutils literal notranslate"><span class="pre">K</span></code> has the <code class="docutils literal notranslate"><span class="pre">PAR</span></code> execution type assigned.</p>
+<p>First, we verify that no dimension of type <code class="docutils literal notranslate"><span class="pre">K</span></code> has the <code class="docutils literal notranslate"><span class="pre">PAR</span></code> execution type assigned.</p>
 <div class="literal-block-wrapper docutils container" id="id21">
 <div class="code-block-caption"><span class="caption-text"><cite>Verify: No PAR assignments for K types</cite></span><a class="headerlink" href="#id21" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>        <span class="bp">self</span><span class="o">.</span><span class="n">verify</span><span class="p">()</span>
-<span class="linenos">2</span>
-<span class="linenos">3</span>    <span class="c1"># -----------------------------------------------------------------------</span>
-<span class="linenos">4</span>    <span class="c1"># Task 3e - verify</span>
-<span class="linenos">5</span>    <span class="c1"># -----------------------------------------------------------------------</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span>        <span class="c1"># 1. No K dimension may have exec_type = PAR.</span>
+<span class="linenos">2</span>        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">et</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">,</span> <span class="n">exec_types</span><span class="p">)):</span>
+<span class="linenos">3</span>            <span class="k">if</span> <span class="n">dt</span> <span class="o">==</span> <span class="n">DimType</span><span class="o">.</span><span class="n">K</span> <span class="ow">and</span> <span class="n">et</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span><span class="p">:</span>
+<span class="linenos">4</span>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">5</span>                    <span class="sa">f</span><span class="s2">&quot;Dimension </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> is K but has exec_type PAR – K dims cannot be parallelised.&quot;</span>
+<span class="linenos">6</span>                <span class="p">)</span>
 </pre></div>
 </div>
 </div>
 <p>Then we verify the dimension order.</p>
 <div class="literal-block-wrapper docutils container" id="id22">
 <div class="code-block-caption"><span class="caption-text"><cite>Verify: SEQ, PAR, PRIM ordering</cite></span><a class="headerlink" href="#id22" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="k">def</span> <span class="nf">verify</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="linenos"> 2</span><span class="w">        </span><span class="sd">&quot;&quot;&quot;Check that the config is executable. Raises ValueError if not.&quot;&quot;&quot;</span>
-<span class="linenos"> 3</span>        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span>
-<span class="linenos"> 4</span>        <span class="n">exec_types</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">exec_types</span>
-<span class="linenos"> 5</span>
-<span class="linenos"> 6</span>        <span class="c1"># 1. No K dimension may have exec_type = PAR.</span>
-<span class="linenos"> 7</span>        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">dt</span><span class="p">,</span> <span class="n">et</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">,</span> <span class="n">exec_types</span><span class="p">)):</span>
-<span class="linenos"> 8</span>            <span class="k">if</span> <span class="n">dt</span> <span class="o">==</span> <span class="n">DimType</span><span class="o">.</span><span class="n">K</span> <span class="ow">and</span> <span class="n">et</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span><span class="p">:</span>
-<span class="linenos"> 9</span>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="linenos">10</span>                    <span class="sa">f</span><span class="s2">&quot;Dimension </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> is K but has exec_type PAR – K dims cannot be parallelised.&quot;</span>
-<span class="linenos">11</span>                <span class="p">)</span>
-<span class="linenos">12</span>
-<span class="linenos">13</span>        <span class="c1"># Helper function: find last index of exec_type et, or -1 if not found;</span>
-<span class="linenos">14</span>        <span class="k">def</span> <span class="nf">last</span><span class="p">(</span><span class="n">et</span><span class="p">):</span> <span class="k">return</span> <span class="nb">max</span><span class="p">(</span>
-<span class="linenos">15</span>            <span class="p">(</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">et</span><span class="p">),</span> <span class="n">default</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
-<span class="linenos">16</span>
-<span class="linenos">17</span>        <span class="c1"># Helper function: find first index of exec_type et, or len(exec_types) if not found;</span>
-<span class="linenos">18</span>        <span class="k">def</span> <span class="nf">first</span><span class="p">(</span><span class="n">et</span><span class="p">):</span> <span class="k">return</span> <span class="nb">next</span><span class="p">(</span>
-<span class="linenos">19</span>            <span class="p">(</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">et</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_types</span><span class="p">))</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="c1"># Helper function: find last index of exec_type et, or -1 if not found;</span>
+<span class="linenos"> 2</span>        <span class="k">def</span> <span class="nf">last</span><span class="p">(</span><span class="n">et</span><span class="p">):</span> <span class="k">return</span> <span class="nb">max</span><span class="p">(</span>
+<span class="linenos"> 3</span>            <span class="p">(</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">et</span><span class="p">),</span> <span class="n">default</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos"> 4</span>
+<span class="linenos"> 5</span>        <span class="c1"># Helper function: find first index of exec_type et, or len(exec_types) if not found;</span>
+<span class="linenos"> 6</span>        <span class="k">def</span> <span class="nf">first</span><span class="p">(</span><span class="n">et</span><span class="p">):</span> <span class="k">return</span> <span class="nb">next</span><span class="p">(</span>
+<span class="linenos"> 7</span>            <span class="p">(</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">et</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_types</span><span class="p">))</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span>        <span class="n">last_par</span> <span class="o">=</span> <span class="n">last</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span><span class="p">)</span>
+<span class="linenos">10</span>        <span class="n">first_seq</span> <span class="o">=</span> <span class="n">first</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">SEQ</span><span class="p">)</span>
+<span class="linenos">11</span>        <span class="n">last_seq</span> <span class="o">=</span> <span class="n">last</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">SEQ</span><span class="p">)</span>
+<span class="linenos">12</span>        <span class="n">first_prim</span> <span class="o">=</span> <span class="n">first</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span><span class="p">)</span>
+<span class="linenos">13</span>
+<span class="linenos">14</span>        <span class="c1"># 2. All SEQ dims must appear left of all PRIM dims.</span>
+<span class="linenos">15</span>        <span class="k">if</span> <span class="n">last_seq</span> <span class="o">&gt;</span> <span class="n">first_prim</span><span class="p">:</span>
+<span class="linenos">16</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">17</span>                <span class="sa">f</span><span class="s2">&quot;SEQ dimension at index </span><span class="si">{</span><span class="n">last_seq</span><span class="si">}</span><span class="s2"> appears after PRIM dimension &quot;</span>
+<span class="linenos">18</span>                <span class="sa">f</span><span class="s2">&quot;at index </span><span class="si">{</span><span class="n">first_prim</span><span class="si">}</span><span class="s2">. All SEQ dims must be left of all PRIM dims.&quot;</span>
+<span class="linenos">19</span>            <span class="p">)</span>
 <span class="linenos">20</span>
-<span class="linenos">21</span>        <span class="n">last_par</span> <span class="o">=</span> <span class="n">last</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">PAR</span><span class="p">)</span>
-<span class="linenos">22</span>        <span class="n">first_seq</span> <span class="o">=</span> <span class="n">first</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">SEQ</span><span class="p">)</span>
-<span class="linenos">23</span>        <span class="n">last_seq</span> <span class="o">=</span> <span class="n">last</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">SEQ</span><span class="p">)</span>
-<span class="linenos">24</span>        <span class="n">first_prim</span> <span class="o">=</span> <span class="n">first</span><span class="p">(</span><span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span><span class="p">)</span>
-<span class="linenos">25</span>
-<span class="linenos">26</span>        <span class="c1"># 2. All SEQ dims must appear left of all PRIM dims.</span>
+<span class="linenos">21</span>        <span class="c1"># 3. All PAR dims must appear left of all SEQ dims.</span>
+<span class="linenos">22</span>        <span class="k">if</span> <span class="n">last_par</span> <span class="o">&gt;</span> <span class="n">first_seq</span><span class="p">:</span>
+<span class="linenos">23</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">24</span>                <span class="sa">f</span><span class="s2">&quot;PAR dimension at index </span><span class="si">{</span><span class="n">last_par</span><span class="si">}</span><span class="s2"> appears after SEQ dimension &quot;</span>
+<span class="linenos">25</span>                <span class="sa">f</span><span class="s2">&quot;at index </span><span class="si">{</span><span class="n">first_seq</span><span class="si">}</span><span class="s2">. All PAR dims must be left of all SEQ dims.&quot;</span>
+<span class="linenos">26</span>            <span class="p">)</span>
+<span class="linenos">27</span>
+<span class="linenos">28</span>        <span class="c1"># 4. Rightmost dims must be PRIM and include at least one M, N, K.</span>
+<span class="linenos">29</span>        <span class="c1"># Get the indices of all PRIM dims</span>
+<span class="linenos">30</span>        <span class="n">prim_indices</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+<span class="linenos">31</span>            <span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span><span class="p">]</span>
+<span class="linenos">32</span>        <span class="k">if</span> <span class="ow">not</span> <span class="n">prim_indices</span><span class="p">:</span>
+<span class="linenos">33</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No PRIM dimensions found.&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -597,28 +621,21 @@ We perform several checks in order to guarantee that a config object is executab
 We also check their continuity in memory.</p>
 <div class="literal-block-wrapper docutils container" id="id23">
 <div class="code-block-caption"><span class="caption-text"><cite>Verify: Tensor PRIM dimensions</cite></span><a class="headerlink" href="#id23" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="linenos"> 2</span>                <span class="sa">f</span><span class="s2">&quot;SEQ dimension at index </span><span class="si">{</span><span class="n">last_seq</span><span class="si">}</span><span class="s2"> appears after PRIM dimension &quot;</span>
-<span class="linenos"> 3</span>                <span class="sa">f</span><span class="s2">&quot;at index </span><span class="si">{</span><span class="n">first_prim</span><span class="si">}</span><span class="s2">. All SEQ dims must be left of all PRIM dims.&quot;</span>
-<span class="linenos"> 4</span>            <span class="p">)</span>
-<span class="linenos"> 5</span>
-<span class="linenos"> 6</span>        <span class="c1"># 3. All PAR dims must appear left of all SEQ dims.</span>
-<span class="linenos"> 7</span>        <span class="k">if</span> <span class="n">last_par</span> <span class="o">&gt;</span> <span class="n">first_seq</span><span class="p">:</span>
-<span class="linenos"> 8</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="linenos"> 9</span>                <span class="sa">f</span><span class="s2">&quot;PAR dimension at index </span><span class="si">{</span><span class="n">last_par</span><span class="si">}</span><span class="s2"> appears after SEQ dimension &quot;</span>
-<span class="linenos">10</span>                <span class="sa">f</span><span class="s2">&quot;at index </span><span class="si">{</span><span class="n">first_seq</span><span class="si">}</span><span class="s2">. All PAR dims must be left of all SEQ dims.&quot;</span>
-<span class="linenos">11</span>            <span class="p">)</span>
-<span class="linenos">12</span>
-<span class="linenos">13</span>        <span class="c1"># 4. Rightmost dims must be PRIM and include at least one M, N, K.</span>
-<span class="linenos">14</span>        <span class="c1"># Get the indices of all PRIM dims</span>
-<span class="linenos">15</span>        <span class="n">prim_indices</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">e</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
-<span class="linenos">16</span>            <span class="n">exec_types</span><span class="p">)</span> <span class="k">if</span> <span class="n">e</span> <span class="o">==</span> <span class="n">ExecType</span><span class="o">.</span><span class="n">PRIM</span><span class="p">]</span>
-<span class="linenos">17</span>        <span class="k">if</span> <span class="ow">not</span> <span class="n">prim_indices</span><span class="p">:</span>
-<span class="linenos">18</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No PRIM dimensions found.&quot;</span><span class="p">)</span>
-<span class="linenos">19</span>
-<span class="linenos">20</span>        <span class="c1"># Check if prim_indices are contiguous at the right end of the config</span>
-<span class="linenos">21</span>        <span class="n">expected</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">prim_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_types</span><span class="p">)))</span>
-<span class="linenos">22</span>        <span class="k">if</span> <span class="n">prim_indices</span> <span class="o">!=</span> <span class="n">expected</span><span class="p">:</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>        <span class="c1"># Check if prim_indices are contiguous at the right end of the config</span>
+<span class="linenos"> 2</span>        <span class="n">expected</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">prim_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_types</span><span class="p">)))</span>
+<span class="linenos"> 3</span>        <span class="k">if</span> <span class="n">prim_indices</span> <span class="o">!=</span> <span class="n">expected</span><span class="p">:</span>
+<span class="linenos"> 4</span>            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos"> 5</span>                <span class="sa">f</span><span class="s2">&quot;PRIM dimensions </span><span class="si">{</span><span class="n">prim_indices</span><span class="si">}</span><span class="s2"> must be contiguous at the right end of the config.&quot;</span>
+<span class="linenos"> 6</span>            <span class="p">)</span>
+<span class="linenos"> 7</span>
+<span class="linenos"> 8</span>        <span class="c1"># Check that the PRIM dimensions include at least one M, N, and K</span>
+<span class="linenos"> 9</span>        <span class="n">prim_dim_types</span> <span class="o">=</span> <span class="p">{</span><span class="n">cfg</span><span class="o">.</span><span class="n">dim_types</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">prim_indices</span><span class="p">}</span>
+<span class="linenos">10</span>        <span class="k">for</span> <span class="n">required</span> <span class="ow">in</span> <span class="p">(</span><span class="n">DimType</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="n">DimType</span><span class="o">.</span><span class="n">N</span><span class="p">,</span> <span class="n">DimType</span><span class="o">.</span><span class="n">K</span><span class="p">):</span>
+<span class="linenos">11</span>            <span class="k">if</span> <span class="n">required</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">prim_dim_types</span><span class="p">:</span>
+<span class="linenos">12</span>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="linenos">13</span>                    <span class="sa">f</span><span class="s2">&quot;PRIM dimensions must include at least one </span><span class="si">{</span><span class="n">required</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> dimension, &quot;</span>
+<span class="linenos">14</span>                    <span class="sa">f</span><span class="s2">&quot;but only found: </span><span class="si">{</span><span class="p">[</span><span class="n">dt</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">dt</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">prim_dim_types</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+<span class="linenos">15</span>                <span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -646,26 +663,29 @@ We also check their continuity in memory.</p>
 </section>
 <section id="b-optimized-config">
 <h3>b) Optimized Config<a class="headerlink" href="#b-optimized-config" title="Link to this heading"></a></h3>
-<p>To optimize the initial config object we made two transformations.</p>
-<p>First, we split the <code class="docutils literal notranslate"><span class="pre">N</span></code> dimension into <code class="docutils literal notranslate"><span class="pre">n1=4</span></code> and <code class="docutils literal notranslate"><span class="pre">n2=1024</span></code>
-Second, we split the <code class="docutils literal notranslate"><span class="pre">M</span></code> dimension into <code class="docutils literal notranslate"><span class="pre">m1=4</span></code> and <code class="docutils literal notranslate"><span class="pre">m2=1024</span></code></p>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Config(
-    data_type  = DataType.FLOAT16
-    prim_main  = PrimType.GEMM
-    prim_last  = LastType.NONE
-    prim_first = FirstType.ZERO
-    dim_types  = [&#39;C&#39;, &#39;M&#39;, &#39;N&#39;, &#39;M&#39;, &#39;K&#39;, &#39;N&#39;]
-    exec_types = [&#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;]
-    dim_sizes  = [4, 4, 4, 1024, 4096, 1024]
-    strides[0] = [16777216, 4194304, 0, 4096, 1, 0]
-    strides[1] = [16777216, 0, 1024, 0, 4096, 1]
-    strides[2] = [16777216, 4194304, 1024, 4096, 0, 1]
-)
-</pre></div>
-</div>
+<p>To optimize the initial config object we made five transformations.</p>
+<p>First, we split the <code class="docutils literal notranslate"><span class="pre">N</span></code> dimension into <code class="docutils literal notranslate"><span class="pre">n1=4</span></code> and <code class="docutils literal notranslate"><span class="pre">n2=1024</span></code>.
+Second, we split the <code class="docutils literal notranslate"><span class="pre">M</span></code> dimension into <code class="docutils literal notranslate"><span class="pre">m1=4</span></code> and <code class="docutils literal notranslate"><span class="pre">m2=1024</span></code>.
+To incorporate the tile sizes directly into the configuration, we additionally split the three PRIM dimensions:
+the <code class="docutils literal notranslate"><span class="pre">M</span></code> inner dimension (1024) into <code class="docutils literal notranslate"><span class="pre">(16,</span> <span class="pre">tM=64)</span></code>, the <code class="docutils literal notranslate"><span class="pre">K</span></code> dimension (4096) into <code class="docutils literal notranslate"><span class="pre">(64,</span> <span class="pre">tK=64)</span></code>, and the <code class="docutils literal notranslate"><span class="pre">N</span></code> inner dimension (1024) into <code class="docutils literal notranslate"><span class="pre">(16,</span> <span class="pre">tN=64)</span></code>.
+After calling <code class="docutils literal notranslate"><span class="pre">make_executable()</span></code>, the PRIM dimensions carry exactly the tile sizes, so no separate heuristic is needed to derive them.</p>
 <p>We decided to go with <code class="docutils literal notranslate"><span class="pre">n2=m2=1024</span></code> because with these dimensions we use the L2 cache optimally.
 After this dimension splitting we have <code class="docutils literal notranslate"><span class="pre">4194304</span> <span class="pre">bytes</span></code> left in the L2 cache.
 With a bigger dimension size we would not be able to keep the whole computation within the L2 cache.</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Config(
+  data_type  = DataType.FLOAT16
+  prim_main  = PrimType.GEMM
+  prim_last  = LastType.NONE
+  prim_first = FirstType.ZERO
+  dim_types  = [&#39;C&#39;, &#39;M&#39;, &#39;M&#39;, &#39;N&#39;, &#39;N&#39;, &#39;K&#39;, &#39;M&#39;, &#39;K&#39;, &#39;N&#39;]
+  exec_types = [&#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;PAR&#39;, &#39;SEQ&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;, &#39;PRIM&#39;]
+  dim_sizes  = [4, 4, 16, 4, 16, 64, 64, 64, 64]
+  strides[0] = [16777216, 4194304, 262144, 0, 0, 64, 4096, 1, 0]
+  strides[1] = [16777216, 0, 0, 1024, 64, 262144, 0, 4096, 1]
+  strides[2] = [16777216, 4194304, 262144, 1024, 64, 0, 4096, 0, 1]
+)
+</pre></div>
+</div>
 </section>
 <section id="c-optimized-kernel">
 <h3>c) Optimized Kernel<a class="headerlink" href="#c-optimized-kernel" title="Link to this heading"></a></h3>
@@ -717,18 +737,17 @@ With a bigger dimension size we would not be able to keep the whole computation 
 <p>Then we load the tiles and calculate our batched matrix multiplication.</p>
 <div class="literal-block-wrapper docutils container" id="id26">
 <div class="code-block-caption"><span class="caption-text"><cite>Batched Matrix Multiplication</cite></span><a class="headerlink" href="#id26" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="n">m_tile</span> <span class="o">=</span> <span class="n">m2</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">m_in_size</span><span class="p">,</span> <span class="n">tM</span><span class="p">)</span> <span class="o">+</span> <span class="n">m1</span>
-<span class="linenos"> 2</span>    <span class="n">n_tile</span> <span class="o">=</span> <span class="n">n2</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">n_in_size</span><span class="p">,</span> <span class="n">tN</span><span class="p">)</span> <span class="o">+</span> <span class="n">n1</span>
-<span class="linenos"> 3</span>
-<span class="linenos"> 4</span>    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-<span class="linenos"> 5</span>
-<span class="linenos"> 6</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
-<span class="linenos"> 7</span>        <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">m_tile</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
-<span class="linenos"> 8</span>        <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">n_tile</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
-<span class="linenos"> 9</span>        
-<span class="linenos">10</span>        <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">)),</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">)),</span> <span class="n">acc</span><span class="p">)</span>
-<span class="linenos">11</span>
-<span class="linenos">12</span>    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">m_tile</span><span class="p">,</span> <span class="n">n_tile</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">acc</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">)))</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>    <span class="c1"># combine L2 group and tile within L2 group to get global tile index</span>
+<span class="linenos"> 2</span>    <span class="n">m_tile</span> <span class="o">=</span> <span class="n">m2</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">m_in_size</span><span class="p">,</span> <span class="n">tM</span><span class="p">)</span> <span class="o">+</span> <span class="n">m1</span>
+<span class="linenos"> 3</span>    <span class="n">n_tile</span> <span class="o">=</span> <span class="n">n2</span> <span class="o">*</span> <span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">n_in_size</span><span class="p">,</span> <span class="n">tN</span><span class="p">)</span> <span class="o">+</span> <span class="n">n1</span>
+<span class="linenos"> 4</span>
+<span class="linenos"> 5</span>    <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tM</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span>    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">cdiv</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">tK</span><span class="p">)):</span>
+<span class="linenos"> 8</span>        <span class="n">tile_A</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">m_tile</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos"> 9</span>        <span class="n">tile_B</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">n_tile</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">),</span> <span class="n">padding_mode</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">PaddingMode</span><span class="o">.</span><span class="n">ZERO</span><span class="p">)</span>
+<span class="linenos">10</span>        
+<span class="linenos">11</span>        <span class="n">acc</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">mma</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_A</span><span class="p">,</span> <span class="p">(</span><span class="n">tM</span><span class="p">,</span> <span class="n">tK</span><span class="p">)),</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">tile_B</span><span class="p">,</span> <span class="p">(</span><span class="n">tK</span><span class="p">,</span> <span class="n">tN</span><span class="p">)),</span> <span class="n">acc</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>

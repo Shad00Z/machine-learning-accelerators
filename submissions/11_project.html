@@ -23,6 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="OLD: Project: cuTile for Local Diffusion" href="11_project_old.html" />
     <link rel="prev" title="Using the whole NPU" href="10_whole_npu.html" /> 
 </head>
 
@@ -58,42 +59,32 @@
 <li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
 <li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Project: cuTile for Local Diffusion</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#milestones">Milestones</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-problem">The Problem</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-model">The Model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-hardware">The Hardware</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#our-milestones">Our Milestones</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#milestone-0-sd-turbo-model">Milestone 0: SD-Turbo Model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#milestone-1-candidates-tiling">Milestone 1: Candidates + Tiling</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#resnet-block">Resnet Block</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#transformer-block">Transformer Block</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#fusing">Fusing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#tiling">Tiling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#milestone-1-fusion-candidates">Milestone 1: Fusion Candidates</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-resnet-block">The ResNet Block</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-transformer-block">The Transformer Block</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#milestone-2-fused-groupnorm-silu-kernel">Milestone 2: Fused GroupNorm + SiLU Kernel</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#groupnorm-shape-coverage">GroupNorm Shape Coverage</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#kernel-benchmark-and-profiling">Kernel Benchmark and Profiling</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#occupancy-is-not-the-bottleneck">Occupancy is not the bottleneck</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#batch-scaling-the-l2-boundary">Batch scaling: the L2 boundary</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#cutile-vs-torch-compile-across-batch-sizes">cuTile vs. torch.compile across batch sizes</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#real-shape-coverage-and-a-profitability-gate">Real-shape coverage and a profitability gate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#milestone-2-fused-groupnorm-silu">Milestone 2: Fused GroupNorm + SiLU</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#groupnorm-and-silu">GroupNorm and SiLU</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-two-pass-kernel">The Two-Pass Kernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#alternative-approaches">Alternative Approaches</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#benchmarks">Benchmarks</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#shape-coverage-and-the-profitability-gate">Shape coverage and the profitability gate</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#milestone-3-fused-layernorm-geglu-ffn">Milestone 3: Fused LayerNorm + GEGLU FFN</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#fusion-headroom-gpu-verified">Fusion headroom (GPU-verified)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#kernel-and-correctness">Kernel and correctness</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#result-fusion-does-not-beat-cublas-here">Result: fusion does not beat cuBLAS here</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#profiling-occupancy-bound-ncu">Profiling: occupancy-bound (NCU)</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#per-shape-tile-selection">Per-shape tile selection</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#profitability-gate-only-fuse-where-it-wins">Profitability gate: only fuse where it wins</a></li>
 </ul>
 </li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#milestone-4-end-to-end-evaluation">Milestone 4: End-to-end Evaluation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#milestone-5-gradio-ui">Milestone 5: Gradio UI</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="#test-execution">Test Execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html">OLD: Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project_old.html#test-execution">Test Execution</a></li>
 </ul>
 
         </div>
@@ -122,730 +113,300 @@
              
   <section id="project-cutile-for-local-diffusion">
 <h1>Project: cuTile for Local Diffusion<a class="headerlink" href="#project-cutile-for-local-diffusion" title="Link to this heading"></a></h1>
-<p>For the last three weeks of the machine-learning-accelerators course, we were asked to select a personal project.
-We have decided to optimize the denoising loop of a local text-to-image diffusion model.</p>
-<p>As our model of choice we have selected the <code class="docutils literal notranslate"><span class="pre">SD-Turbo</span></code> text-to-image model.
-The architecture of <code class="docutils literal notranslate"><span class="pre">SD-Turbo</span></code> is a U-Net.</p>
-<p>Each denoising step runs the whole U-Net, which, for the <code class="docutils literal notranslate"><span class="pre">SD-Turbo</span></code>, is built from 22 ResnetBlocks (and 16 transformer blocks).
-For our selected model, the operations within such a block are:</p>
-<ul class="simple">
-<li><p>GroupNorm,</p></li>
-<li><p>SiLU,</p></li>
-<li><p>Conv2d, and</p></li>
-<li><p>Linear.</p></li>
-</ul>
-<p>Further, on the transformer side there are:</p>
-<ul class="simple">
-<li><p>LayerNorm,</p></li>
-<li><p>GELU / GEGLU FFN, and</p></li>
-<li><p>the attention mechanism.</p></li>
-</ul>
-<p>Looking at these operations it becomes clear that there are a lot of memory transfers happening.
-Therefore, we plan to decrease the text-to-image time by fusing together several of these operations.
-That means we are optimizing the diffusion model with regard to memory bandwidth.</p>
-<section id="milestones">
-<h2>Milestones<a class="headerlink" href="#milestones" title="Link to this heading"></a></h2>
-<p>To follow a clear plan for these three weeks we came up with six milestones.</p>
+<p>For our final project, we wanted to see how much of a difference custom GPU kernels can make on a real model.
+We took SD-Turbo, a local text-to-image diffusion model from Stability AI, and spent three weeks trying to cut its inference latency with cuTile.
+Some optimizations paid off, while others worsened performance, but we learned a lot about the model, the hardware, and the optimization process.</p>
+<section id="the-problem">
+<h2>The Problem<a class="headerlink" href="#the-problem" title="Link to this heading"></a></h2>
+<p>A diffusion model generates images by iteratively denoising a random noise field, guided by a text prompt.
+Each denoising step runs a neural network whose blocks chain normalization, activation, and matrix multiplication in sequence.
+The obvious approach is to optimize each operation individually, but that ignores the memory traffic between them.
+Every kernel reads its input from memory, performs its computation, and writes its output back to memory.
+This data transfer is expensive and it is repeated for every operation in the chain.
+Fusing consecutive operations keeps intermediate results in registers or shared memory and eliminates memory round-trips.</p>
+<p>In our project, we wanted to optimize a local diffusion model with cuTile by identifying and fusing memory-bound operations in the diffusion process. But more on that later.
+First, we need to understand the model architecture and the hardware.</p>
+<section id="the-model">
+<h3>The Model<a class="headerlink" href="#the-model" title="Link to this heading"></a></h3>
+<p>The model is <code class="docutils literal notranslate"><span class="pre">SD-Turbo</span></code>, a distilled text-to-image model from Stability AI, available on <a class="reference external" href="https://huggingface.co/stabilityai/sd-turbo">HuggingFace</a>.
+It generates images in a single denoising step, which makes it a clean latency target, since there is no multi-step averaging to hide slow kernels.
+The simplified architecture is shown below.</p>
+<figure class="align-center">
+<a class="reference internal image-reference" href="../_images/model-architecture.png"><img alt="SD-Turbo Architecture" src="../_images/model-architecture.png" style="width: 80%;" />
+</a>
+</figure>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>A prompt is first encoded into a text embedding by the <em>Text Encoder</em>.
+The <em>U-Net</em> denoiser then uses that embedding to generate an image, running 22 ResNet blocks and 16 Transformer blocks on each denoising step.
+Finally, the <em>VAE Decoder</em> maps the denoised output to the final RGB image.</p>
+</section>
+<section id="the-hardware">
+<h3>The Hardware<a class="headerlink" href="#the-hardware" title="Link to this heading"></a></h3>
+<p>For the project we had access to a <a class="reference external" href="https://docs.nvidia.com/dgx/dgx-spark/hardware.html">DGX Spark</a>, a compact machine built for local AI workloads.
+It runs the NVIDIA GB10 Grace Blackwell Superchip with 128 GB of unified LPDDR5X memory at 273 GB/s, shared between the CPU and GPU.
+The GPU has 48 Streaming Multiprocessors (SMs) and 24 MiB of L2 cache.</p>
+<a class="reference internal image-reference" href="../_images/dgx-spark.png"><img alt="DGX Spark" class="align-center" src="../_images/dgx-spark.png" style="width: 30%;" />
+</a>
+</section>
+<section id="our-milestones">
+<h3>Our Milestones<a class="headerlink" href="#our-milestones" title="Link to this heading"></a></h3>
+<p>We split the three-week project into six milestones:</p>
 <ol class="arabic simple" start="0">
 <li><p>Set up the environment and install required dependencies.</p></li>
-<li><p>Inspect SD-Turbo model, identify fusion candidates, reason about tiling approaches, and build a roofline model.</p></li>
-<li><p>Implement and optimize fused GroupNorm + SiLU kernel (+ verify correctness via <code class="docutils literal notranslate"><span class="pre">torch.allclose</span></code> per block and benchmark).</p></li>
-<li><p>Implement and optimize fused LayerNorm + GEGLU FFN kernel (+ verify correctness via <code class="docutils literal notranslate"><span class="pre">torch.allclose</span></code> per block and benchmark).</p></li>
-<li><p>Patch both kernels into SD-Turbo and verify end-to-end image equivalence.</p></li>
+<li><p>Inspect SD-Turbo, identify fusion candidates, reason about tiling, and build a roofline model.</p></li>
+<li><p>Implement and optimize a fused GroupNorm + SiLU kernel.</p></li>
+<li><p>Implement and optimize a fused LayerNorm + GEGLU FFN kernel.</p></li>
+<li><p>Patch both kernels into SD-Turbo and verify end-to-end correctness.</p></li>
 <li><p>Build a Gradio UI for running the optimized model on the DGX Spark.</p></li>
 </ol>
-<p>Regarding benchmarking we plan to:</p>
-<ul class="simple">
-<li><p>compare against <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>,</p></li>
-<li><p>prove the approach with Nsight (bytes moved per step at each memory tier),</p></li>
-<li><p>keep track on the gain of each of our fusing approaches, and</p></li>
-<li><p>compare different tiling sizes and approaches.</p></li>
-</ul>
+<p>Each milestone includes benchmarks against the eager PyTorch baseline and <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>, across batch sizes and the full set of real U-Net shapes.</p>
+</section>
 </section>
 <section id="milestone-0-sd-turbo-model">
 <h2>Milestone 0: SD-Turbo Model<a class="headerlink" href="#milestone-0-sd-turbo-model" title="Link to this heading"></a></h2>
-<p>Additional requirements that are needed to generate images with the <code class="docutils literal notranslate"><span class="pre">SD-Turbo</span></code> model.</p>
+<p>The SD-Turbo pipeline needs a few libraries beyond a base PyTorch install.
+<code class="docutils literal notranslate"><span class="pre">diffusers</span></code> and <code class="docutils literal notranslate"><span class="pre">transformers</span></code> provide the model and text encoder; <code class="docutils literal notranslate"><span class="pre">accelerate</span></code> is a HuggingFace utility that suppresses dispatch warnings; <code class="docutils literal notranslate"><span class="pre">torchvision</span></code> handles image I/O.</p>
 <div class="literal-block-wrapper docutils container" id="id1">
 <div class="code-block-caption"><span class="caption-text">requirements</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>diffusers
 pip<span class="w"> </span>install<span class="w"> </span>transformers
-<span class="c1"># Silence warnings</span>
 pip<span class="w"> </span>install<span class="w"> </span>accelerate
 pip<span class="w"> </span>install<span class="w"> </span>torchvision
 </pre></div>
 </div>
 </div>
 </section>
-<section id="milestone-1-candidates-tiling">
-<h2>Milestone 1: Candidates + Tiling<a class="headerlink" href="#milestone-1-candidates-tiling" title="Link to this heading"></a></h2>
-<p>After installing the required libraries, we then inspected a resnet and a transformer block of the model.</p>
-<section id="resnet-block">
-<h3>Resnet Block<a class="headerlink" href="#resnet-block" title="Link to this heading"></a></h3>
+<section id="milestone-1-fusion-candidates">
+<h2>Milestone 1: Fusion Candidates<a class="headerlink" href="#milestone-1-fusion-candidates" title="Link to this heading"></a></h2>
+<p>Before writing any kernels, we needed to find where fusion would actually pay off.
+That meant inspecting the two main block types in the U-Net and building a roofline model to confirm which operations are worth targeting.
+To see what <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> generates for each block, we used <code class="docutils literal notranslate"><span class="pre">TORCH_LOGS=output_code</span></code>.
+We simply set it as an environment variable before compiling, which causes Inductor to print every kernel it emits to stdout.</p>
+<section id="the-resnet-block">
+<h3>The ResNet Block<a class="headerlink" href="#the-resnet-block" title="Link to this heading"></a></h3>
+<p>Each ResNet block follows the same pattern: GroupNorm and SiLU, a 3x3 convolution that mixes information across neighboring pixels, a time-embedding step that injects the current noise level into the block, and then the same sequence again.
+Finally, the block’s input is added back to its output as a residual connection.</p>
+<a class="reference internal image-reference" href="../_images/resnet-fusing-cands.png"><img alt="ResNet block with fusion candidates highlighted" class="align-center" src="../_images/resnet-fusing-cands.png" style="width: 60%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>Two fusion candidates stand out: the GroupNorm + SiLU pairs before and after the time-embedding.
+Running them as separate kernels means the full activation gets read and written twice per pair.
+At the top resolution (320 channels, 64x64 spatial), that activation is 2.5 MiB, so each unfused pair costs an unnecessary 5 MiB of memory traffic.
+Fusing both operations into a single kernel reduces that to one read and one write.</p>
+<p>The activation sizes vary with U-Net depth.
+As the network goes deeper, spatial resolution halves and channel count doubles at each step: 320 channels at 64x64, 640 at 32x32, 1280 at 16x16 and 8x8.
+Fewer spatial locations, but each one carries a richer feature representation.
+All of these shapes are candidates for the same fusion.</p>
+<a class="reference internal image-reference" href="../_images/roofline.svg"><img alt="Roofline model" class="align-center" src="../_images/roofline.svg" style="width: 80%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>GroupNorm and SiLU both sit close to the memory bandwidth ceiling and well below the compute roof, which means that they are bandwidth-bound.
+Fusing them reduces memory traffic without increasing compute requirements.</p>
+<p>In the kernel log, eager PyTorch dispatches 4 separate kernels for the GN+SiLU block.
+<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> already fuses the normalization and activation down to 3.
+Our cuTile kernel brings that to 2 (a stats pass and an apply pass), or 1 with a single-pass design.
+That is the bar we are working against.</p>
+</section>
+<section id="the-transformer-block">
+<h3>The Transformer Block<a class="headerlink" href="#the-transformer-block" title="Link to this heading"></a></h3>
+<p>The transformer block takes a sequence of tokens as input, where each token corresponds to one spatial location.
+In the model, tokens = height × width (the flattened spatial resolution from the previous ResNet layer) and dim = channels.</p>
+<p>The block runs LayerNorm + self-attention and LayerNorm + cross-attention first.
+Both attention operations showed up as fused kernels in the log, leaving little room to improve.</p>
+<a class="reference internal image-reference" href="../_images/transformer-fusing-cands.png"><img alt="Transformer block with fusion candidates highlighted" class="align-center" src="../_images/transformer-fusing-cands.png" style="width: 60%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>The feed-forward network at the end of the block is more promising.
+The kernel log revealed that Inductor emits the LayerNorm and the GEGLU gate as separate kernels, sandwiching two cuBLAS matmul calls:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">triton_</span><span class="o">...</span><span class="n">_native_layer_norm</span>      <span class="c1"># LayerNorm  (own kernel)</span>
+<span class="n">extern_kernels</span><span class="o">.</span><span class="n">addmm</span>              <span class="c1"># mm1 (cuBLAS)</span>
+<span class="n">triton_</span><span class="o">...</span><span class="n">_gelu_mul</span>               <span class="c1"># GEGLU gate (own kernel)</span>
+<span class="n">extern_kernels</span><span class="o">.</span><span class="n">addmm</span>              <span class="c1"># mm2 (cuBLAS)</span>
+</pre></div>
+</div>
+<p>Because cuBLAS handles the matmuls, Inductor cannot fold LayerNorm or GEGLU into them.
+The mm1 output is written to DRAM and read back by the gate kernel.</p>
+<p>The path to fusion is clear: use LayerNorm as a first touch going into mm1 and GEGLU as a last touch coming out of mm1, keeping the intermediate in registers and avoiding the DRAM round-trip entirely.</p>
+<p>The feed-forward expansion factor is 4, and GEGLU requires two projections (hidden and gate), so mm1 projects from [tokens, dim] to [tokens, 8*dim].
+At the top shape (tokens=4096, dim=320), that intermediate is 4096 x 2560 x 2 bytes (fp16) = 20 MiB.
+Writing it to DRAM and reading it back costs 40 MiB per FFN call.
+The fused kernel avoids that entirely.</p>
+</section>
+</section>
+<section id="milestone-2-fused-groupnorm-silu">
+<h2>Milestone 2: Fused GroupNorm + SiLU<a class="headerlink" href="#milestone-2-fused-groupnorm-silu" title="Link to this heading"></a></h2>
+<p>The first kernel to implement is the GroupNorm + SiLU fusion for the ResNet blocks.
+Before writing any cuTile code, it helps to understand what each operation computes and what data dependencies it creates.</p>
+<section id="groupnorm-and-silu">
+<h3>GroupNorm and SiLU<a class="headerlink" href="#groupnorm-and-silu" title="Link to this heading"></a></h3>
+<p>GroupNorm normalizes each group of channels independently.
+For each sample <code class="docutils literal notranslate"><span class="pre">n</span></code> and group <code class="docutils literal notranslate"><span class="pre">g</span></code>, it computes the mean and variance over all channels and spatial locations in the group, then normalizes and applies a learned affine transform:</p>
+<div class="math notranslate nohighlight">
+\[ \begin{align}\begin{aligned}\mu_g = \frac{1}{C_g \cdot H \cdot W} \sum_{c \in g} \sum_{h,w} x_{n,c,h,w}\\\hat{x}_{n,c,h,w} = \frac{x_{n,c,h,w} - \mu_g}{\sqrt{\sigma_g^2 + \varepsilon}}\\y_{n,c,h,w} = \gamma_c \cdot \hat{x}_{n,c,h,w} + \beta_c\end{aligned}\end{align} \]</div>
+<p>Stability AI fixed the number of groups at 32 during training, so with 320 channels each group covers exactly 10 channels.
+The key constraint is that every element in the group must be read before any single element can be normalized, since mean and variance span the whole group. A two-pass design is the direct consequence: the first pass computes the statistics, the second applies them.</p>
+<p>SiLU is simpler.
+Each output element depends only on the corresponding input:</p>
+<div class="math notranslate nohighlight">
+\[\text{SiLU}(x) = \frac{x}{1 + e^{-x}}\]</div>
+<p>There is no cross-element dependency, which makes it a natural last touch to fuse onto the normalization apply pass.</p>
+</section>
+<section id="the-two-pass-kernel">
+<h3>The Two-Pass Kernel<a class="headerlink" href="#the-two-pass-kernel" title="Link to this heading"></a></h3>
+<p><strong>Pass 1: stats kernel</strong> – grid of <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">*</span> <span class="pre">G</span> <span class="pre">=</span> <span class="pre">32</span></code> blocks, one per group.</p>
+<p>Each block iterates over its <code class="docutils literal notranslate"><span class="pre">channels_per_group</span> <span class="pre">=</span> <span class="pre">10</span></code> channels, accumulating the sum and sum-of-squares over the full H*W spatial extent.
+From these it derives the group mean and inverse standard deviation, then stores them to DRAM for pass 2.</p>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">ResnetBlock2D</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>ResnetBlock2D(
-  (norm1): GroupNorm(32, 320, eps=1e-05, affine=True)
-  (conv1): Conv2d(320, 320, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-  (time_emb_proj): Linear(in_features=1280, out_features=320, bias=True)
-  (norm2): GroupNorm(32, 320, eps=1e-05, affine=True)
-  (dropout): Dropout(p=0.0, inplace=False)
-  (conv2): Conv2d(320, 320, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-  (nonlinearity): SiLU()
-)
+<div class="code-block-caption"><span class="caption-text">Stats kernel: mean and inverse std per group</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="k">def</span> <span class="nf">gn_mean_stddev_kernel</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">std_dev</span><span class="p">,</span>
+                          <span class="n">channels_per_group</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span>
+                          <span class="n">height</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">eps</span><span class="p">):</span>
+    <span class="n">num_groups</span> <span class="o">=</span> <span class="n">mean</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">bid</span>        <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">group_idx</span>  <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">num_groups</span>
+    <span class="n">n</span>          <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">num_groups</span>
+
+    <span class="nb">sum</span>    <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">sum_sq</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">channel_in_group</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">channels_per_group</span><span class="p">):</span>
+        <span class="n">channel_idx</span> <span class="o">=</span> <span class="n">group_idx</span> <span class="o">*</span> <span class="n">channels_per_group</span> <span class="o">+</span> <span class="n">channel_in_group</span>
+        <span class="n">flat</span>    <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">channel_idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                             <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+                             <span class="p">(</span><span class="n">height</span> <span class="o">*</span> <span class="n">width</span><span class="p">,))</span>
+        <span class="nb">sum</span>    <span class="o">=</span> <span class="nb">sum</span>    <span class="o">+</span> <span class="n">ct</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">flat</span><span class="p">,</span>        <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">sum_sq</span> <span class="o">=</span> <span class="n">sum_sq</span> <span class="o">+</span> <span class="n">ct</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">flat</span> <span class="o">*</span> <span class="n">flat</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">count</span>         <span class="o">=</span> <span class="n">channels_per_group</span> <span class="o">*</span> <span class="n">height</span> <span class="o">*</span> <span class="n">width</span>
+    <span class="n">group_mean</span>    <span class="o">=</span> <span class="nb">sum</span> <span class="o">/</span> <span class="n">count</span>
+    <span class="n">group_std_dev</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">sum_sq</span> <span class="o">/</span> <span class="n">count</span> <span class="o">-</span> <span class="n">group_mean</span> <span class="o">*</span> <span class="n">group_mean</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+
+    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span>    <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">group_idx</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">group_mean</span><span class="p">,</span>    <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
+    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">std_dev</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">group_idx</span><span class="p">),</span> <span class="n">tile</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">group_std_dev</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)))</span>
 </pre></div>
 </div>
 </div>
-<p>Based on this resnet-block it is clear that each operation (norm, SiLU) reads and writes <span class="math notranslate nohighlight">\(2 \cdot 320 \cdot 64 \cdot 64 = 2.5MiB\)</span>.
-Therefore, the clear candidates for a fusion are <code class="docutils literal notranslate"><span class="pre">norm1</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> and <code class="docutils literal notranslate"><span class="pre">norm2</span> <span class="pre">+</span> <span class="pre">SiLU</span></code>.
-To achieve the highest performance for the resnet block, it is also possible to additionally fuse the denoising (<code class="docutils literal notranslate"><span class="pre">temb</span></code>) and the residual tail.</p>
-<img alt="../_images/roofline.svg" src="../_images/roofline.svg" />
-<p>The roofline model shows that the norm / activation operations are memory-bound, so fusing <code class="docutils literal notranslate"><span class="pre">norm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> makes sense.</p>
-</section>
-<section id="transformer-block">
-<h3>Transformer Block<a class="headerlink" href="#transformer-block" title="Link to this heading"></a></h3>
+<p><strong>Pass 2: apply kernel</strong> – grid of <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">*</span> <span class="pre">C</span> <span class="pre">=</span> <span class="pre">320</span></code> blocks, one per channel.</p>
+<p>Each block loads the mean and inverse std for its group, applies normalization and the learned affine transform, then fuses SiLU as a final elementwise step.
+A grid of 320 blocks fully covers the 48 SMs.</p>
 <div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">Transformer2DModel</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
-<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Transformer2DModel(
-  (norm): GroupNorm(32, 320, eps=1e-06, affine=True, bias=True)
-  (proj_in): Linear(in_features=320, out_features=320, bias=True)
-  (transformer_blocks): ModuleList(
-    (0): BasicTransformerBlock(
-      (norm1): LayerNorm((320,), eps=1e-05, elementwise_affine=True, bias=True)
-      (attn1): Attention(
-        (to_q): Linear(in_features=320, out_features=320, bias=False)
-        (to_k): Linear(in_features=320, out_features=320, bias=False)
-        (to_v): Linear(in_features=320, out_features=320, bias=False)
-        (to_out): ModuleList(
-          (0): Linear(in_features=320, out_features=320, bias=True)
-          (1): Dropout(p=0.0, inplace=False)
-        )
-      )
-      (norm2): LayerNorm((320,), eps=1e-05, elementwise_affine=True, bias=True)
-      (attn2): Attention(
-        (to_q): Linear(in_features=320, out_features=320, bias=False)
-        (to_k): Linear(in_features=1024, out_features=320, bias=False)
-        (to_v): Linear(in_features=1024, out_features=320, bias=False)
-        (to_out): ModuleList(
-          (0): Linear(in_features=320, out_features=320, bias=True)
-          (1): Dropout(p=0.0, inplace=False)
-        )
-      )
-      (norm3): LayerNorm((320,), eps=1e-05, elementwise_affine=True, bias=True)
-      (ff): FeedForward(
-        (net): ModuleList(
-          (0): GEGLU(
-            (proj): Linear(in_features=320, out_features=2560, bias=True)
-          )
-          (1): Dropout(p=0.0, inplace=False)
-          (2): Linear(in_features=1280, out_features=320, bias=True)
-        )
-      )
-    )
-  )
-  (proj_out): Linear(in_features=320, out_features=320, bias=True)
-)
+<div class="code-block-caption"><span class="caption-text">Apply kernel: normalize, affine, SiLU</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@ct</span><span class="o">.</span><span class="n">kernel</span>
+<span class="k">def</span> <span class="nf">gn_silu_kernel</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">out</span><span class="p">,</span> <span class="n">weight</span><span class="p">,</span> <span class="n">bias</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">std_dev</span><span class="p">,</span>
+                   <span class="n">channels_per_group</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span>
+                   <span class="n">height</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="n">ConstInt</span><span class="p">):</span>
+    <span class="n">bid</span>         <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">bid</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">channel_idx</span> <span class="o">=</span> <span class="n">bid</span> <span class="o">%</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">sample_idx</span>  <span class="o">=</span> <span class="n">bid</span> <span class="o">//</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">group_idx</span>   <span class="o">=</span> <span class="n">channel_idx</span> <span class="o">//</span> <span class="n">channels_per_group</span>
+
+    <span class="n">mean_s</span>    <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">mean</span><span class="p">,</span>    <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">group_idx</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+    <span class="n">inv_std_s</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">std_dev</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">group_idx</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+    <span class="n">weight_s</span>  <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">channel_idx</span><span class="p">,),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">bias_s</span>    <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">bias</span><span class="p">,</span>   <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">channel_idx</span><span class="p">,),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="n">x_fp32</span> <span class="o">=</span> <span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">ct</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">channel_idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                         <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+                         <span class="p">(</span><span class="n">height</span> <span class="o">*</span> <span class="n">width</span><span class="p">,))</span>
+
+    <span class="n">normed</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_fp32</span> <span class="o">-</span> <span class="n">mean_s</span><span class="p">)</span> <span class="o">*</span> <span class="n">inv_std_s</span>
+    <span class="n">affine</span> <span class="o">=</span> <span class="n">normed</span> <span class="o">*</span> <span class="n">weight_s</span> <span class="o">+</span> <span class="n">bias_s</span>
+    <span class="n">silu</span>   <span class="o">=</span> <span class="n">affine</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">ct</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">affine</span><span class="p">)))</span>
+
+    <span class="n">ct</span><span class="o">.</span><span class="n">store</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="p">(</span><span class="n">sample_idx</span><span class="p">,</span> <span class="n">channel_idx</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+             <span class="n">tile</span><span class="o">=</span><span class="n">ct</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">silu</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">)))</span>
 </pre></div>
 </div>
 </div>
-<p>For the transformer block, the <code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">+</span> <span class="pre">GEGLU</span></code> are worth fusing with the matrix multiplications.</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">-&gt;</span> <span class="pre">mm1</span> <span class="pre">(320,</span> <span class="pre">2560)</span> <span class="pre">-&gt;</span> <span class="pre">GEGLU</span> <span class="pre">-&gt;</span> <span class="pre">mm2</span> <span class="pre">(1280,</span> <span class="pre">320)</span></code></p></li>
-</ul>
-<p>By fusing these operations, we plan to remove the separated memory passes for <code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">+</span> <span class="pre">GEGLU</span></code>.</p>
-</section>
-<section id="fusing">
-<h3>Fusing<a class="headerlink" href="#fusing" title="Link to this heading"></a></h3>
-<p>After performing some initial tests, we verified that <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> already fuses <code class="docutils literal notranslate"><span class="pre">norm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> into a single kernel.
-Therefore, this kernel serves as a warm-up kernel.</p>
-<p>On the other hand, the <code class="docutils literal notranslate"><span class="pre">LayerNorm</span></code> and <code class="docutils literal notranslate"><span class="pre">GEGLU</span></code> are executed as two separate kernels.
-Therefore, fusing them with the matmul provides higher value compared to the <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> reference.</p>
-</section>
-<section id="tiling">
-<h3>Tiling<a class="headerlink" href="#tiling" title="Link to this heading"></a></h3>
-<p>For the optimal tiling approach we have several constraints that have to be met, either from cuTile or the GPU.</p>
-<p>From the cuTile side of things, we have to consider that the tile dimensions must be powers of two.</p>
-<p>The Nvidia Spark GPU has <code class="docutils literal notranslate"><span class="pre">24</span> <span class="pre">MiB</span></code> of L2 cache and <code class="docutils literal notranslate"><span class="pre">48</span> <span class="pre">SMs</span></code>.
-The per-block activation (<code class="docutils literal notranslate"><span class="pre">2.5</span> <span class="pre">MiB</span></code>) fits comfortably in L2, so at batch 1 it stays cache-resident.</p>
-<p>For the <code class="docutils literal notranslate"><span class="pre">norm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> fusion we are looking at 32 groups and 320 channels.
-Therefore, we can use 10 channels per group and thereby, have <span class="math notranslate nohighlight">\(10 \times 64 \times 64 = 40,960\)</span> elements.</p>
-<p>For the fusion of the matmul with the <code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">+</span> <span class="pre">GEGLU</span></code>, we keep the contraction pattern of the two linear layers with <code class="docutils literal notranslate"><span class="pre">(320</span> <span class="pre">-&gt;</span> <span class="pre">2560,</span> <span class="pre">1280</span> <span class="pre">-&gt;</span> <span class="pre">320)</span></code>.
-We are going to fuse the <code class="docutils literal notranslate"><span class="pre">LayerNorm</span></code> as a first touch and then apply the <code class="docutils literal notranslate"><span class="pre">GELU</span></code> as a last touch for the first matmul.</p>
-</section>
-</section>
-<section id="milestone-2-fused-groupnorm-silu-kernel">
-<h2>Milestone 2: Fused GroupNorm + SiLU Kernel<a class="headerlink" href="#milestone-2-fused-groupnorm-silu-kernel" title="Link to this heading"></a></h2>
-<section id="groupnorm-shape-coverage">
-<h3>GroupNorm Shape Coverage<a class="headerlink" href="#groupnorm-shape-coverage" title="Link to this heading"></a></h3>
-<p>A forward-pass survey of all 44 GroupNorm calls across the U-Net’s <code class="docutils literal notranslate"><span class="pre">ResnetBlock2D</span></code> blocks reveals 14 distinct <code class="docutils literal notranslate"><span class="pre">(channels,</span> <span class="pre">H,</span> <span class="pre">W,</span> <span class="pre">groups)</span></code> shapes, of which the fused cuTile kernel currently serves only the <code class="docutils literal notranslate"><span class="pre">(320,</span> <span class="pre">64,</span> <span class="pre">64,</span> <span class="pre">32)</span></code> case (16 % of calls).
-Because the kernel is already shape-parametric – the channel count is only a loop bound and every spatial extent is a power of two – all 44 calls are kernel-eligible, so full coverage requires merely relaxing the <code class="docutils literal notranslate"><span class="pre">GnSiluFused._is_supported</span></code> gate rather than writing new kernels.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span> <span class="n">chan</span>    <span class="n">H</span>    <span class="n">W</span>  <span class="n">grps</span>   <span class="n">Cg</span>  <span class="n">count</span>   <span class="n">now</span> <span class="n">eligible</span>
-<span class="o">----------------------------------------------------</span>
- <span class="mi">1280</span>    <span class="mi">8</span>    <span class="mi">8</span>    <span class="mi">32</span>   <span class="mi">40</span>     <span class="mi">11</span>            <span class="n">YES</span>
-  <span class="mi">320</span>   <span class="mi">64</span>   <span class="mi">64</span>    <span class="mi">32</span>   <span class="mi">10</span>      <span class="mi">7</span>   <span class="n">YES</span>      <span class="n">YES</span>
-  <span class="mi">640</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">20</span>      <span class="mi">6</span>            <span class="n">YES</span>
- <span class="mi">1280</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">40</span>      <span class="mi">6</span>            <span class="n">YES</span>
- <span class="mi">2560</span>    <span class="mi">8</span>    <span class="mi">8</span>    <span class="mi">32</span>   <span class="mi">80</span>      <span class="mi">3</span>            <span class="n">YES</span>
-  <span class="mi">640</span>   <span class="mi">64</span>   <span class="mi">64</span>    <span class="mi">32</span>   <span class="mi">20</span>      <span class="mi">2</span>            <span class="n">YES</span>
- <span class="mi">2560</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">80</span>      <span class="mi">2</span>            <span class="n">YES</span>
-  <span class="mi">320</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">10</span>      <span class="mi">1</span>            <span class="n">YES</span>
-  <span class="mi">640</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">20</span>      <span class="mi">1</span>            <span class="n">YES</span>
-  <span class="mi">960</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">30</span>      <span class="mi">1</span>            <span class="n">YES</span>
-  <span class="mi">960</span>   <span class="mi">64</span>   <span class="mi">64</span>    <span class="mi">32</span>   <span class="mi">30</span>      <span class="mi">1</span>            <span class="n">YES</span>
- <span class="mi">1280</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">40</span>      <span class="mi">1</span>            <span class="n">YES</span>
- <span class="mi">1920</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">60</span>      <span class="mi">1</span>            <span class="n">YES</span>
- <span class="mi">1920</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">60</span>      <span class="mi">1</span>            <span class="n">YES</span>
-<span class="o">----------------------------------------------------</span>
-<span class="n">total</span> <span class="n">GN</span> <span class="n">calls</span><span class="p">:</span> <span class="mi">44</span>   <span class="n">fused</span> <span class="n">now</span><span class="p">:</span> <span class="mi">7</span> <span class="p">(</span><span class="mi">16</span><span class="o">%</span><span class="p">)</span>   <span class="n">kernel</span><span class="o">-</span><span class="n">eligible</span><span class="p">:</span> <span class="mi">44</span> <span class="p">(</span><span class="mi">100</span><span class="o">%</span><span class="p">)</span>
-<span class="n">distinct</span> <span class="n">shapes</span><span class="p">:</span> <span class="mi">14</span>
-</pre></div>
-</div>
-<p>After we applied the arbitrary shapes, we are now fusing everything:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span> <span class="n">chan</span>    <span class="n">H</span>    <span class="n">W</span>  <span class="n">grps</span>   <span class="n">Cg</span>  <span class="n">count</span>   <span class="n">fusable</span>
-<span class="o">--------------------------------------------</span>
- <span class="mi">1280</span>    <span class="mi">8</span>    <span class="mi">8</span>    <span class="mi">32</span>   <span class="mi">40</span>     <span class="mi">11</span>       <span class="n">YES</span>
-  <span class="mi">320</span>   <span class="mi">64</span>   <span class="mi">64</span>    <span class="mi">32</span>   <span class="mi">10</span>      <span class="mi">7</span>       <span class="n">YES</span>
-  <span class="mi">640</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">20</span>      <span class="mi">6</span>       <span class="n">YES</span>
- <span class="mi">1280</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">40</span>      <span class="mi">6</span>       <span class="n">YES</span>
- <span class="mi">2560</span>    <span class="mi">8</span>    <span class="mi">8</span>    <span class="mi">32</span>   <span class="mi">80</span>      <span class="mi">3</span>       <span class="n">YES</span>
-  <span class="mi">640</span>   <span class="mi">64</span>   <span class="mi">64</span>    <span class="mi">32</span>   <span class="mi">20</span>      <span class="mi">2</span>       <span class="n">YES</span>
- <span class="mi">2560</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">80</span>      <span class="mi">2</span>       <span class="n">YES</span>
-  <span class="mi">320</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">10</span>      <span class="mi">1</span>       <span class="n">YES</span>
-  <span class="mi">640</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">20</span>      <span class="mi">1</span>       <span class="n">YES</span>
-  <span class="mi">960</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">30</span>      <span class="mi">1</span>       <span class="n">YES</span>
-  <span class="mi">960</span>   <span class="mi">64</span>   <span class="mi">64</span>    <span class="mi">32</span>   <span class="mi">30</span>      <span class="mi">1</span>       <span class="n">YES</span>
- <span class="mi">1280</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">40</span>      <span class="mi">1</span>       <span class="n">YES</span>
- <span class="mi">1920</span>   <span class="mi">16</span>   <span class="mi">16</span>    <span class="mi">32</span>   <span class="mi">60</span>      <span class="mi">1</span>       <span class="n">YES</span>
- <span class="mi">1920</span>   <span class="mi">32</span>   <span class="mi">32</span>    <span class="mi">32</span>   <span class="mi">60</span>      <span class="mi">1</span>       <span class="n">YES</span>
-<span class="o">--------------------------------------------</span>
-<span class="n">total</span> <span class="n">GN</span> <span class="n">calls</span><span class="p">:</span> <span class="mi">44</span>   <span class="n">fusable</span><span class="p">:</span> <span class="mi">44</span> <span class="p">(</span><span class="mi">100</span><span class="o">%</span><span class="p">)</span>
-<span class="n">distinct</span> <span class="n">shapes</span><span class="p">:</span> <span class="mi">14</span>
-</pre></div>
-</div>
-</section>
-<section id="kernel-benchmark-and-profiling">
-<h3>Kernel Benchmark and Profiling<a class="headerlink" href="#kernel-benchmark-and-profiling" title="Link to this heading"></a></h3>
-<p>We compared the fused cuTile <code class="docutils literal notranslate"><span class="pre">GroupNorm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> against the eager PyTorch reference and
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> on a single <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">320,</span> <span class="pre">64,</span> <span class="pre">64)</span></code> block, and profiled every kernel with
-Nsight Compute (<code class="docutils literal notranslate"><span class="pre">ncu</span></code>).</p>
-<table class="docutils align-default" id="id4">
-<caption><span class="caption-text">GroupNorm + SiLU on (1, 320, 64, 64), profiled with Nsight Compute</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Variant</p></th>
-<th class="head"><p>Kernels</p></th>
-<th class="head"><p>Total (us)</p></th>
-<th class="head"><p>Memory throughput</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>eager (reference)</p></td>
-<td><p>4</p></td>
-<td><p>~104</p></td>
-<td><p>2 - 19 %</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></td>
-<td><p>3</p></td>
-<td><p>~41</p></td>
-<td><p>0.5 - 16 %</p></td>
-</tr>
-<tr class="row-even"><td><p>fused (cuTile)</p></td>
-<td><p>2</p></td>
-<td><p>~39</p></td>
-<td><p>6 - 14 %</p></td>
-</tr>
-</tbody>
-</table>
-<p>At the kernel level the cuTile fusion matches <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> (two kernels vs three) and both
-plateau at a low memory throughput: a single batch-1 <code class="docutils literal notranslate"><span class="pre">GroupNorm</span></code> is too small to saturate the
-48 SMs, so the kernels are latency-bound, not bandwidth-bound. The larger speed-up seen in the
-Python micro-benchmark is dominated by <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>’s per-call dispatch overhead rather than
-kernel efficiency. End-to-end, <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> additionally optimizes the whole U-Net graph
-(CUDA graphs, cross-kernel scheduling), which a per-block kernel replacement does not – so the
-end-to-end difference reflects graph-level optimization, not the quality of the
-<code class="docutils literal notranslate"><span class="pre">GroupNorm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> kernel.</p>
-<section id="occupancy-is-not-the-bottleneck">
-<h4>Occupancy is not the bottleneck<a class="headerlink" href="#occupancy-is-not-the-bottleneck" title="Link to this heading"></a></h4>
-<p>The statistics kernel launches only <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">x</span> <span class="pre">groups</span> <span class="pre">=</span> <span class="pre">32</span></code> blocks, so we suspected it underfilled the
-48 SMs and wrote a split-reduction variant: per-channel partial sums (<code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">x</span> <span class="pre">channels</span> <span class="pre">=</span> <span class="pre">320</span></code> blocks)
-recombined in the apply pass. <strong>Profiling disproved the hypothesis.</strong> Raising the block count 32 -&gt; 320
-left the memory throughput unchanged (6.73 % -&gt; 6.70 %) and the achieved occupancy nearly flat
-(9.3 % -&gt; 11.5 %); the split apply pass even ran <em>slower</em> (19.2 -&gt; 23.4 us) because rebuilding the
-group statistics per block adds dependent scalar loads. The decisive evidence comes from
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>: its apply kernel runs at <strong>94.9 % occupancy and still reaches only 15.7 % memory
-throughput</strong>. The ceiling is therefore the <em>problem size</em> – a single batch-1 <code class="docutils literal notranslate"><span class="pre">GroupNorm</span></code> (2.5 MiB,
-~19 us) cannot supply enough parallel work to saturate the GPU – not the launch occupancy. The
-simple two-pass kernel remains the fastest variant; the split kernel is kept as a documented negative
-result. Further speed-ups must come from graph-level optimization (CUDA graphs) or larger batches,
-not from tuning this kernel. Sweeping the batch size confirms this is scale-independent: the
-split-reduction kernel stays within ~2 % of the two-pass kernel from <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">=</span> <span class="pre">1</span></code> to <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">=</span> <span class="pre">128</span></code>
-(<code class="docutils literal notranslate"><span class="pre">split</span> <span class="pre">/</span> <span class="pre">two-pass</span></code> = 0.98 - 1.01), so raising occupancy is neutral across the whole L2-to-DRAM
-range, not only at batch 1.</p>
-</section>
-<section id="batch-scaling-the-l2-boundary">
-<h4>Batch scaling: the L2 boundary<a class="headerlink" href="#batch-scaling-the-l2-boundary" title="Link to this heading"></a></h4>
-<p>Sweeping the batch size makes the memory hierarchy directly visible. Each image needs
-<code class="docutils literal notranslate"><span class="pre">x</span></code> + <code class="docutils literal notranslate"><span class="pre">out</span></code> = <code class="docutils literal notranslate"><span class="pre">2</span> <span class="pre">x</span> <span class="pre">2.5</span> <span class="pre">MiB</span> <span class="pre">=</span> <span class="pre">5</span> <span class="pre">MiB</span></code> of working set, so the set crosses the <code class="docutils literal notranslate"><span class="pre">24</span> <span class="pre">MiB</span></code> L2 cache
-between <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">=</span> <span class="pre">4</span></code> (20 MiB, fits) and <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">=</span> <span class="pre">8</span></code> (40 MiB, spills to DRAM):</p>
-<table class="docutils align-default" id="id5">
-<caption><span class="caption-text">Fused GroupNorm + SiLU, per-image latency vs batch size</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Batch</p></th>
-<th class="head"><p>us / call</p></th>
-<th class="head"><p>us / image</p></th>
-<th class="head"><p>Regime</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>1</p></td>
-<td><p>17.7</p></td>
-<td><p>17.7</p></td>
-<td><p>L2-resident</p></td>
-</tr>
-<tr class="row-odd"><td><p>2</p></td>
-<td><p>24.2</p></td>
-<td><p>12.1</p></td>
-<td><p>L2-resident</p></td>
-</tr>
-<tr class="row-even"><td><p>4</p></td>
-<td><p>59.1</p></td>
-<td><p>14.8</p></td>
-<td><p>L2-resident (near limit)</p></td>
-</tr>
-<tr class="row-odd"><td><p>8</p></td>
-<td><p>238.7</p></td>
-<td><p>29.8</p></td>
-<td><p>spills to DRAM</p></td>
-</tr>
-<tr class="row-even"><td><p>16</p></td>
-<td><p>536.0</p></td>
-<td><p>33.5</p></td>
-<td><p>DRAM-bound</p></td>
-</tr>
-<tr class="row-odd"><td><p>32</p></td>
-<td><p>1046.0</p></td>
-<td><p>32.7</p></td>
-<td><p>DRAM-bound</p></td>
-</tr>
-<tr class="row-even"><td><p>64</p></td>
-<td><p>2092.5</p></td>
-<td><p>32.7</p></td>
-<td><p>DRAM-bound</p></td>
-</tr>
-</tbody>
-</table>
-<p>While the working set is L2-resident the per-image latency stays ~12 - 18 us (latency-bound); once it
-spills, it plateaus at ~32.7 us/image. That plateau is exactly the DRAM-bandwidth cost of the two-pass
-kernel, which moves <code class="docutils literal notranslate"><span class="pre">x</span></code> twice plus <code class="docutils literal notranslate"><span class="pre">out</span></code> once: <span class="math notranslate nohighlight">\(3 \times 2.5\,\text{MiB} / 240\,\text{GB/s} \approx 32.8\,\mu s\)</span>.
-This confirms the roofline premise from Milestone 1: at batch 1 the activation is L2-resident (so the
-fusion win is L2 traffic and launch overhead), and only at larger batch / resolution does it spill to
-DRAM, where reducing the number of passes would yield the larger, bandwidth-bound win.</p>
-</section>
-<section id="cutile-vs-torch-compile-across-batch-sizes">
-<h4>cuTile vs. torch.compile across batch sizes<a class="headerlink" href="#cutile-vs-torch-compile-across-batch-sizes" title="Link to this heading"></a></h4>
-<p>Comparing the fused cuTile kernel against <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> on random inputs across batch sizes
-separates the two regimes cleanly:</p>
-<table class="docutils align-default" id="id6">
-<caption><span class="caption-text">Median latency (us), fused GroupNorm + SiLU on random data</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Batch</p></th>
-<th class="head"><p>Working set</p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></th>
-<th class="head"><p>cuTile</p></th>
-<th class="head"><p>cuTile vs compile</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>1</p></td>
-<td><p>5 MiB (L2)</p></td>
-<td><p>29.8</p></td>
-<td><p>15.7</p></td>
-<td><p>1.90x</p></td>
-</tr>
-<tr class="row-odd"><td><p>8</p></td>
-<td><p>40 MiB (DRAM)</p></td>
-<td><p>225.1</p></td>
-<td><p>260.4</p></td>
-<td><p>0.86x</p></td>
-</tr>
-<tr class="row-even"><td><p>32</p></td>
-<td><p>160 MiB (DRAM)</p></td>
-<td><p>1006.1</p></td>
-<td><p>1075.8</p></td>
-<td><p>0.94x</p></td>
-</tr>
-<tr class="row-odd"><td><p>64</p></td>
-<td><p>320 MiB (DRAM)</p></td>
-<td><p>1996.0</p></td>
-<td><p>2044.2</p></td>
-<td><p>0.98x</p></td>
-</tr>
-<tr class="row-even"><td><p>128</p></td>
-<td><p>640 MiB (DRAM)</p></td>
-<td><p>3995.4</p></td>
-<td><p>4067.1</p></td>
-<td><p>0.98x</p></td>
-</tr>
-</tbody>
-</table>
-<p>At batch 1 cuTile is 1.90x faster, but this is a <em>launch-overhead</em> win: cuTile issues two kernels via a
-light launch path, whereas default-mode <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> issues three with Python dispatch guards. Once
-the working set spills to DRAM both kernels become bandwidth-bound – they move the same bytes against the
-same ~240 GB/s roof – so the ratio converges toward a tie (0.86 -&gt; 0.98), the two implementations landing
-within a few percent of each other. The conclusion: for this memory-bound operation the cuTile kernel <em>matches</em> a
-heavily tuned production compiler to within ~10 %; its only clear advantage is launch overhead at batch 1,
-which <code class="docutils literal notranslate"><span class="pre">torch.compile(mode=&quot;reduce-overhead&quot;)</span></code> (CUDA graphs) would also remove. This closes the
-<code class="docutils literal notranslate"><span class="pre">GroupNorm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> candidate: there is no kernel-level headroom left, so the remaining gains must come
-from graph-level launch amortization (CUDA graphs) and from the compute-bound transformer FFN candidate.</p>
-</section>
-<section id="real-shape-coverage-and-a-profitability-gate">
-<h4>Real-shape coverage and a profitability gate<a class="headerlink" href="#real-shape-coverage-and-a-profitability-gate" title="Link to this heading"></a></h4>
-<p>Extending the batch-1 comparison to all 14 real U-Net GroupNorm shapes confirms the launch-overhead
-picture: default-mode <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> sits at a ~27 us dispatch floor <em>regardless of shape</em>, so the
-fused kernel – whose latency tracks the actual work – beats it on 11 of 14 shapes (1.1 - 2.9x). But it
-loses to plain <strong>eager</strong> on 5 high-channel, tiny-spatial shapes (<code class="docutils literal notranslate"><span class="pre">C</span> <span class="pre">&gt;=</span> <span class="pre">1280,</span> <span class="pre">H</span> <span class="pre">&lt;=</span> <span class="pre">16</span></code>), where too few
-elements per group leave the two-pass kernel underutilized. A <code class="docutils literal notranslate"><span class="pre">_PROFITABLE_GN_SHAPES</span></code> gate (mirroring
-the FFN one) therefore fuses only the 9 beat-eager shapes and defers the rest, making the ResNet patch a
-non-regression vs eager. Two honest caveats: these batch-1 wins are the launch-overhead advantage that
-<code class="docutils literal notranslate"><span class="pre">mode=&quot;reduce-overhead&quot;</span></code> (CUDA graphs) would remove – not kernel-efficiency gains – and the gate’s
-whole-model effect is within noise (GroupNorm is a small fraction of the step), so its justification is
-per-shape correctness, not an end-to-end number.</p>
-</section>
-</section>
-</section>
-<section id="milestone-3-fused-layernorm-geglu-ffn">
-<h2>Milestone 3: Fused LayerNorm + GEGLU FFN<a class="headerlink" href="#milestone-3-fused-layernorm-geglu-ffn" title="Link to this heading"></a></h2>
-<p>The second candidate is the transformer feed-forward block
-<code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">-&gt;</span> <span class="pre">mm1</span> <span class="pre">(dim</span> <span class="pre">-&gt;</span> <span class="pre">8*dim)</span> <span class="pre">-&gt;</span> <span class="pre">GEGLU</span> <span class="pre">-&gt;</span> <span class="pre">mm2</span> <span class="pre">(4*dim</span> <span class="pre">-&gt;</span> <span class="pre">dim)</span></code>. A shape survey over the 16
-transformer blocks finds four distinct <code class="docutils literal notranslate"><span class="pre">(tokens,</span> <span class="pre">dim)</span></code> shapes: <code class="docutils literal notranslate"><span class="pre">4096x320</span></code>, <code class="docutils literal notranslate"><span class="pre">1024x640</span></code>,
-<code class="docutils literal notranslate"><span class="pre">256x1280</span></code> and <code class="docutils literal notranslate"><span class="pre">64x1280</span></code>. Unlike <code class="docutils literal notranslate"><span class="pre">GroupNorm</span> <span class="pre">+</span> <span class="pre">SiLU</span></code> this candidate is compute-bound
-(~150 GFLOP per denoising step across the FFNs), so the goal is to hide the LayerNorm and GEGLU
-memory passes inside the matmuls rather than to save bandwidth on an elementwise chain.</p>
-<section id="fusion-headroom-gpu-verified">
-<h3>Fusion headroom (GPU-verified)<a class="headerlink" href="#fusion-headroom-gpu-verified" title="Link to this heading"></a></h3>
-<p>Compiling the block with <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> on the Spark and inspecting the generated Triton code
-confirms the Milestone 1 hypothesis on GPU: Inductor emits LayerNorm and the GEGLU gate as
-separate Triton kernels around two external cuBLAS matmuls.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">triton_per_fused_native_layer_norm_0</span>             <span class="c1"># LayerNorm  (own kernel)</span>
-<span class="n">extern_kernels</span><span class="o">.</span><span class="n">addmm</span><span class="p">(</span> <span class="p">(</span><span class="mi">4096</span><span class="p">,</span><span class="mi">320</span><span class="p">)</span> <span class="o">@</span> <span class="p">(</span><span class="mi">320</span><span class="p">,</span><span class="mi">2560</span><span class="p">)</span> <span class="p">)</span>  <span class="c1"># mm1        (cuBLAS)</span>
-<span class="n">triton_poi_fused_gelu_mul_split_view_1</span>           <span class="c1"># GEGLU gate (own kernel)</span>
-<span class="n">extern_kernels</span><span class="o">.</span><span class="n">addmm</span><span class="p">(</span> <span class="p">(</span><span class="mi">4096</span><span class="p">,</span><span class="mi">1280</span><span class="p">)</span> <span class="o">@</span> <span class="p">(</span><span class="mi">1280</span><span class="p">,</span><span class="mi">320</span><span class="p">)</span> <span class="p">)</span> <span class="c1"># mm2        (cuBLAS)</span>
-</pre></div>
-</div>
-<p>Because the matmuls run in cuBLAS, Inductor cannot fold the norm or activation into them, so the
-<code class="docutils literal notranslate"><span class="pre">mm1</span></code> output (the proj) is materialized to DRAM and read back by the gate kernel. GEGLU projects to
-twice the feed-forward inner dimension, so at the top shape the proj is <code class="docutils literal notranslate"><span class="pre">[tokens,</span> <span class="pre">2*inner]</span></code> wide:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">inner</span>      <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">dim</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">320</span> <span class="o">=</span> <span class="mi">1280</span>        <span class="p">(</span><span class="n">feed</span><span class="o">-</span><span class="n">forward</span> <span class="n">expansion</span><span class="p">,</span> <span class="n">mult</span> <span class="o">=</span> <span class="mi">4</span><span class="p">)</span>
-<span class="n">proj</span> <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span><span class="n">tokens</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">inner</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">2560</span><span class="p">]</span>     <span class="p">(</span><span class="n">GEGLU</span> <span class="o">-&gt;</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">inner</span><span class="p">)</span>
-<span class="n">proj</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="mi">4096</span> <span class="o">*</span> <span class="mi">2560</span> <span class="o">*</span> <span class="mi">2</span> <span class="p">(</span><span class="n">fp16</span><span class="p">)</span>  <span class="o">=</span> <span class="mi">20</span><span class="p">,</span><span class="mi">971</span><span class="p">,</span><span class="mi">520</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="mi">20</span> <span class="n">MiB</span>
-<span class="nb">round</span><span class="o">-</span><span class="n">trip</span> <span class="o">=</span> <span class="n">write</span> <span class="o">+</span> <span class="n">read</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">20</span> <span class="n">MiB</span> <span class="o">=</span> <span class="mi">40</span> <span class="n">MiB</span> <span class="n">per</span> <span class="n">FFN</span> <span class="n">call</span>
-</pre></div>
-</div>
-<p>Folding the LayerNorm into <code class="docutils literal notranslate"><span class="pre">mm1</span></code>’s prologue and the GEGLU into its epilogue keeps the proj in
-registers, avoiding that ~40 MiB round-trip entirely – headroom cuTile can capture and
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> cannot.</p>
-</section>
-<section id="kernel-and-correctness">
-<h3>Kernel and correctness<a class="headerlink" href="#kernel-and-correctness" title="Link to this heading"></a></h3>
-<p>The fused kernel is two cuTile kernels: <strong>Kernel A</strong> (LayerNorm prologue -&gt; <code class="docutils literal notranslate"><span class="pre">mm1</span></code> -&gt; GEGLU
-epilogue) producing the gated <code class="docutils literal notranslate"><span class="pre">[tokens,</span> <span class="pre">4*dim]</span></code> without ever materializing the <code class="docutils literal notranslate"><span class="pre">8*dim</span></code> proj,
-and <strong>Kernel B</strong> (<code class="docutils literal notranslate"><span class="pre">mm2</span></code>). Both use the <code class="docutils literal notranslate"><span class="pre">ct.mma</span></code> tile contraction with tile-unit load indexing.
-The kernel matches the captured block output within an fp16 tolerance (GELU uses the tanh
-approximation, since cuTile has no <code class="docutils literal notranslate"><span class="pre">erf</span></code>).</p>
-</section>
-<section id="result-fusion-does-not-beat-cublas-here">
-<h3>Result: fusion does not beat cuBLAS here<a class="headerlink" href="#result-fusion-does-not-beat-cublas-here" title="Link to this heading"></a></h3>
-<p>Benchmarked against the eager block and <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>:</p>
-<table class="docutils align-default" id="id7">
-<caption><span class="caption-text">FFN latency (us): eager / torch.compile / cuTile fused</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>tokens x dim</p></th>
-<th class="head"><p>eager</p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></th>
-<th class="head"><p>cuTile</p></th>
-<th class="head"><p>cuTile vs compile</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>4096 x 320</p></td>
-<td><p>397</p></td>
-<td><p>331</p></td>
-<td><p>352</p></td>
-<td><p>0.94x</p></td>
-</tr>
-<tr class="row-odd"><td><p>1024 x 640</p></td>
-<td><p>235</p></td>
-<td><p>181</p></td>
-<td><p>429</p></td>
-<td><p>0.42x</p></td>
-</tr>
-<tr class="row-even"><td><p>256 x 1280</p></td>
-<td><p>223</p></td>
-<td><p>264</p></td>
-<td><p>1072</p></td>
-<td><p>0.25x</p></td>
-</tr>
-</tbody>
-</table>
-<p>The fused cuTile kernel is slower than <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>, and increasingly so at the smaller-token,
-higher-dim shapes. The cause is matmul utilization: a tile-size sweep tops out at <strong>31.7 TFLOPS</strong>
-(tile <code class="docutils literal notranslate"><span class="pre">128x64x64</span></code>), only ~32 % of the ~100 TFLOP/s FP16 tensor ceiling, whereas <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>
-dispatches the matmuls to cuBLAS, which runs far closer to peak. On a compute-bound operation a
-matmul that is ~3x slower than cuBLAS cannot be recovered by removing the memory passes, even though
-those passes are real (at 4096 x 320, where the proj round-trip is comparable to the matmul time,
-cuTile does reach a near-tie at 0.94x).</p>
-<p>This is the intended contrast with Milestone 2 and confirms the Milestone 1 roofline reasoning:</p>
-<ul class="simple">
-<li><p><strong>Memory-bound (GroupNorm + SiLU):</strong> cuTile <em>ties</em> <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> – fusion captures the win
-because there is no cuBLAS matmul to beat.</p></li>
-<li><p><strong>Compute-bound (LayerNorm + GEGLU):</strong> cuTile <em>loses</em> – the matmul dominates and a hand-written
-tile GEMM does not reach cuBLAS-level utilization, so the fusion saving is given back.</p></li>
-</ul>
-<p>The tile-throughput heatmaps (one per <code class="docutils literal notranslate"><span class="pre">k_tile</span></code>) show throughput rising with tile size up to a
-sweet spot around <code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span> <span class="pre">x</span> <span class="pre">64</span></code> (31.7 TFLOPS at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>), then <em>collapsing</em> for the
-largest tiles – the signature of register spilling.</p>
-<section id="profiling-occupancy-bound-ncu">
-<h4>Profiling: occupancy-bound (NCU)<a class="headerlink" href="#profiling-occupancy-bound-ncu" title="Link to this heading"></a></h4>
-<p>Nsight Compute pins the cause. <em>Occupancy</em> is the fraction of an SM’s maximum warps that are actually
-resident; the GPU hides memory latency by switching among resident warps, so when one warp stalls on
-a load another can run. High occupancy therefore requires many warps per SM, but each SM has a fixed
-register file that all its threads share – so a high register count per thread caps how many warps
-fit. Both fused kernels compile to <strong>255 registers per thread</strong> (the hardware maximum), which pins
-occupancy at ~12 %:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">register</span> <span class="n">file</span> <span class="n">per</span> <span class="n">SM</span>  <span class="o">=</span> <span class="mi">65</span><span class="p">,</span><span class="mi">536</span> <span class="n">registers</span> <span class="p">(</span><span class="mi">256</span> <span class="n">KB</span><span class="p">)</span>
-<span class="n">registers</span> <span class="n">per</span> <span class="n">thread</span>  <span class="o">=</span> <span class="mi">255</span>                       <span class="p">(</span><span class="n">the</span> <span class="n">hardware</span> <span class="n">maximum</span><span class="p">)</span>
-<span class="n">resident</span> <span class="n">threads</span>      <span class="o">=</span> <span class="mi">65</span><span class="p">,</span><span class="mi">536</span> <span class="o">/</span> <span class="mi">255</span> <span class="o">~=</span> <span class="mi">257</span> <span class="n">threads</span> <span class="o">=</span> <span class="mi">8</span> <span class="n">warps</span>
-<span class="n">occupancy</span>             <span class="o">=</span> <span class="mi">8</span> <span class="o">/</span> <span class="mi">64</span> <span class="nb">max</span> <span class="n">warps</span> <span class="o">~=</span> <span class="mf">12.5</span> <span class="o">%</span>   <span class="p">(</span><span class="n">NCU</span> <span class="n">measured</span><span class="p">:</span> <span class="mf">11.9</span> <span class="o">%</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>With only ~8 resident warps there is nothing to hide memory latency, so neither the compute
-(~19 - 24 %) nor the memory (~33 - 40 %) pipe approaches saturation: the kernels are <em>occupancy-bound</em>,
-not compute- or memory-bound. The register pressure is inherent to the design – the GEGLU keeps <strong>two live accumulators</strong> (hidden and gate)
-across the entire reduction, doubling a plain GEMM’s footprint – and cuTile exposes no
-register/shared-memory blocking control, so the kernel cannot reach the occupancy cuBLAS sustains via
-shared-memory staging and warp specialization. This is the concrete reason a hand-written tile GEMM
-does not match cuBLAS on the compute-bound path.</p>
-<p>We tested the obvious fix – a register-reduced variant that splits the GEGLU into two
-single-accumulator kernels (materializing the hidden half between them). It ran <strong>slower</strong>, not
-faster (521 vs 351 us at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>): splitting sacrifices the fused kernel’s reuse of the
-normalized A operand (the LayerNorm and normalization are recomputed for both halves) and adds a
-10 MiB buffer round-trip, which outweighs the occupancy gained. The fully-fused two-accumulator
-kernel therefore remains the best cuTile variant – the register pressure is the price of A-operand
-reuse and is worth paying. The ~32 % ceiling is intrinsic to a hand-written tile GEMM in cuTile and
-is recovered by neither zero-padded larger tiles nor register-splitting.</p>
-<p>An <strong>L2 block swizzle</strong> (grouping <code class="docutils literal notranslate"><span class="pre">GROUP_M</span></code> row-tiles so concurrent blocks reuse the weight columns
-from L2) gave a modest, shape-dependent gain – largest (~15 %) at the weight-heavy <code class="docutils literal notranslate"><span class="pre">256</span> <span class="pre">x</span> <span class="pre">1280</span></code>
-shape where L2 pressure is highest, and negligible at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> where the weights are already
-L2-resident. It brings <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> to a <strong>near-tie with torch.compile</strong> (0.96x at a fixed <code class="docutils literal notranslate"><span class="pre">64x64x64</span></code>
-tile; <strong>1.05x once the tile is tuned per shape</strong> – see below), but does not touch
-the occupancy bound; reaching parity across all shapes would require shared-memory blocking, which
-cuTile does not straightforwardly expose alongside the fused epilogue. Notably, <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> – the
-top-resolution shape where the fusion’s avoided proj round-trip is largest – is exactly where the
-fused kernel is competitive, consistent with the memory-vs-compute-bound framing throughout.</p>
-</section>
-<section id="per-shape-tile-selection">
-<h4>Per-shape tile selection<a class="headerlink" href="#per-shape-tile-selection" title="Link to this heading"></a></h4>
-<p>A single fixed tile is not optimal, because the three FFN shapes have different aspect ratios. Re-running
-the <code class="docutils literal notranslate"><span class="pre">(tM,</span> <span class="pre">tN,</span> <span class="pre">tK)</span></code> sweep and taking the best tile <em>per shape</em> shows a clear pattern and a large win on
-the dominant shape:</p>
-<table class="docutils align-default" id="id8">
-<caption><span class="caption-text">Best swizzle tile per FFN shape (from the tile sweep)</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Shape (tokens x dim)</p></th>
-<th class="head"><p>Fixed <code class="docutils literal notranslate"><span class="pre">64x64x64</span></code></p></th>
-<th class="head"><p>Best tile</p></th>
-<th class="head"><p>Best latency</p></th>
-<th class="head"><p>Speedup</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>4096 x 320</p></td>
-<td><p>777 us</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span> <span class="pre">x</span> <span class="pre">64</span></code></p></td>
-<td><p>316 us</p></td>
-<td><p>2.46x</p></td>
-</tr>
-<tr class="row-odd"><td><p>1024 x 640</p></td>
-<td><p>436 us</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">64</span> <span class="pre">x</span> <span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span></code></p></td>
-<td><p>392 us</p></td>
-<td><p>1.11x</p></td>
-</tr>
-<tr class="row-even"><td><p>256 x 1280</p></td>
-<td><p>918 us</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">64</span> <span class="pre">x</span> <span class="pre">128</span> <span class="pre">x</span> <span class="pre">64</span></code></p></td>
-<td><p>911 us</p></td>
-<td><p>~1.0x</p></td>
-</tr>
-</tbody>
-</table>
-<p>The pattern is that the best tile tracks the problem’s aspect ratio: the <strong>tall</strong> shape (4096 rows) prefers
-a <strong>tall tile</strong> (<code class="docutils literal notranslate"><span class="pre">tM</span> <span class="pre">=</span> <span class="pre">128</span></code>), which amortizes each loaded weight column over more rows; the <strong>wide</strong>
-shapes (fewer rows, larger <code class="docutils literal notranslate"><span class="pre">dim</span></code>) prefer a <strong>wide tile</strong> (<code class="docutils literal notranslate"><span class="pre">tN</span> <span class="pre">=</span> <span class="pre">128</span></code>). <code class="docutils literal notranslate"><span class="pre">dim</span> <span class="pre">=</span> <span class="pre">320</span></code> is not divisible
-by 128, so <code class="docutils literal notranslate"><span class="pre">tN</span></code> cannot widen there – the sweep is forced onto <code class="docutils literal notranslate"><span class="pre">tM</span></code> and happens to land on the right
-lever. The <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> block is both the largest and the most frequent (the early transformer blocks),
-so its 2.46x kernel speedup dominates the FFN’s total time.</p>
-<p><strong>Approach.</strong> Rather than hard-code one tile, the launchers auto-select via <code class="docutils literal notranslate"><span class="pre">best_ffn_tile(dim,</span> <span class="pre">tokens,</span>
-<span class="pre">inner)</span></code> (in <code class="docutils literal notranslate"><span class="pre">ffn_kernel.py</span></code>): a per-<code class="docutils literal notranslate"><span class="pre">dim</span></code> lookup of the tuned tile, guarded by a divisibility check
-(<code class="docutils literal notranslate"><span class="pre">tM</span></code> must divide the row count; <code class="docutils literal notranslate"><span class="pre">tN</span></code> must divide both <code class="docutils literal notranslate"><span class="pre">inner</span></code> and <code class="docutils literal notranslate"><span class="pre">dim</span></code>) that falls back to
-<code class="docutils literal notranslate"><span class="pre">64x64x64</span></code> for any shape not in the table, so a mismatched shape can never pick a padding-only tile.
-Both the plain and swizzled launchers default to it, and an explicit tile still overrides for
-benchmarking. The <code class="docutils literal notranslate"><span class="pre">FusedFFN</span></code> model patch uses the <strong>swizzled</strong> launcher (the fastest variant on the
-two larger shapes – the plain kernel is ~2.4x slower at <code class="docutils literal notranslate"><span class="pre">1024</span> <span class="pre">x</span> <span class="pre">640</span></code>).</p>
-<p>Wiring this in and re-running <code class="docutils literal notranslate"><span class="pre">bench_compare</span></code> (each variant now at its tuned tile) confirms it end to
-end, and shows the swizzle is the best cuTile variant on the two larger shapes:</p>
-<table class="docutils align-default" id="id9">
-<caption><span class="caption-text">FFN latency with tuned tiles (us; ratio = x vs torch.compile)</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Shape (tokens x dim)</p></th>
-<th class="head"><p>eager</p></th>
-<th class="head"><p>torch.compile</p></th>
-<th class="head"><p>fused</p></th>
-<th class="head"><p>swizzle</p></th>
-<th class="head"><p>split</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>4096 x 320</p></td>
-<td><p>399</p></td>
-<td><p>330</p></td>
-<td><p>351 (0.94x)</p></td>
-<td><p><strong>314 (1.05x)</strong></p></td>
-<td><p>684 (0.48x)</p></td>
-</tr>
-<tr class="row-odd"><td><p>1024 x 640</p></td>
-<td><p>238</p></td>
-<td><p>357</p></td>
-<td><p>954 (0.37x)</p></td>
-<td><p><strong>394 (0.91x)</strong></p></td>
-<td><p>553 (0.65x)</p></td>
-</tr>
-<tr class="row-even"><td><p>256 x 1280</p></td>
-<td><p>230</p></td>
-<td><p>263</p></td>
-<td><p>1950 (0.13x)</p></td>
-<td><p>1332 (0.20x)</p></td>
-<td><p><strong>1090 (0.24x)</strong></p></td>
-</tr>
-</tbody>
-</table>
-<p>The headline is <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>: the tuned swizzle reaches <strong>1.05x vs torch.compile</strong> – the first (and
-only) cuTile variant to cross parity, on the top-resolution, most-frequent shape, exactly where the
-avoided proj round-trip is largest. At <code class="docutils literal notranslate"><span class="pre">1024</span> <span class="pre">x</span> <span class="pre">640</span></code> the swizzle (0.91x) is the strongest variant but
-still short of cuBLAS; at <code class="docutils literal notranslate"><span class="pre">256</span> <span class="pre">x</span> <span class="pre">1280</span></code> every variant loses badly (~0.2x), and there the single-accumulator
-<code class="docutils literal notranslate"><span class="pre">split</span></code> marginally leads the cuTile field – the weight-heavy, few-token regime where occupancy hurts most.</p>
-<p>This is a free win – a launch-parameter change, no kernel rewrite – but it does <strong>not</strong> overturn the
-conclusion: even the tuned <code class="docutils literal notranslate"><span class="pre">31.9</span> <span class="pre">TFLOPS</span></code> is still only ~32 % of the FP16 tensor ceiling, so the
-occupancy bound and the loss to cuBLAS on the compute-bound path stand across the shape mix. It narrows
-the gap – to a genuine win at <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code> – but does not close it overall.</p>
-</section>
-<section id="profitability-gate-only-fuse-where-it-wins">
-<h4>Profitability gate: only fuse where it wins<a class="headerlink" href="#profitability-gate-only-fuse-where-it-wins" title="Link to this heading"></a></h4>
-<p>The table above also shows the fused kernel is <em>worse than plain eager</em> on the two larger shapes – at
-<code class="docutils literal notranslate"><span class="pre">1024</span> <span class="pre">x</span> <span class="pre">640</span></code> eager is 238 us vs the swizzle’s 394, and at <code class="docutils literal notranslate"><span class="pre">256</span> <span class="pre">x</span> <span class="pre">1280</span></code> eager (230) even beats
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> (263). Running the kernel there is strictly self-harm. The <code class="docutils literal notranslate"><span class="pre">FusedFFN</span></code> patch therefore
-gates on <strong>profitability</strong>, not just correctness: a <code class="docutils literal notranslate"><span class="pre">_PROFITABLE_DIMS</span></code> allow-list (currently
-<code class="docutils literal notranslate"><span class="pre">{320}</span></code>) fuses only the shape that beats eager and falls back to the original <code class="docutils literal notranslate"><span class="pre">LayerNorm</span> <span class="pre">+</span> <span class="pre">FeedForward</span></code>
-everywhere else. This makes the patch a <strong>strict non-regression vs eager</strong> – it wins the <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>
-blocks and matches eager on the rest – rather than a kernel that helps one shape and hurts two.</p>
-<p>This is the roofline thesis expressed as a dispatch rule: <em>fuse where the shape leans memory-bound
-(``dim = 320``, where the avoided proj round-trip pays for the slower GEMM), defer to cuBLAS/eager where
-it is compute-bound.</em> It is damage-avoidance, not a new win: the gate cannot make the hand kernel
-competitive on the compute-bound shapes, so the end-to-end result still does not beat <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>
-(which fuses the whole graph and captures it into CUDA graphs) – it only stops the fused path from
-paying for a kernel that loses.</p>
-</section>
-</section>
-</section>
-<section id="milestone-4-end-to-end-evaluation">
-<h2>Milestone 4: End-to-end Evaluation<a class="headerlink" href="#milestone-4-end-to-end-evaluation" title="Link to this heading"></a></h2>
-<p>Patching each fused kernel into the full SD-Turbo U-Net and timing one generation gives the
-whole-model picture. Both patches were first verified to be image-equivalent to the baseline (the
-FFN’s tanh-GELU approximation gives a slightly larger but still visually identical difference).</p>
-<table class="docutils align-default" id="id10">
-<caption><span class="caption-text">End-to-end latency, 1-step generation</span><a class="headerlink" href="#id10" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Variant</p></th>
-<th class="head"><p>Median (ms)</p></th>
-<th class="head"><p>vs baseline</p></th>
-<th class="head"><p>vs torch.compile</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Baseline (eager)</p></td>
-<td><p>42.58</p></td>
-<td><p>1.00x</p></td>
-<td><p>0.93x</p></td>
-</tr>
-<tr class="row-odd"><td><p>Fused ResNet (GN + SiLU)</p></td>
-<td><p>41.99</p></td>
-<td><p>1.01x</p></td>
-<td><p>0.94x</p></td>
-</tr>
-<tr class="row-even"><td><p>Fused FFN (LN + GEGLU)</p></td>
-<td><p>41.80</p></td>
-<td><p>1.02x</p></td>
-<td><p>0.95x</p></td>
-</tr>
-<tr class="row-odd"><td><p>Fused Both</p></td>
-<td><p>41.86</p></td>
-<td><p>1.02x</p></td>
-<td><p>0.95x</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">torch.compile</span></code></p></td>
-<td><p>39.62</p></td>
-<td><p>1.07x</p></td>
-<td><p>1.00x</p></td>
-</tr>
-</tbody>
-</table>
-<p>With the profitability gates active (fuse GN only on the beat-eager shapes, FFN only on <code class="docutils literal notranslate"><span class="pre">dim</span> <span class="pre">=</span> <span class="pre">320</span></code>),
-every fused variant lands within ~1 - 2 % of the eager baseline – a statistical <strong>tie</strong>, i.e. a
-non-regression. The gates are doing exactly their job: <em>without</em> them the fused FFN regresses to <strong>0.89x</strong>
-(adding ~5 ms by running the losing compute-bound shapes), and the gate removes precisely that.</p>
-<p>The 1 - 2 % spread is within run-to-run noise, so the per-kernel wins measured in isolation (GN beating
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> by 1.2 - 2x on the real batch-1 shapes; the FFN swizzle at 1.04x on <code class="docutils literal notranslate"><span class="pre">4096</span> <span class="pre">x</span> <span class="pre">320</span></code>) do
-<strong>not</strong> surface end to end. The reason is Amdahl: GroupNorm and the FFN are a small fraction of the ~42 ms
-step – convolutions, attention, and the VAE dominate – so even a 2x kernel moves the whole-model number
-by ~1 %, below the noise floor. End-to-end is the wrong instrument to resolve these kernels; the per-kernel
-benchmarks are where their effect is visible and outside noise.</p>
-<p>The decisive point is <em>why</em>, in isolation, GN can beat the baseline and the FFN cannot. <strong>The eager
-baseline is not naive:</strong> it already dispatches matmuls and convolutions to cuBLAS / cuDNN, and is only
-inefficient about the small memory-bound glue (norms, activations), which it runs as separate kernels.</p>
-<ul class="simple">
-<li><p><strong>GroupNorm + SiLU is memory-bound</strong> – the baseline runs it as ~4 scattered kernels with no cuBLAS
-involved, so fusing them into 2 kernels beats/ties the baseline.</p></li>
-<li><p><strong>The FFN is compute-bound</strong> – the baseline runs its matmuls on cuBLAS, so beating it requires
-replacing cuBLAS with our own matmul (~32 % of peak). Fusing away the memory passes cannot offset a
-matmul 2 - 4x slower, so on the compute-bound shapes the fused FFN is <em>slower</em> – which is why the gate
-defers them to eager rather than regressing.</p></li>
-</ul>
-<p>In one sentence: <strong>fusion beats the eager baseline only where the baseline is inefficient (memory-bound
-ops); for a compute-bound op the baseline already uses cuBLAS, so “beating the baseline” means “beating
-cuBLAS”, which a hand-written tile kernel does not.</strong> The only <strong>robust</strong> end-to-end winner is
-<code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> (1.07x), which pairs cuBLAS/cuDNN with CUDA graphs (<code class="docutils literal notranslate"><span class="pre">mode=&quot;reduce-overhead&quot;</span></code>) to
-remove the per-launch overhead the eager and patched pipelines still pay – a CUDA-graph capture of the
-fused pipeline is the natural next step to close that gap.</p>
-</section>
-<section id="milestone-5-gradio-ui">
-<h2>Milestone 5: Gradio UI<a class="headerlink" href="#milestone-5-gradio-ui" title="Link to this heading"></a></h2>
-<p>A simple Gradio interface wraps the optimized pipeline, allowing interactive text-to-image
-generation with the fused kernels on the DGX Spark.</p>
-<p>It can be run with:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>src/diffusion/app.py
-</pre></div>
-</div>
-<p>The UI can then be accessed via the browser:</p>
-<img alt="Gradio UI screenshot" src="../_images/gradio-ui.png" />
-</section>
-</section>
-<section id="test-execution">
-<h1>Test Execution<a class="headerlink" href="#test-execution" title="Link to this heading"></a></h1>
-<div class="literal-block-wrapper docutils container" id="id11">
-<div class="code-block-caption"><span class="caption-text">Test Execution</span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">PYTHONPATH</span><span class="o">=</span>src/diffusion:test/diffusion
-python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py<span class="w"> </span>-v
+<p>The launch function allocates small intermediate buffers for the stats and fires both grids:</p>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">Launch grids</span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">grid1</span> <span class="o">=</span> <span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="n">num_groups</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>   <span class="c1">#  32 blocks -- one per group</span>
+<span class="n">grid2</span> <span class="o">=</span> <span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="n">C</span><span class="p">,</span>          <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>   <span class="c1"># 320 blocks -- one per channel</span>
 </pre></div>
 </div>
 </div>
+</section>
+<section id="alternative-approaches">
+<h3>Alternative Approaches<a class="headerlink" href="#alternative-approaches" title="Link to this heading"></a></h3>
+<p>We tried two other designs before settling on the two-pass kernel.</p>
+<p><strong>Split-reduction variant</strong></p>
+<p>The stats kernel launches only 32 blocks.
+With 48 SMs on the DGX Spark, 16 stay idle, which is a waste of parallelism.
+To fix this, we raised the stats grid to 320 blocks (one per channel) to compute partial sums per channel, and recombine them into group statistics inside the apply pass.</p>
+<p>However, profiling disproved the hypothesis.
+Raising the block count from 32 to 320 left memory throughput unchanged (6.73% -&gt; 6.70%) and occupancy nearly flat (9.3% -&gt; 11.5%).
+The split apply pass even ran slower (19.2 us -&gt; 23.4 us), because each apply block now has to load and sum 10 per-channel partial sums before it can normalize anything.
+The clearest signal came from <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> itself: its apply kernel runs at 94.9% occupancy and still reaches only 15.7% memory throughput.
+Therefore, the ceiling is not occupancy, but the problem size. A single batch-1 GroupNorm (2.5 MiB) does not supply enough parallel work to saturate the GPU.</p>
+<p><strong>Single-pass variant</strong></p>
+<p>The two-pass design has two costs: a kernel launch overhead for each pass, and a DRAM round-trip for the mean/inv_std buffers between them.
+The single-pass kernel removes both: one launch, one block per group, statistics computed in registers and immediately reused to normalize all channels in the same block.</p>
+<p>The trade-off is that <code class="docutils literal notranslate"><span class="pre">x</span></code> must be read twice, once to compute the statistics and once to normalize, because the full group (40,960 elements at the top shape) is too large to keep in registers across both loops.
+We hoped the second read would mostly be served from L2 cache, since the stats loop had just touched the same data.</p>
+</section>
+<section id="benchmarks">
+<h3>Benchmarks<a class="headerlink" href="#benchmarks" title="Link to this heading"></a></h3>
+<p>Comparing all variants against eager and <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> on a single (1, 320, 64, 64) block (all times in microseconds):</p>
+<a class="reference internal image-reference" href="../_images/bench-resnet-runtimes-reference.png"><img alt="GroupNorm + SiLU benchmark, batch 1" class="align-center" src="../_images/bench-resnet-runtimes-reference.png" style="width: 75%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>Both cuTile and <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code> sit at low memory throughput at batch 1. At 2.5 MiB the problem is latency-bound, not bandwidth-bound.
+The two-pass kernel reaches a 1.85x speedup over <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>; the win comes from launch overhead, not kernel efficiency.
+Single-pass still beats torch.compile and unfused at batch 1, but sits behind the two-pass and split variants. Its grid of only 32 blocks leaves 16 of the 48 SMs idle, so the saved launch overhead is partially eaten by lower parallelism.</p>
+<p>Sweeping the batch size makes the memory hierarchy directly visible (all times in microseconds).
+Each image needs 5 MiB of working set (<code class="docutils literal notranslate"><span class="pre">x</span></code> + <code class="docutils literal notranslate"><span class="pre">out</span></code>), so the set crosses the 24 MiB L2 cache between B=1 (5 MiB, L2-resident) and B=8 (40 MiB, spills to DRAM):</p>
+<a class="reference internal image-reference" href="../_images/bench-resnet-batch-sizes.png"><img alt="GN+SiLU latency across batch sizes, all variants" class="align-center" src="../_images/bench-resnet-batch-sizes.png" style="width: 90%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>At B=1, the two-pass (Fused) kernel leads. Its 320 apply blocks fully cover the 48 SMs and, with only 2.5 MiB to process, launch overhead is the dominant cost.
+At B=8, Fused-Split takes over as the working set spills to DRAM and the split variant’s higher block count amortizes the cost better.
+From B=32 onward, the single-pass kernel takes over.
+The primary driver is intra-kernel cache reuse. Each block runs the stats loop and the apply loop in sequence, so the apply reads hit the L2 cache just primed by the stats pass rather than going back to DRAM.
+The two-pass variant offers no such locality. Here the stats and apply kernels are separate launches with a global synchronization between them, so the apply kernel always reads <code class="docutils literal notranslate"><span class="pre">x</span></code> fresh from DRAM.</p>
+<p>The measurements agree. At B=128, the theoretical DRAM bandwidth limit is roughly 3,690 µs (3 passes over 128 × 2.5 MiB at 273 GB/s); two-pass measures 4,140 µs (about 12% above the limit, i.e. ~243 GB/s effective), while single-pass measures 3,616 µs, below the theoretical limit, which is only possible if the second read of <code class="docutils literal notranslate"><span class="pre">x</span></code> is partially served from L2.
+The single-pass grid grows as <code class="docutils literal notranslate"><span class="pre">batch</span> <span class="pre">*</span> <span class="pre">32</span></code> blocks, keeping the SMs well occupied, with one fewer kernel launch on top.
+Across all batch sizes, at least one cuTile variant consistently outperforms <code class="docutils literal notranslate"><span class="pre">torch.compile</span></code>, which dispatches more kernels and therefore pays more launch overhead.</p>
+<p>The DRAM-bound plateau confirms the roofline prediction: reading <code class="docutils literal notranslate"><span class="pre">x</span></code> twice and writing <code class="docutils literal notranslate"><span class="pre">out</span></code> once costs
+<span class="math notranslate nohighlight">\(3 \times 2.5\,\text{MiB} / 273\,\text{GB/s} \approx 28.8\,\mu s\)</span> per image.</p>
+<section id="shape-coverage-and-the-profitability-gate">
+<h4>Shape coverage and the profitability gate<a class="headerlink" href="#shape-coverage-and-the-profitability-gate" title="Link to this heading"></a></h4>
+<p>The U-Net has 44 GroupNorm calls across 14 distinct shapes.
+Most shapes fall well within what the kernel handles efficiently:</p>
+<a class="reference internal image-reference" href="../_images/bench-resnet-shapes-better.png"><img alt="GN+SiLU shape benchmark, shapes where cuTile wins" class="align-center" src="../_images/bench-resnet-shapes-better.png" style="width: 90%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>On the remaining high-channel, tiny-spatial shapes, the fusion advantage disappears.
+The activations are small enough to fit entirely in L2 cache, so the memory traffic savings from fusion are negligible.
+The culprit is work-per-block granularity. The apply kernel dispatches one block per channel, so at shapes like 2560×8×8 each block handles only 64 spatial elements, far too little to amortize per-block scheduling overhead.
+Notably, the single-pass variant (one kernel launch) is slower than the two-pass variant (two launches), and both are slower than plain eager (four launches), the exact opposite of what kernel-launch count would predict, confirming that launch count is not the bottleneck.
+PyTorch applies the normalization as a single flat elementwise pass over the whole tensor (a fused <a class="reference external" href="https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/cuda/group_norm_kernel.cu">TensorIterator</a> kernel), so it stays fully occupied regardless of per-channel spatial size, and the cuTile kernel ends up slower than plain eager:</p>
+<a class="reference internal image-reference" href="../_images/bench-resnet-shapes-worse.png"><img alt="GN+SiLU shape benchmark, shapes where cuTile loses" class="align-center" src="../_images/bench-resnet-shapes-worse.png" style="width: 90%;" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>To avoid regressing those shapes, we added a <code class="docutils literal notranslate"><span class="pre">_PROFITABLE_GN_SHAPES</span></code> gate that activates the fused path only where it beats eager and falls back to PyTorch everywhere else.
+The gate ensures the end-to-end patch is a net improvement and no shape is left slower than baseline.
+The batch-1 wins are purely launch-overhead gains; <code class="docutils literal notranslate"><span class="pre">torch.compile(mode=&quot;reduce-overhead&quot;)</span></code> with CUDA graphs would erase them.
+There is no kernel-level headroom left; further speed-up requires graph-level optimization.</p>
+</section>
+</section>
+</section>
 </section>
 
 
@@ -853,6 +414,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> <
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="10_whole_npu.html" class="btn btn-neutral float-left" title="Using the whole NPU" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="11_project_old.html" class="btn btn-neutral float-right" title="OLD: Project: cuTile for Local Diffusion" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
