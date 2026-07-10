@@ -1,791 +1,365 @@
 Project: cuTile for Local Diffusion
 ===================================
 
-For the last three weeks of the machine-learning-accelerators course, we were asked to select a personal project.
-We have decided to optimize the denoising loop of a local text-to-image diffusion model.
+For our final project, we wanted to see how much of a difference custom GPU kernels can make on a real model.
+We took SD-Turbo, a local text-to-image diffusion model from Stability AI, and spent three weeks trying to cut its inference latency with cuTile.
+Some optimizations paid off, while others worsened performance, but we learned a lot about the model, the hardware, and the optimization process.
 
-As our model of choice we have selected the ``SD-Turbo`` text-to-image model.
-The architecture of ``SD-Turbo`` is a U-Net.
+The Problem
+--------------------
 
-Each denoising step runs the whole U-Net, which, for the ``SD-Turbo``, is built from 22 ResnetBlocks (and 16 transformer blocks).
-For our selected model, the operations within such a block are:
+A diffusion model generates images by iteratively denoising a random noise field, guided by a text prompt.
+Each denoising step runs a neural network whose blocks chain normalization, activation, and matrix multiplication in sequence.
+The obvious approach is to optimize each operation individually, but that ignores the memory traffic between them.
+Every kernel reads its input from memory, performs its computation, and writes its output back to memory.
+This data transfer is expensive and it is repeated for every operation in the chain.
+Fusing consecutive operations keeps intermediate results in registers or shared memory and eliminates memory round-trips.
 
-- GroupNorm,
-- SiLU,
-- Conv2d, and
-- Linear.
+In our project, we wanted to optimize a local diffusion model with cuTile by identifying and fusing memory-bound operations in the diffusion process. But more on that later. 
+First, we need to understand the model architecture and the hardware.
 
-Further, on the transformer side there are:
+The Model
+^^^^^^^^^^^
 
-- LayerNorm,
-- GELU / GEGLU FFN, and
-- the attention mechanism.
+The model is ``SD-Turbo``, a distilled text-to-image model from Stability AI, available on `HuggingFace <https://huggingface.co/stabilityai/sd-turbo>`__.
+It generates images in a single denoising step, which makes it a clean latency target, since there is no multi-step averaging to hide slow kernels.
+The simplified architecture is shown below.
 
-Looking at these operations it becomes clear that there are a lot of memory transfers happening.
-Therefore, we plan to decrease the text-to-image time by fusing together several of these operations.
-That means we are optimizing the diffusion model with regard to memory bandwidth.
+.. figure:: ../_static/project/model-architecture.png
+   :alt: SD-Turbo Architecture
+   :align: center
+   :width: 80%
 
-Milestones
-----------
+|
 
-To follow a clear plan for these three weeks we came up with six milestones.
+A prompt is first encoded into a text embedding by the *Text Encoder*.
+The *U-Net* denoiser then uses that embedding to generate an image, running 22 ResNet blocks and 16 Transformer blocks on each denoising step.
+Finally, the *VAE Decoder* maps the denoised output to the final RGB image.
+
+The Hardware
+^^^^^^^^^^^^^^
+
+For the project we had access to a `DGX Spark <https://docs.nvidia.com/dgx/dgx-spark/hardware.html>`__, a compact machine built for local AI workloads.
+It runs the NVIDIA GB10 Grace Blackwell Superchip with 128 GB of unified LPDDR5X memory at 273 GB/s, shared between the CPU and GPU.
+The GPU has 48 Streaming Multiprocessors (SMs) and 24 MiB of L2 cache.
+
+.. image:: ../_static/project/dgx-spark.png
+   :alt: DGX Spark
+   :align: center
+   :width: 30%
+
+
+Our Milestones
+^^^^^^^^^^^^^^^^
+
+We split the three-week project into six milestones:
 
 0. Set up the environment and install required dependencies.
-1. Inspect SD-Turbo model, identify fusion candidates, reason about tiling approaches, and build a roofline model.
-2. Implement and optimize fused GroupNorm + SiLU kernel (+ verify correctness via ``torch.allclose`` per block and benchmark).
-3. Implement and optimize fused LayerNorm + GEGLU FFN kernel (+ verify correctness via ``torch.allclose`` per block and benchmark).
-4. Patch both kernels into SD-Turbo and verify end-to-end image equivalence.
+1. Inspect SD-Turbo, identify fusion candidates, reason about tiling, and build a roofline model.
+2. Implement and optimize a fused GroupNorm + SiLU kernel.
+3. Implement and optimize a fused LayerNorm + GEGLU FFN kernel.
+4. Patch both kernels into SD-Turbo and verify end-to-end correctness.
 5. Build a Gradio UI for running the optimized model on the DGX Spark.
 
-Regarding benchmarking we plan to:
-
-- compare against ``torch.compile``,
-- prove the approach with Nsight (bytes moved per step at each memory tier),
-- keep track on the gain of each of our fusing approaches, and
-- compare different tiling sizes and approaches.
-
+Each milestone includes benchmarks against the eager PyTorch baseline and ``torch.compile``, across batch sizes and the full set of real U-Net shapes.
 
 Milestone 0: SD-Turbo Model
 ---------------------------
 
-Additional requirements that are needed to generate images with the ``SD-Turbo`` model.
+The SD-Turbo pipeline needs a few libraries beyond a base PyTorch install.
+``diffusers`` and ``transformers`` provide the model and text encoder; ``accelerate`` is a HuggingFace utility that suppresses dispatch warnings; ``torchvision`` handles image I/O.
 
 .. code-block:: bash
     :caption: requirements
 
     pip install diffusers
     pip install transformers
-    # Silence warnings
     pip install accelerate
     pip install torchvision
 
-Milestone 1: Candidates + Tiling
---------------------------------
+Milestone 1: Fusion Candidates
+-------------------------------
 
-After installing the required libraries, we then inspected a resnet and a transformer block of the model.
+Before writing any kernels, we needed to find where fusion would actually pay off.
+That meant inspecting the two main block types in the U-Net and building a roofline model to confirm which operations are worth targeting.
+To see what ``torch.compile`` generates for each block, we used ``TORCH_LOGS=output_code``. 
+We simply set it as an environment variable before compiling, which causes Inductor to print every kernel it emits to stdout.
 
-Resnet Block
-^^^^^^^^^^^^^^
-
-.. literalinclude:: ../_static/resnet.txt
-    :language: text
-    :caption: ResnetBlock2D
-
-Based on this resnet-block it is clear that each operation (norm, SiLU) reads and writes :math:`2 \cdot 320 \cdot 64 \cdot 64 = 2.5MiB`.
-Therefore, the clear candidates for a fusion are ``norm1 + SiLU`` and ``norm2 + SiLU``.
-To achieve the highest performance for the resnet block, it is also possible to additionally fuse the denoising (``temb``) and the residual tail.
-
-.. image:: ../_static/roofline.svg
-
-The roofline model shows that the norm / activation operations are memory-bound, so fusing ``norm + SiLU`` makes sense.
-
-Transformer Block
+The ResNet Block
 ^^^^^^^^^^^^^^^^^
 
-.. literalinclude:: ../_static/transformer.txt
-    :language: text
-    :caption: Transformer2DModel
+Each ResNet block follows the same pattern: GroupNorm and SiLU, a 3x3 convolution that mixes information across neighboring pixels, a time-embedding step that injects the current noise level into the block, and then the same sequence again.
+Finally, the block's input is added back to its output as a residual connection.
 
-For the transformer block, the ``LayerNorm + GEGLU`` are worth fusing with the matrix multiplications.
+.. image:: ../_static/project/resnet-fusing-cands.png
+   :alt: ResNet block with fusion candidates highlighted
+   :align: center
+   :width: 60%
 
-- ``LayerNorm -> mm1 (320, 2560) -> GEGLU -> mm2 (1280, 320)``
+|
 
-By fusing these operations, we plan to remove the separated memory passes for ``LayerNorm + GEGLU``.
+Two fusion candidates stand out: the GroupNorm + SiLU pairs before and after the time-embedding.
+Running them as separate kernels means the full activation gets read and written twice per pair.
+At the top resolution (320 channels, 64x64 spatial), that activation is 2.5 MiB, so each unfused pair costs an unnecessary 5 MiB of memory traffic.
+Fusing both operations into a single kernel reduces that to one read and one write.
 
-Fusing
-^^^^^^
+The activation sizes vary with U-Net depth.
+As the network goes deeper, spatial resolution halves and channel count doubles at each step: 320 channels at 64x64, 640 at 32x32, 1280 at 16x16 and 8x8.
+Fewer spatial locations, but each one carries a richer feature representation.
+All of these shapes are candidates for the same fusion.
 
-After performing some initial tests, we verified that ``torch.compile`` already fuses ``norm + SiLU`` into a single kernel.
-Therefore, this kernel serves as a warm-up kernel.
+.. image:: ../_static/project/roofline.svg
+   :alt: Roofline model
+   :align: center
+   :width: 80%
 
-On the other hand, the ``LayerNorm`` and ``GEGLU`` are executed as two separate kernels.
-Therefore, fusing them with the matmul provides higher value compared to the ``torch.compile`` reference.
+|
 
-Tiling
-^^^^^^
+GroupNorm and SiLU both sit close to the memory bandwidth ceiling and well below the compute roof, which means that they are bandwidth-bound.
+Fusing them reduces memory traffic without increasing compute requirements.
 
-For the optimal tiling approach we have several constraints that have to be met, either from cuTile or the GPU.
+In the kernel log, eager PyTorch dispatches 4 separate kernels for the GN+SiLU block.
+``torch.compile`` already fuses the normalization and activation down to 3.
+Our cuTile kernel brings that to 2 (a stats pass and an apply pass), or 1 with a single-pass design.
+That is the bar we are working against.
 
-From the cuTile side of things, we have to consider that the tile dimensions must be powers of two.
+The Transformer Block
+^^^^^^^^^^^^^^^^^^^^^
 
-The Nvidia Spark GPU has ``24 MiB`` of L2 cache and ``48 SMs``.
-The per-block activation (``2.5 MiB``) fits comfortably in L2, so at batch 1 it stays cache-resident.
+The transformer block takes a sequence of tokens as input, where each token corresponds to one spatial location.
+In the model, tokens = height × width (the flattened spatial resolution from the previous ResNet layer) and dim = channels.
 
-For the ``norm + SiLU`` fusion we are looking at 32 groups and 320 channels.
-Therefore, we can use 10 channels per group and thereby, have :math:`10 \times 64 \times 64 = 40,960` elements.
+The block runs LayerNorm + self-attention and LayerNorm + cross-attention first.
+Both attention operations showed up as fused kernels in the log, leaving little room to improve.
 
-For the fusion of the matmul with the ``LayerNorm + GEGLU``, we keep the contraction pattern of the two linear layers with ``(320 -> 2560, 1280 -> 320)``.
-We are going to fuse the ``LayerNorm`` as a first touch and then apply the ``GELU`` as a last touch for the first matmul.
+.. image:: ../_static/project/transformer-fusing-cands.png
+   :alt: Transformer block with fusion candidates highlighted
+   :align: center
+   :width: 60%
 
+|
 
-Milestone 2: Fused GroupNorm + SiLU Kernel
-------------------------------------------
-
-torch.compile already fuses GN + SiLU
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Before implementing the cuTile kernel, we verified what ``torch.compile`` does with this candidate.
-Setting ``TORCH_LOGS=output_code`` and compiling a standalone ``GroupNorm + SiLU`` module (see
-``src/diffusion/sd_turbo/resnet/gn_check.py``) causes Inductor to print the generated Triton kernels:
+The feed-forward network at the end of the block is more promising.
+The kernel log revealed that Inductor emits the LayerNorm and the GEGLU gate as separate kernels, sandwiching two cuBLAS matmul calls:
 
 ::
 
-    triton_red_fused_native_group_norm_0      # partial reduction (Welford, 160 blocks * 8192 elems)
-    triton_per_fused_native_group_norm_1      # combine partial results -> final mean/variance per group
-    triton_poi_fused_native_group_norm_silu_2 # apply norm + SiLU (fused into one pointwise kernel)
+    triton_..._native_layer_norm      # LayerNorm  (own kernel)
+    extern_kernels.addmm              # mm1 (cuBLAS)
+    triton_..._gelu_mul               # GEGLU gate (own kernel)
+    extern_kernels.addmm              # mm2 (cuBLAS)
 
-``torch.compile`` (Inductor) fuses the normalization apply and SiLU into a single Triton
-kernel. However, the GroupNorm statistics (mean and variance per group) require a two-stage
-reduction: a first pass computes partial Welford statistics across the large spatial domain (40,960
-elements per group at ``320 x 64 x 64``), and a second pass combines those partial results into the
-final per-group mean and variance. This leaves ``torch.compile`` at 3 kernels total.
+Because cuBLAS handles the matmuls, Inductor cannot fold LayerNorm or GEGLU into them.
+The mm1 output is written to DRAM and read back by the gate kernel.
 
-The First Fused CuTile Kernel
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The path to fusion is clear: use LayerNorm as a first touch going into mm1 and GEGLU as a last touch coming out of mm1, keeping the intermediate in registers and avoiding the DRAM round-trip entirely.
 
-We designed our kernel with a similar two-pass approach, but with a single fused apply kernel that computes the mean and variance in registers and applies the normalization and SiLU in one pass. The first pass is a reduction kernel that computes the mean and variance per group:
+The feed-forward expansion factor is 4, and GEGLU requires two projections (hidden and gate), so mm1 projects from [tokens, dim] to [tokens, 8*dim].
+At the top shape (tokens=4096, dim=320), that intermediate is 4096 x 2560 x 2 bytes (fp16) = 20 MiB.
+Writing it to DRAM and reading it back costs 40 MiB per FFN call.
+The fused kernel avoids that entirely.
+
+Milestone 2: Fused GroupNorm + SiLU
+-------------------------------------
+
+The first kernel to implement is the GroupNorm + SiLU fusion for the ResNet blocks.
+Before writing any cuTile code, it helps to understand what each operation computes and what data dependencies it creates.
+
+GroupNorm and SiLU
+^^^^^^^^^^^^^^^^^^^
+
+GroupNorm normalizes each group of channels independently.
+For each sample ``n`` and group ``g``, it computes the mean and variance over all channels and spatial locations in the group, then normalizes and applies a learned affine transform:
+
+.. math::
+
+    \mu_g = \frac{1}{C_g \cdot H \cdot W} \sum_{c \in g} \sum_{h,w} x_{n,c,h,w}
+
+    \hat{x}_{n,c,h,w} = \frac{x_{n,c,h,w} - \mu_g}{\sqrt{\sigma_g^2 + \varepsilon}}
+
+    y_{n,c,h,w} = \gamma_c \cdot \hat{x}_{n,c,h,w} + \beta_c
+
+Stability AI fixed the number of groups at 32 during training, so with 320 channels each group covers exactly 10 channels.
+The key constraint is that every element in the group must be read before any single element can be normalized, since mean and variance span the whole group. A two-pass design is the direct consequence: the first pass computes the statistics, the second applies them.
+
+SiLU is simpler.
+Each output element depends only on the corresponding input:
+
+.. math::
+
+    \text{SiLU}(x) = \frac{x}{1 + e^{-x}}
+
+There is no cross-element dependency, which makes it a natural last touch to fuse onto the normalization apply pass.
+
+The Two-Pass Kernel
+^^^^^^^^^^^^^^^^^^^^
+
+**Pass 1: stats kernel** -- grid of ``N * G = 32`` blocks, one per group.
+
+Each block iterates over its ``channels_per_group = 10`` channels, accumulating the sum and sum-of-squares over the full H*W spatial extent.
+From these it derives the group mean and inverse standard deviation, then stores them to DRAM for pass 2.
 
 .. code-block:: python
-  :caption: Kernel for computing mean and variance per group
+    :caption: Stats kernel: mean and inverse std per group
 
-  @ct.kernel
-  def gn_mean_stddev_kernel(x, 
-                            mean, 
-                            std_dev, 
-                            channels_per_group: ConstInt, 
-                            height: ConstInt, 
-                            width: ConstInt,
-                            eps):
-    # 1) Prepare
-    num_groups = mean.shape[1]
-    bid = ct.bid(0)
-    group_idx = bid % num_groups
-    n = bid // num_groups
+    @ct.kernel
+    def gn_mean_stddev_kernel(x, mean, std_dev,
+                              channels_per_group: ConstInt,
+                              height: ConstInt, width: ConstInt, eps):
+        num_groups = mean.shape[1]
+        bid        = ct.bid(0)
+        group_idx  = bid % num_groups
+        n          = bid // num_groups
 
-    # 2) Reduction / Accumulation
-    sum    = ct.zeros((1,), dtype=torch.float32)
-    sum_sq = ct.zeros((1,), dtype=torch.float32)
-    for channel_in_group in range(channels_per_group):
-        channel_idx = group_idx * channels_per_group + channel_in_group
+        sum    = ct.zeros((1,), dtype=torch.float32)
+        sum_sq = ct.zeros((1,), dtype=torch.float32)
+        for channel_in_group in range(channels_per_group):
+            channel_idx = group_idx * channels_per_group + channel_in_group
+            flat    = ct.reshape(ct.load(x, index=(n, channel_idx, 0, 0),
+                                 shape=(1, 1, height, width)).astype(torch.float32),
+                                 (height * width,))
+            sum    = sum    + ct.sum(flat,        axis=0)
+            sum_sq = sum_sq + ct.sum(flat * flat, axis=0)
 
-        tile = ct.load(x, index=(n, channel_idx, 0, 0), shape=(1, 1, height, width))
-        res_tile = ct.reshape(tile.astype(torch.float), (height * width,))
+        count         = channels_per_group * height * width
+        group_mean    = sum / count
+        group_std_dev = ct.rsqrt(sum_sq / count - group_mean * group_mean + eps)
 
-        sum = sum + ct.sum(res_tile, axis=0)
-        sum_sq = sum_sq + ct.sum(res_tile * res_tile, axis=0)
+        ct.store(mean,    index=(n, group_idx), tile=ct.reshape(group_mean,    (1, 1)))
+        ct.store(std_dev, index=(n, group_idx), tile=ct.reshape(group_std_dev, (1, 1)))
 
-    # 3) Store
-    count = channels_per_group * height * width
-    group_mean    = sum / count
-    group_var     = sum_sq / count - group_mean * group_mean
-    group_std_dev = ct.rsqrt(group_var + eps)
+**Pass 2: apply kernel** -- grid of ``N * C = 320`` blocks, one per channel.
 
-    ct.store(mean, index=(n, group_idx), tile=ct.reshape(group_mean, (1, 1)))
-    ct.store(std_dev, index=(n, group_idx), tile=ct.reshape(group_std_dev, (1, 1)))
-    return
-
-and the second pass is a pointwise kernel that normalizes the input and applies the SiLU activation:
+Each block loads the mean and inverse std for its group, applies normalization and the learned affine transform, then fuses SiLU as a final elementwise step.
+A grid of 320 blocks fully covers the 48 SMs.
 
 .. code-block:: python
-  :caption: Kernel for applying normalization and SiLU activation
+    :caption: Apply kernel: normalize, affine, SiLU
 
-  @ct.kernel
-  def gn_silu_kernel(x, 
-                   out, 
-                   weight, 
-                   bias, 
-                   mean, 
-                   std_dev, 
-                   channels_per_group: ConstInt, 
-                   height: ConstInt, 
-                   width: ConstInt):
-    spatial_size = height * width
-    
-    # index calculation
-    bid = ct.bid(0)
-    channel_idx = bid % x.shape[1]
-    sample_idx  = bid // x.shape[1]
-    group_idx   = channel_idx // channels_per_group
+    @ct.kernel
+    def gn_silu_kernel(x, out, weight, bias, mean, std_dev,
+                       channels_per_group: ConstInt,
+                       height: ConstInt, width: ConstInt):
+        bid         = ct.bid(0)
+        channel_idx = bid % x.shape[1]
+        sample_idx  = bid // x.shape[1]
+        group_idx   = channel_idx // channels_per_group
 
-    # per-group, loaded as 1-element tiles to broadcast over the channel
-    mean_s    = ct.reshape(ct.load(mean,    index=(sample_idx, group_idx), shape=(1, 1)), (1,))  # VERIFY
-    inv_std_s = ct.reshape(ct.load(std_dev, index=(sample_idx, group_idx), shape=(1, 1)), (1,))  # VERIFY
-    weight_s  = ct.load(weight, index=(channel_idx,), shape=(1,)).astype(torch.float32)
-    bias_s    = ct.load(bias,   index=(channel_idx,), shape=(1,)).astype(torch.float32)
+        mean_s    = ct.reshape(ct.load(mean,    index=(sample_idx, group_idx), shape=(1, 1)), (1,))
+        inv_std_s = ct.reshape(ct.load(std_dev, index=(sample_idx, group_idx), shape=(1, 1)), (1,))
+        weight_s  = ct.load(weight, index=(channel_idx,), shape=(1,)).astype(torch.float32)
+        bias_s    = ct.load(bias,   index=(channel_idx,), shape=(1,)).astype(torch.float32)
 
-    x_tile = ct.load(x, index=(sample_idx, channel_idx, 0, 0), shape=(1, 1, height, width))
-    x_fp32 = ct.reshape(x_tile.astype(torch.float32), (spatial_size,))
-    
-    normed = (x_fp32 - mean_s) * inv_std_s            # broadcast (1,) over (HW,)  # VERIFY broadcast
-    affine = normed * weight_s + bias_s
-    silu   = affine * (1.0 / (1.0 + ct.exp(-affine))) # SiLU, composed             # VERIFY scalar+tile
+        x_fp32 = ct.reshape(ct.load(x, index=(sample_idx, channel_idx, 0, 0),
+                             shape=(1, 1, height, width)).astype(torch.float32),
+                             (height * width,))
 
-    out_tile = ct.reshape(silu.astype(out.dtype), (1, 1, height, width))
-    ct.store(out, index=(sample_idx, channel_idx, 0, 0), tile=out_tile)
-    return
+        normed = (x_fp32 - mean_s) * inv_std_s
+        affine = normed * weight_s + bias_s
+        silu   = affine * (1.0 / (1.0 + ct.exp(-affine)))
 
-GroupNorm Shape Coverage
-^^^^^^^^^^^^^^^^^^^^^^^^^
+        ct.store(out, index=(sample_idx, channel_idx, 0, 0),
+                 tile=ct.reshape(silu.astype(out.dtype), (1, 1, height, width)))
 
-A forward-pass survey of all 44 GroupNorm calls across the U-Net's ``ResnetBlock2D`` blocks reveals 14 distinct ``(channels, H, W, groups)`` shapes, of which the fused cuTile kernel currently serves only the ``(320, 64, 64, 32)`` case (16 % of calls).
-Because the kernel is already shape-parametric -- the channel count is only a loop bound and every spatial extent is a power of two -- all 44 calls are kernel-eligible, so full coverage requires merely relaxing the ``GnSiluFused._is_supported`` gate rather than writing new kernels.
+The launch function allocates small intermediate buffers for the stats and fires both grids:
 
-::
+.. code-block:: python
+    :caption: Launch grids
 
-     chan    H    W  grps   Cg  count   now eligible
-    ----------------------------------------------------
-     1280    8    8    32   40     11            YES
-      320   64   64    32   10      7   YES      YES
-      640   32   32    32   20      6            YES
-     1280   16   16    32   40      6            YES
-     2560    8    8    32   80      3            YES
-      640   64   64    32   20      2            YES
-     2560   16   16    32   80      2            YES
-      320   32   32    32   10      1            YES
-      640   16   16    32   20      1            YES
-      960   32   32    32   30      1            YES
-      960   64   64    32   30      1            YES
-     1280   32   32    32   40      1            YES
-     1920   16   16    32   60      1            YES
-     1920   32   32    32   60      1            YES
-    ----------------------------------------------------
-    total GN calls: 44   fused now: 7 (16%)   kernel-eligible: 44 (100%)
-    distinct shapes: 14
+    grid1 = (N * num_groups, 1, 1)   #  32 blocks -- one per group
+    grid2 = (N * C,          1, 1)   # 320 blocks -- one per channel
 
-After we applied the arbitrary shapes, we are now fusing everything:
-
-::
-
-     chan    H    W  grps   Cg  count   fusable
-    --------------------------------------------
-     1280    8    8    32   40     11       YES
-      320   64   64    32   10      7       YES
-      640   32   32    32   20      6       YES
-     1280   16   16    32   40      6       YES
-     2560    8    8    32   80      3       YES
-      640   64   64    32   20      2       YES
-     2560   16   16    32   80      2       YES
-      320   32   32    32   10      1       YES
-      640   16   16    32   20      1       YES
-      960   32   32    32   30      1       YES
-      960   64   64    32   30      1       YES
-     1280   32   32    32   40      1       YES
-     1920   16   16    32   60      1       YES
-     1920   32   32    32   60      1       YES
-    --------------------------------------------
-    total GN calls: 44   fusable: 44 (100%)
-    distinct shapes: 14
-
-
-
-Kernel Benchmark and Profiling
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-We compared the fused cuTile ``GroupNorm + SiLU`` against the eager PyTorch reference and
-``torch.compile`` on a single ``(1, 320, 64, 64)`` block, and profiled every kernel with
-Nsight Compute (``ncu``).
-
-.. list-table:: GroupNorm + SiLU on (1, 320, 64, 64), profiled with Nsight Compute
-   :header-rows: 1
-
-   * - Variant
-     - Kernels
-     - Total (us)
-     - Memory throughput
-   * - eager (reference)
-     - 4
-     - ~104
-     - 2 - 19 %
-   * - ``torch.compile``
-     - 3
-     - ~41
-     - 0.5 - 16 %
-   * - fused (cuTile)
-     - 2
-     - ~39
-     - 6 - 14 %
-
-At the kernel level the cuTile fusion matches ``torch.compile`` (two kernels vs three) and both
-plateau at a low memory throughput: a single batch-1 ``GroupNorm`` is too small to saturate the
-48 SMs, so the kernels are latency-bound, not bandwidth-bound. The larger speed-up seen in the
-Python micro-benchmark is dominated by ``torch.compile``'s per-call dispatch overhead rather than
-kernel efficiency. End-to-end, ``torch.compile`` additionally optimizes the whole U-Net graph
-(CUDA graphs, cross-kernel scheduling), which a per-block kernel replacement does not -- so the
-end-to-end difference reflects graph-level optimization, not the quality of the
-``GroupNorm + SiLU`` kernel.
-
-Occupancy is not the bottleneck
-"""""""""""""""""""""""""""""""
-
-The statistics kernel launches only ``N x groups = 32`` blocks, so we suspected it underfilled the
-48 SMs and wrote a split-reduction variant: per-channel partial sums (``N x channels = 320`` blocks)
-recombined in the apply pass. **Profiling disproved the hypothesis.** Raising the block count 32 -> 320
-left the memory throughput unchanged (6.73 % -> 6.70 %) and the achieved occupancy nearly flat
-(9.3 % -> 11.5 %); the split apply pass even ran *slower* (19.2 -> 23.4 us) because rebuilding the
-group statistics per block adds dependent scalar loads. The decisive evidence comes from
-``torch.compile``: its apply kernel runs at **94.9 % occupancy and still reaches only 15.7 % memory
-throughput**. The ceiling is therefore the *problem size* -- a single batch-1 ``GroupNorm`` (2.5 MiB,
-~19 us) cannot supply enough parallel work to saturate the GPU -- not the launch occupancy. The
-simple two-pass kernel remains the fastest variant; the split kernel is kept as a documented negative
-result. Further speed-ups must come from graph-level optimization (CUDA graphs) or larger batches,
-not from tuning this kernel. Sweeping the batch size confirms this is scale-independent: the
-split-reduction kernel stays within ~2 % of the two-pass kernel from ``B = 1`` to ``B = 128``
-(``split / two-pass`` = 0.98 - 1.01), so raising occupancy is neutral across the whole L2-to-DRAM
-range, not only at batch 1.
-
-Batch scaling: the L2 boundary
-""""""""""""""""""""""""""""""
-
-Sweeping the batch size makes the memory hierarchy directly visible. Each image needs
-``x`` + ``out`` = ``2 x 2.5 MiB = 5 MiB`` of working set, so the set crosses the ``24 MiB`` L2 cache
-between ``B = 4`` (20 MiB, fits) and ``B = 8`` (40 MiB, spills to DRAM):
-
-.. list-table:: Fused GroupNorm + SiLU, per-image latency vs batch size
-   :header-rows: 1
-
-   * - Batch
-     - us / call
-     - us / image
-     - Regime
-   * - 1
-     - 17.7
-     - 17.7
-     - L2-resident
-   * - 2
-     - 24.2
-     - 12.1
-     - L2-resident
-   * - 4
-     - 59.1
-     - 14.8
-     - L2-resident (near limit)
-   * - 8
-     - 238.7
-     - 29.8
-     - spills to DRAM
-   * - 16
-     - 536.0
-     - 33.5
-     - DRAM-bound
-   * - 32
-     - 1046.0
-     - 32.7
-     - DRAM-bound
-   * - 64
-     - 2092.5
-     - 32.7
-     - DRAM-bound
-
-While the working set is L2-resident the per-image latency stays ~12 - 18 us (latency-bound); once it
-spills, it plateaus at ~32.7 us/image. That plateau is exactly the DRAM-bandwidth cost of the two-pass
-kernel, which moves ``x`` twice plus ``out`` once: :math:`3 \times 2.5\,\text{MiB} / 240\,\text{GB/s} \approx 32.8\,\mu s`.
-This confirms the roofline premise from Milestone 1: at batch 1 the activation is L2-resident (so the
-fusion win is L2 traffic and launch overhead), and only at larger batch / resolution does it spill to
-DRAM, where reducing the number of passes would yield the larger, bandwidth-bound win.
-
-cuTile vs. torch.compile across batch sizes
-"""""""""""""""""""""""""""""""""""""""""""
-
-Comparing the fused cuTile kernel against ``torch.compile`` on random inputs across batch sizes
-separates the two regimes cleanly:
-
-.. list-table:: Median latency (us), fused GroupNorm + SiLU on random data
-   :header-rows: 1
-
-   * - Batch
-     - Working set
-     - ``torch.compile``
-     - cuTile
-     - cuTile vs compile
-   * - 1
-     - 5 MiB (L2)
-     - 29.8
-     - 15.7
-     - 1.90x
-   * - 8
-     - 40 MiB (DRAM)
-     - 225.1
-     - 260.4
-     - 0.86x
-   * - 32
-     - 160 MiB (DRAM)
-     - 1006.1
-     - 1075.8
-     - 0.94x
-   * - 64
-     - 320 MiB (DRAM)
-     - 1996.0
-     - 2044.2
-     - 0.98x
-   * - 128
-     - 640 MiB (DRAM)
-     - 3995.4
-     - 4067.1
-     - 0.98x
-
-At batch 1 cuTile is 1.90x faster, but this is a *launch-overhead* win: cuTile issues two kernels via a
-light launch path, whereas default-mode ``torch.compile`` issues three with Python dispatch guards. Once
-the working set spills to DRAM both kernels become bandwidth-bound -- they move the same bytes against the
-same ~240 GB/s roof -- so the ratio converges toward a tie (0.86 -> 0.98), the two implementations landing
-within a few percent of each other. The conclusion: for this memory-bound operation the cuTile kernel *matches* a
-heavily tuned production compiler to within ~10 %; its only clear advantage is launch overhead at batch 1,
-which ``torch.compile(mode="reduce-overhead")`` (CUDA graphs) would also remove. This closes the
-``GroupNorm + SiLU`` candidate: there is no kernel-level headroom left, so the remaining gains must come
-from graph-level launch amortization (CUDA graphs) and from the compute-bound transformer FFN candidate.
-
-
-
-Real-shape coverage and a profitability gate
-""""""""""""""""""""""""""""""""""""""""""""
-
-Extending the batch-1 comparison to all 14 real U-Net GroupNorm shapes confirms the launch-overhead
-picture: default-mode ``torch.compile`` sits at a ~27 us dispatch floor *regardless of shape*, so the
-fused kernel -- whose latency tracks the actual work -- beats it on 11 of 14 shapes (1.1 - 2.9x). But it
-loses to plain **eager** on 5 high-channel, tiny-spatial shapes (``C >= 1280, H <= 16``), where too few
-elements per group leave the two-pass kernel underutilized. A ``_PROFITABLE_GN_SHAPES`` gate (mirroring
-the FFN one) therefore fuses only the 9 beat-eager shapes and defers the rest, making the ResNet patch a
-non-regression vs eager. Two honest caveats: these batch-1 wins are the launch-overhead advantage that
-``mode="reduce-overhead"`` (CUDA graphs) would remove -- not kernel-efficiency gains -- and the gate's
-whole-model effect is within noise (GroupNorm is a small fraction of the step), so its justification is
-per-shape correctness, not an end-to-end number.
-
-
-Milestone 3: Fused LayerNorm + GEGLU FFN
-----------------------------------------
-
-The second candidate is the transformer feed-forward block
-``LayerNorm -> mm1 (dim -> 8*dim) -> GEGLU -> mm2 (4*dim -> dim)``. A shape survey over the 16
-transformer blocks finds four distinct ``(tokens, dim)`` shapes: ``4096x320``, ``1024x640``,
-``256x1280`` and ``64x1280``. Unlike ``GroupNorm + SiLU`` this candidate is compute-bound
-(~150 GFLOP per denoising step across the FFNs), so the goal is to hide the LayerNorm and GEGLU
-memory passes inside the matmuls rather than to save bandwidth on an elementwise chain.
-
-Fusion headroom (GPU-verified)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Compiling the block with ``torch.compile`` on the Spark and inspecting the generated Triton code
-confirms the Milestone 1 hypothesis on GPU: Inductor emits LayerNorm and the GEGLU gate as
-separate Triton kernels around two external cuBLAS matmuls.
-
-::
-
-    triton_per_fused_native_layer_norm_0             # LayerNorm  (own kernel)
-    extern_kernels.addmm( (4096,320) @ (320,2560) )  # mm1        (cuBLAS)
-    triton_poi_fused_gelu_mul_split_view_1           # GEGLU gate (own kernel)
-    extern_kernels.addmm( (4096,1280) @ (1280,320) ) # mm2        (cuBLAS)
-
-Because the matmuls run in cuBLAS, Inductor cannot fold the norm or activation into them, so the
-``mm1`` output (the proj) is materialized to DRAM and read back by the gate kernel. GEGLU projects to
-twice the feed-forward inner dimension, so at the top shape the proj is ``[tokens, 2*inner]`` wide:
-
-::
-
-    inner      = 4 * dim = 4 * 320 = 1280        (feed-forward expansion, mult = 4)
-    proj shape = [tokens, 2 * inner] = [4096, 2560]     (GEGLU -> 2 * inner)
-    proj bytes = 4096 * 2560 * 2 (fp16)  = 20,971,520 bytes = 20 MiB
-    round-trip = write + read = 2 * 20 MiB = 40 MiB per FFN call
-
-Folding the LayerNorm into ``mm1``'s prologue and the GEGLU into its epilogue keeps the proj in
-registers, avoiding that ~40 MiB round-trip entirely -- headroom cuTile can capture and
-``torch.compile`` cannot.
-
-Kernel and correctness
+Alternative Approaches
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-The fused kernel is two cuTile kernels: **Kernel A** (LayerNorm prologue -> ``mm1`` -> GEGLU
-epilogue) producing the gated ``[tokens, 4*dim]`` without ever materializing the ``8*dim`` proj,
-and **Kernel B** (``mm2``). Both use the ``ct.mma`` tile contraction with tile-unit load indexing.
-The kernel matches the captured block output within an fp16 tolerance (GELU uses the tanh
-approximation, since cuTile has no ``erf``).
+We tried two other designs before settling on the two-pass kernel.
 
-Result: fusion does not beat cuBLAS here
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+**Split-reduction variant**
 
-Benchmarked against the eager block and ``torch.compile``:
+The stats kernel launches only 32 blocks.
+With 48 SMs on the DGX Spark, 16 stay idle, which is a waste of parallelism.
+To fix this, we raised the stats grid to 320 blocks (one per channel) to compute partial sums per channel, and recombine them into group statistics inside the apply pass.
 
-.. list-table:: FFN latency (us): eager / torch.compile / cuTile fused
-   :header-rows: 1
+However, profiling disproved the hypothesis.
+Raising the block count from 32 to 320 left memory throughput unchanged (6.73% -> 6.70%) and occupancy nearly flat (9.3% -> 11.5%).
+The split apply pass even ran slower (19.2 us -> 23.4 us), because each apply block now has to load and sum 10 per-channel partial sums before it can normalize anything.
+The clearest signal came from ``torch.compile`` itself: its apply kernel runs at 94.9% occupancy and still reaches only 15.7% memory throughput.
+Therefore, the ceiling is not occupancy, but the problem size. A single batch-1 GroupNorm (2.5 MiB) does not supply enough parallel work to saturate the GPU.
 
-   * - tokens x dim
-     - eager
-     - ``torch.compile``
-     - cuTile
-     - cuTile vs compile
-   * - 4096 x 320
-     - 397
-     - 331
-     - 352
-     - 0.94x
-   * - 1024 x 640
-     - 235
-     - 181
-     - 429
-     - 0.42x
-   * - 256 x 1280
-     - 223
-     - 264
-     - 1072
-     - 0.25x
+**Single-pass variant**
 
-The fused cuTile kernel is slower than ``torch.compile``, and increasingly so at the smaller-token,
-higher-dim shapes. The cause is matmul utilization: a tile-size sweep tops out at **31.7 TFLOPS**
-(tile ``128x64x64``), only ~32 % of the ~100 TFLOP/s FP16 tensor ceiling, whereas ``torch.compile``
-dispatches the matmuls to cuBLAS, which runs far closer to peak. On a compute-bound operation a
-matmul that is ~3x slower than cuBLAS cannot be recovered by removing the memory passes, even though
-those passes are real (at 4096 x 320, where the proj round-trip is comparable to the matmul time,
-cuTile does reach a near-tie at 0.94x).
+The two-pass design has two costs: a kernel launch overhead for each pass, and a DRAM round-trip for the mean/inv_std buffers between them.
+The single-pass kernel removes both: one launch, one block per group, statistics computed in registers and immediately reused to normalize all channels in the same block.
 
-This is the intended contrast with Milestone 2 and confirms the Milestone 1 roofline reasoning:
+The trade-off is that ``x`` must be read twice, once to compute the statistics and once to normalize, because the full group (40,960 elements at the top shape) is too large to keep in registers across both loops.
+We hoped the second read would mostly be served from L2 cache, since the stats loop had just touched the same data.
 
-- **Memory-bound (GroupNorm + SiLU):** cuTile *ties* ``torch.compile`` -- fusion captures the win
-  because there is no cuBLAS matmul to beat.
-- **Compute-bound (LayerNorm + GEGLU):** cuTile *loses* -- the matmul dominates and a hand-written
-  tile GEMM does not reach cuBLAS-level utilization, so the fusion saving is given back.
+Benchmarks
+^^^^^^^^^^^
 
-The tile-throughput heatmaps (one per ``k_tile``) show throughput rising with tile size up to a
-sweet spot around ``128 x 64 x 64`` (31.7 TFLOPS at ``4096 x 320``), then *collapsing* for the
-largest tiles -- the signature of register spilling.
+Comparing all variants against eager and ``torch.compile`` on a single (1, 320, 64, 64) block (all times in microseconds):
 
-Profiling: occupancy-bound (NCU)
-""""""""""""""""""""""""""""""""
+.. image:: ../_static/project/bench-resnet-runtimes-reference.png
+   :alt: GroupNorm + SiLU benchmark, batch 1
+   :align: center
+   :width: 75%
 
-Nsight Compute pins the cause. *Occupancy* is the fraction of an SM's maximum warps that are actually
-resident; the GPU hides memory latency by switching among resident warps, so when one warp stalls on
-a load another can run. High occupancy therefore requires many warps per SM, but each SM has a fixed
-register file that all its threads share -- so a high register count per thread caps how many warps
-fit. Both fused kernels compile to **255 registers per thread** (the hardware maximum), which pins
-occupancy at ~12 %:
+|
 
-::
+Both cuTile and ``torch.compile`` sit at low memory throughput at batch 1. At 2.5 MiB the problem is latency-bound, not bandwidth-bound.
+The two-pass kernel reaches a 1.85x speedup over ``torch.compile``; the win comes from launch overhead, not kernel efficiency.
+Single-pass still beats torch.compile and unfused at batch 1, but sits behind the two-pass and split variants. Its grid of only 32 blocks leaves 16 of the 48 SMs idle, so the saved launch overhead is partially eaten by lower parallelism.
 
-    register file per SM  = 65,536 registers (256 KB)
-    registers per thread  = 255                       (the hardware maximum)
-    resident threads      = 65,536 / 255 ~= 257 threads = 8 warps
-    occupancy             = 8 / 64 max warps ~= 12.5 %   (NCU measured: 11.9 %)
+Sweeping the batch size makes the memory hierarchy directly visible (all times in microseconds).
+Each image needs 5 MiB of working set (``x`` + ``out``), so the set crosses the 24 MiB L2 cache between B=1 (5 MiB, L2-resident) and B=8 (40 MiB, spills to DRAM):
 
-With only ~8 resident warps there is nothing to hide memory latency, so neither the compute
-(~19 - 24 %) nor the memory (~33 - 40 %) pipe approaches saturation: the kernels are *occupancy-bound*,
-not compute- or memory-bound. The register pressure is inherent to the design -- the GEGLU keeps **two live accumulators** (hidden and gate)
-across the entire reduction, doubling a plain GEMM's footprint -- and cuTile exposes no
-register/shared-memory blocking control, so the kernel cannot reach the occupancy cuBLAS sustains via
-shared-memory staging and warp specialization. This is the concrete reason a hand-written tile GEMM
-does not match cuBLAS on the compute-bound path.
+.. image:: ../_static/project/bench-resnet-batch-sizes.png
+   :alt: GN+SiLU latency across batch sizes, all variants
+   :align: center
+   :width: 90%
 
-We tested the obvious fix -- a register-reduced variant that splits the GEGLU into two
-single-accumulator kernels (materializing the hidden half between them). It ran **slower**, not
-faster (521 vs 351 us at ``4096 x 320``): splitting sacrifices the fused kernel's reuse of the
-normalized A operand (the LayerNorm and normalization are recomputed for both halves) and adds a
-10 MiB buffer round-trip, which outweighs the occupancy gained. The fully-fused two-accumulator
-kernel therefore remains the best cuTile variant -- the register pressure is the price of A-operand
-reuse and is worth paying. The ~32 % ceiling is intrinsic to a hand-written tile GEMM in cuTile and
-is recovered by neither zero-padded larger tiles nor register-splitting.
+|
 
-An **L2 block swizzle** (grouping ``GROUP_M`` row-tiles so concurrent blocks reuse the weight columns
-from L2) gave a modest, shape-dependent gain -- largest (~15 %) at the weight-heavy ``256 x 1280``
-shape where L2 pressure is highest, and negligible at ``4096 x 320`` where the weights are already
-L2-resident. It brings ``4096 x 320`` to a **near-tie with torch.compile** (0.96x at a fixed ``64x64x64``
-tile; **1.05x once the tile is tuned per shape** -- see below), but does not touch
-the occupancy bound; reaching parity across all shapes would require shared-memory blocking, which
-cuTile does not straightforwardly expose alongside the fused epilogue. Notably, ``4096 x 320`` -- the
-top-resolution shape where the fusion's avoided proj round-trip is largest -- is exactly where the
-fused kernel is competitive, consistent with the memory-vs-compute-bound framing throughout.
+At B=1, the two-pass (Fused) kernel leads. Its 320 apply blocks fully cover the 48 SMs and, with only 2.5 MiB to process, launch overhead is the dominant cost.
+At B=8, Fused-Split takes over as the working set spills to DRAM and the split variant's higher block count amortizes the cost better.
+From B=32 onward, the single-pass kernel takes over.
+The primary driver is intra-kernel cache reuse. Each block runs the stats loop and the apply loop in sequence, so the apply reads hit the L2 cache just primed by the stats pass rather than going back to DRAM.
+The two-pass variant offers no such locality. Here the stats and apply kernels are separate launches with a global synchronization between them, so the apply kernel always reads ``x`` fresh from DRAM.
 
-Per-shape tile selection
-""""""""""""""""""""""""
+The measurements agree. At B=128, the theoretical DRAM bandwidth limit is roughly 3,690 µs (3 passes over 128 × 2.5 MiB at 273 GB/s); two-pass measures 4,140 µs (about 12% above the limit, i.e. ~243 GB/s effective), while single-pass measures 3,616 µs, below the theoretical limit, which is only possible if the second read of ``x`` is partially served from L2.
+The single-pass grid grows as ``batch * 32`` blocks, keeping the SMs well occupied, with one fewer kernel launch on top.
+Across all batch sizes, at least one cuTile variant consistently outperforms ``torch.compile``, which dispatches more kernels and therefore pays more launch overhead.
 
-A single fixed tile is not optimal, because the three FFN shapes have different aspect ratios. Re-running
-the ``(tM, tN, tK)`` sweep and taking the best tile *per shape* shows a clear pattern and a large win on
-the dominant shape:
+The DRAM-bound plateau confirms the roofline prediction: reading ``x`` twice and writing ``out`` once costs
+:math:`3 \times 2.5\,\text{MiB} / 273\,\text{GB/s} \approx 28.8\,\mu s` per image.
 
-.. list-table:: Best swizzle tile per FFN shape (from the tile sweep)
-   :header-rows: 1
+Shape coverage and the profitability gate
+""""""""""""""""""""""""""""""""""""""""""
 
-   * - Shape (tokens x dim)
-     - Fixed ``64x64x64``
-     - Best tile
-     - Best latency
-     - Speedup
-   * - 4096 x 320
-     - 777 us
-     - ``128 x 64 x 64``
-     - 316 us
-     - 2.46x
-   * - 1024 x 640
-     - 436 us
-     - ``64 x 128 x 64``
-     - 392 us
-     - 1.11x
-   * - 256 x 1280
-     - 918 us
-     - ``64 x 128 x 64``
-     - 911 us
-     - ~1.0x
+The U-Net has 44 GroupNorm calls across 14 distinct shapes.
+Most shapes fall well within what the kernel handles efficiently:
 
-The pattern is that the best tile tracks the problem's aspect ratio: the **tall** shape (4096 rows) prefers
-a **tall tile** (``tM = 128``), which amortizes each loaded weight column over more rows; the **wide**
-shapes (fewer rows, larger ``dim``) prefer a **wide tile** (``tN = 128``). ``dim = 320`` is not divisible
-by 128, so ``tN`` cannot widen there -- the sweep is forced onto ``tM`` and happens to land on the right
-lever. The ``4096 x 320`` block is both the largest and the most frequent (the early transformer blocks),
-so its 2.46x kernel speedup dominates the FFN's total time.
+.. image:: ../_static/project/bench-resnet-shapes-better.png
+   :alt: GN+SiLU shape benchmark, shapes where cuTile wins
+   :align: center
+   :width: 90%
 
-**Approach.** Rather than hard-code one tile, the launchers auto-select via ``best_ffn_tile(dim, tokens,
-inner)`` (in ``ffn_kernel.py``): a per-``dim`` lookup of the tuned tile, guarded by a divisibility check
-(``tM`` must divide the row count; ``tN`` must divide both ``inner`` and ``dim``) that falls back to
-``64x64x64`` for any shape not in the table, so a mismatched shape can never pick a padding-only tile.
-Both the plain and swizzled launchers default to it, and an explicit tile still overrides for
-benchmarking. The ``FusedFFN`` model patch uses the **swizzled** launcher (the fastest variant on the
-two larger shapes -- the plain kernel is ~2.4x slower at ``1024 x 640``).
+|
 
-Wiring this in and re-running ``bench_compare`` (each variant now at its tuned tile) confirms it end to
-end, and shows the swizzle is the best cuTile variant on the two larger shapes:
+On the remaining high-channel, tiny-spatial shapes, the fusion advantage disappears.
+The activations are small enough to fit entirely in L2 cache, so the memory traffic savings from fusion are negligible.
+The culprit is work-per-block granularity. The apply kernel dispatches one block per channel, so at shapes like 2560×8×8 each block handles only 64 spatial elements, far too little to amortize per-block scheduling overhead.
+Notably, the single-pass variant (one kernel launch) is slower than the two-pass variant (two launches), and both are slower than plain eager (four launches), the exact opposite of what kernel-launch count would predict, confirming that launch count is not the bottleneck.
+PyTorch applies the normalization as a single flat elementwise pass over the whole tensor (a fused `TensorIterator <https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/cuda/group_norm_kernel.cu>`__ kernel), so it stays fully occupied regardless of per-channel spatial size, and the cuTile kernel ends up slower than plain eager:
 
-.. list-table:: FFN latency with tuned tiles (us; ratio = x vs torch.compile)
-   :header-rows: 1
+.. image:: ../_static/project/bench-resnet-shapes-worse.png
+   :alt: GN+SiLU shape benchmark, shapes where cuTile loses
+   :align: center
+   :width: 90%
 
-   * - Shape (tokens x dim)
-     - eager
-     - torch.compile
-     - fused
-     - swizzle
-     - split
-   * - 4096 x 320
-     - 399
-     - 330
-     - 351 (0.94x)
-     - **314 (1.05x)**
-     - 684 (0.48x)
-   * - 1024 x 640
-     - 238
-     - 357
-     - 954 (0.37x)
-     - **394 (0.91x)**
-     - 553 (0.65x)
-   * - 256 x 1280
-     - 230
-     - 263
-     - 1950 (0.13x)
-     - 1332 (0.20x)
-     - **1090 (0.24x)**
+|
 
-The headline is ``4096 x 320``: the tuned swizzle reaches **1.05x vs torch.compile** -- the first (and
-only) cuTile variant to cross parity, on the top-resolution, most-frequent shape, exactly where the
-avoided proj round-trip is largest. At ``1024 x 640`` the swizzle (0.91x) is the strongest variant but
-still short of cuBLAS; at ``256 x 1280`` every variant loses badly (~0.2x), and there the single-accumulator
-``split`` marginally leads the cuTile field -- the weight-heavy, few-token regime where occupancy hurts most.
-
-This is a free win -- a launch-parameter change, no kernel rewrite -- but it does **not** overturn the
-conclusion: even the tuned ``31.9 TFLOPS`` is still only ~32 % of the FP16 tensor ceiling, so the
-occupancy bound and the loss to cuBLAS on the compute-bound path stand across the shape mix. It narrows
-the gap -- to a genuine win at ``4096 x 320`` -- but does not close it overall.
-
-Profitability gate: only fuse where it wins
-"""""""""""""""""""""""""""""""""""""""""""
-
-The table above also shows the fused kernel is *worse than plain eager* on the two larger shapes -- at
-``1024 x 640`` eager is 238 us vs the swizzle's 394, and at ``256 x 1280`` eager (230) even beats
-``torch.compile`` (263). Running the kernel there is strictly self-harm. The ``FusedFFN`` patch therefore
-gates on **profitability**, not just correctness: a ``_PROFITABLE_DIMS`` allow-list (currently
-``{320}``) fuses only the shape that beats eager and falls back to the original ``LayerNorm + FeedForward``
-everywhere else. This makes the patch a **strict non-regression vs eager** -- it wins the ``4096 x 320``
-blocks and matches eager on the rest -- rather than a kernel that helps one shape and hurts two.
-
-This is the roofline thesis expressed as a dispatch rule: *fuse where the shape leans memory-bound
-(``dim = 320``, where the avoided proj round-trip pays for the slower GEMM), defer to cuBLAS/eager where
-it is compute-bound.* It is damage-avoidance, not a new win: the gate cannot make the hand kernel
-competitive on the compute-bound shapes, so the end-to-end result still does not beat ``torch.compile``
-(which fuses the whole graph and captures it into CUDA graphs) -- it only stops the fused path from
-paying for a kernel that loses.
-
-
-Milestone 4: End-to-end Evaluation
-----------------------------------
-
-Patching each fused kernel into the full SD-Turbo U-Net and timing one generation gives the
-whole-model picture. Both patches were first verified to be image-equivalent to the baseline (the
-FFN's tanh-GELU approximation gives a slightly larger but still visually identical difference).
-
-.. list-table:: End-to-end latency, 1-step generation
-   :header-rows: 1
-
-   * - Variant
-     - Median (ms)
-     - vs baseline
-     - vs torch.compile
-   * - Baseline (eager)
-     - 42.58
-     - 1.00x
-     - 0.93x
-   * - Fused ResNet (GN + SiLU)
-     - 41.99
-     - 1.01x
-     - 0.94x
-   * - Fused FFN (LN + GEGLU)
-     - 41.80
-     - 1.02x
-     - 0.95x
-   * - Fused Both
-     - 41.86
-     - 1.02x
-     - 0.95x
-   * - ``torch.compile``
-     - 39.62
-     - 1.07x
-     - 1.00x
-
-With the profitability gates active (fuse GN only on the beat-eager shapes, FFN only on ``dim = 320``),
-every fused variant lands within ~1 - 2 % of the eager baseline -- a statistical **tie**, i.e. a
-non-regression. The gates are doing exactly their job: *without* them the fused FFN regresses to **0.89x**
-(adding ~5 ms by running the losing compute-bound shapes), and the gate removes precisely that.
-
-The 1 - 2 % spread is within run-to-run noise, so the per-kernel wins measured in isolation (GN beating
-``torch.compile`` by 1.2 - 2x on the real batch-1 shapes; the FFN swizzle at 1.04x on ``4096 x 320``) do
-**not** surface end to end. The reason is Amdahl: GroupNorm and the FFN are a small fraction of the ~42 ms
-step -- convolutions, attention, and the VAE dominate -- so even a 2x kernel moves the whole-model number
-by ~1 %, below the noise floor. End-to-end is the wrong instrument to resolve these kernels; the per-kernel
-benchmarks are where their effect is visible and outside noise.
-
-The decisive point is *why*, in isolation, GN can beat the baseline and the FFN cannot. **The eager
-baseline is not naive:** it already dispatches matmuls and convolutions to cuBLAS / cuDNN, and is only
-inefficient about the small memory-bound glue (norms, activations), which it runs as separate kernels.
-
-- **GroupNorm + SiLU is memory-bound** -- the baseline runs it as ~4 scattered kernels with no cuBLAS
-  involved, so fusing them into 2 kernels beats/ties the baseline.
-- **The FFN is compute-bound** -- the baseline runs its matmuls on cuBLAS, so beating it requires
-  replacing cuBLAS with our own matmul (~32 % of peak). Fusing away the memory passes cannot offset a
-  matmul 2 - 4x slower, so on the compute-bound shapes the fused FFN is *slower* -- which is why the gate
-  defers them to eager rather than regressing.
-
-In one sentence: **fusion beats the eager baseline only where the baseline is inefficient (memory-bound
-ops); for a compute-bound op the baseline already uses cuBLAS, so "beating the baseline" means "beating
-cuBLAS", which a hand-written tile kernel does not.** The only **robust** end-to-end winner is
-``torch.compile`` (1.07x), which pairs cuBLAS/cuDNN with CUDA graphs (``mode="reduce-overhead"``) to
-remove the per-launch overhead the eager and patched pipelines still pay -- a CUDA-graph capture of the
-fused pipeline is the natural next step to close that gap.
-
-
-Milestone 5: Gradio UI
-----------------------
-
-A simple Gradio interface wraps the optimized pipeline, allowing interactive text-to-image
-generation with the fused kernels on the DGX Spark.
-
-It can be run with:
-
-.. code-block:: bash
-
-    python src/diffusion/app.py
-
-The UI can then be accessed via the browser:
-
-.. image:: ../_static/gradio-ui.png
-   :alt: Gradio UI screenshot
-
-
-Test Execution
-==============
-
-.. code-block:: bash
-    :caption: Test Execution
-
-    export PYTHONPATH=src/diffusion:test/diffusion
-    python -m pytest test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py -v
+To avoid regressing those shapes, we added a ``_PROFITABLE_GN_SHAPES`` gate that activates the fused path only where it beats eager and falls back to PyTorch everywhere else.
+The gate ensures the end-to-end patch is a net improvement and no shape is left slower than baseline.
+The batch-1 wins are purely launch-overhead gains; ``torch.compile(mode="reduce-overhead")`` with CUDA graphs would erase them.
+There is no kernel-level headroom left; further speed-up requires graph-level optimization.
