@@ -363,3 +363,178 @@ To avoid regressing those shapes, we added a ``_PROFITABLE_GN_SHAPES`` gate that
 The gate ensures the end-to-end patch is a net improvement and no shape is left slower than baseline.
 The batch-1 wins are purely launch-overhead gains; ``torch.compile(mode="reduce-overhead")`` with CUDA graphs would erase them.
 There is no kernel-level headroom left; further speed-up requires graph-level optimization.
+
+Milestone 3: Fused LayerNorm + GEGLU FFN
+------------------------------------------
+
+The second candidate is the transformer feed-forward network.
+Recall the target from Milestone 1: LayerNorm as a first touch into mm1, GEGLU as a last touch out of it, keeping the wide projection in registers instead of paying the 40 MiB DRAM round-trip.
+Unlike GroupNorm + SiLU, this block is dominated by two matmuls rather than memory traffic.
+Fusing away memory passes only helps when memory is the bottleneck, and here it usually is not.
+
+LayerNorm and GEGLU
+^^^^^^^^^^^^^^^^^^^
+
+LayerNorm normalizes each token independently over its feature dimension.
+For a token ``t``, that is one full row of the ``[tokens, dim]`` input:
+
+.. math::
+
+    \mu_t = \frac{1}{K} \sum_{k} x_{t,k}
+    \qquad
+    y_{t,k} = \frac{x_{t,k} - \mu_t}{\sqrt{\sigma_t^2 + \varepsilon}} \cdot \gamma_k + \beta_k
+
+where ``K = dim`` is the feature width.
+Every block still has to read all ``K`` columns of its rows before it can normalize a single element, since the mean and variance span the whole row.
+
+GEGLU is the activation that sits on the output of mm1.
+The first matmul projects the normalized input to ``[tokens, 2*inner]``, twice the feed-forward width, which splits into two equal halves:
+
+.. math::
+
+    \text{hidden}, \text{gate} \in \mathbb{R}^{\text{tokens} \times \text{inner}}, \qquad \text{inner} = 4 \cdot \text{dim}
+
+GELU is applied to the gate half, then the two halves are multiplied elementwise:
+
+.. math::
+
+    \text{GEGLU} = \text{hidden} \odot \text{GELU}(\text{gate})
+
+cuTile has no ``erf``, so we use the tanh approximation of GELU:
+
+.. math::
+
+    \text{GELU}(x) \approx 0.5\,x \left(1 + \tanh\!\left(\sqrt{2/\pi}\,(x + 0.044715\,x^3)\right)\right)
+
+The final gated output is ``[tokens, inner]``, exactly the input width the second matmul expects.
+
+The Fused Kernel
+^^^^^^^^^^^^^^^^
+
+As with the ResNet kernel, we fixed a reference shape to design against: ``[1, 4096, 320]``.
+The launch side is straightforward.
+We reshape ``x`` to ``[M, dim]``, transpose ``w1`` to ``[dim, 2*inner]`` so the weight tiles load directly, allocate the ``gated`` output buffer, and compute the grid.
+Because the kernel is tiled, the grid is the number of output tiles: row-tiles times column-tiles.
+
+.. code-block:: python
+    :caption: Launch grid for Kernel A
+
+    gridA = (ct.cdiv(M, tM) * ct.cdiv(inner, tN), 1, 1)   # row-tiles x col-tiles
+
+Note that the grid is sized by the matmul output, not by LayerNorm.
+The kernel itself runs LayerNorm, mm1, and GEGLU in a single pass per block, using two K-loops:
+
+.. code-block:: python
+    :caption: Kernel A: LayerNorm first touch, mm1, GEGLU last touch
+
+    @ct.kernel
+    def ffn_mm1_geglu(x, w1t, b1, ln_weight, ln_bias, gated,
+                      tM: ConstInt, tN: ConstInt, tK: ConstInt, eps):
+        K           = x.shape[1]          # contraction dim (e.g. 320)
+        inner       = gated.shape[1]      # output width after GEGLU (e.g. 1280)
+        num_tiles_n = ct.cdiv(inner, tN)
+
+        bid    = ct.bid(0)
+        n_tile = bid % num_tiles_n
+        m_tile = bid // num_tiles_n
+
+        # Loop 1: per-row LayerNorm statistics over the feature dim K
+        row_sum = ct.zeros((tM,), dtype=torch.float32)
+        row_sq  = ct.zeros((tM,), dtype=torch.float32)
+        for k in range(ct.cdiv(K, tK)):
+            xt = ct.load(x, index=(m_tile, k), shape=(tM, tK)).astype(torch.float32)
+            row_sum = row_sum + ct.sum(xt,      axis=1)
+            row_sq  = row_sq  + ct.sum(xt * xt, axis=1)
+        mean_1d = row_sum / K
+        mean    = ct.reshape(mean_1d, (tM, 1))
+        inv_std = ct.reshape(ct.rsqrt(row_sq / K - mean_1d * mean_1d + eps), (tM, 1))
+
+        # Loop 2: normalize + affine, accumulate hidden and gate halves together
+        acc_hidden = ct.zeros((tM, tN), dtype=torch.float32)
+        acc_gate   = ct.zeros((tM, tN), dtype=torch.float32)
+        for k in range(ct.cdiv(K, tK)):
+            xt = ct.load(x, index=(m_tile, k), shape=(tM, tK)).astype(torch.float32)
+            lw = ct.load(ln_weight, index=(k,), shape=(tK,)).astype(torch.float32)
+            lb = ct.load(ln_bias,   index=(k,), shape=(tK,)).astype(torch.float32)
+            normed = ((xt - mean) * inv_std * lw + lb).astype(torch.float16)
+
+            w_hidden = ct.load(w1t, index=(k, n_tile),               shape=(tK, tN))
+            w_gate   = ct.load(w1t, index=(k, n_tile + num_tiles_n), shape=(tK, tN))
+            acc_hidden = ct.mma(normed, w_hidden, acc_hidden)
+            acc_gate   = ct.mma(normed, w_gate,   acc_gate)
+
+        # GEGLU last touch: hidden * GELU(gate)
+        hidden = acc_hidden + ct.load(b1, index=(n_tile,),               shape=(tN,)).astype(torch.float32)
+        gate   = acc_gate   + ct.load(b1, index=(n_tile + num_tiles_n,), shape=(tN,)).astype(torch.float32)
+        gelu   = 0.5 * gate * (1.0 + ct.tanh(0.7978845608 * (gate + 0.044715 * gate * gate * gate)))
+        ct.store(gated, index=(m_tile, n_tile), tile=(hidden * gelu).astype(gated.dtype))
+
+The first loop computes one mean and inverse standard deviation per row of the tile.
+The second loop normalizes each input tile and immediately feeds it into two matmul accumulators, ``acc_hidden`` and ``acc_gate``, one for each half of ``w1``.
+Keeping both accumulators live means the normalized input is reused for both projections without ever writing the ``2*inner`` intermediate to memory.
+After the loop, the bias is added and GEGLU produces the gated output directly.
+
+For the second matmul we did not write a cuTile kernel at all.
+A plain ``F.linear(gated, w2, b2)`` (which dispatches to cuBLAS) was simply faster than anything we could tile by hand.
+That asymmetry, fusing the first matmul but handing the second to cuBLAS, is the first hint of what the benchmarks confirm below.
+
+Alternative Approaches
+^^^^^^^^^^^^^^^^^^^^^^^
+
+**Split variant**
+
+The fused kernel keeps two accumulators alive across the whole reduction.
+The split variant instead computes the two halves in separate kernels: one for hidden, one for gate plus GEGLU, materializing the hidden buffer in between.
+The cost is that each kernel recomputes the LayerNorm statistics from scratch, so the reduction runs twice, and the hidden buffer makes an extra DRAM round-trip.
+
+**Swizzle variant**
+
+The swizzle variant reorders how blocks are scheduled.
+Instead of walking output tiles row by row, it groups ``GROUP_M = 8`` row-tiles together so that blocks running concurrently touch the same weight columns, which keeps those columns hot in L2.
+This is purely a scheduling change; the math inside the kernel is identical to the fused version.
+
+Benchmarks
+^^^^^^^^^^^
+
+Before comparing variants, we swept the tile shape to find the best ``(tM, tN, tK)`` for the reference shape.
+All three cuTile variants prefer the same tile: ``tM = 128``, ``tN = tK = 64``.
+
+.. image:: ../_static/project/bench-transformer-shapes-best.png
+   :alt: Best tile shape per FFN variant
+   :align: center
+   :width: 75%
+
+|
+
+With that tile fixed, here are the runtimes on the reference shape ``(1, 4096, 320)`` (all times in microseconds, lower is better):
+
+.. image:: ../_static/project/bench-transformer-runtimes.png
+   :alt: FFN runtimes at 4096x320, all variants
+   :align: center
+   :width: 75%
+
+|
+
+The swizzle variant is the best, reaching a 1.14x speedup over ``torch.compile``.
+The reason is the same one we identified in Milestone 1: fusing LayerNorm and GEGLU into mm1 avoids the wide-projection round-trip that ``torch.compile`` cannot, so we simply move less data.
+
+But this shape is the exception, not the rule.
+Extending the comparison to all four FFN shapes in the U-Net shows where the fusion breaks down:
+
+.. image:: ../_static/project/bench-transformer-shapes.png
+   :alt: FFN benchmark across all four transformer shapes
+   :align: center
+   :width: 90%
+
+|
+
+We only win on ``4096 x 320``, and lose on the other three, often badly.
+The trade-off is between two competing effects:
+
+- **Larger dim** means the matmul takes up more of the total work. Our hand-written mm1 is a much weaker GEMM than cuBLAS, so as the matmul share grows, we lose more ground to ``torch.compile``.
+- **More tokens** means more data to move, which is exactly where the avoided round-trip pays off, so our kernel does relatively better.
+
+``4096 x 320`` is the one shape where the token count is high and the dim is low, making it the only memory-bound FFN shape. Everywhere else the matmul dominates and cuBLAS wins. On those shapes we are slower than plain eager too, not just ``torch.compile``.
+
+As with the ResNet kernel, this motivates a profitability gate: we only fuse the ``dim = 320`` shape and leave the rest to the original PyTorch path.
+The reasoning is the mirror image of the roofline argument. Fusion helps when a block is memory-bound, and hurts when it is compute-bound and a tuned GEMM library is already doing the heavy lifting.
