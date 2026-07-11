@@ -130,7 +130,7 @@ The transformer block takes a sequence of tokens as input, where each token corr
 In the model, tokens = height × width (the flattened spatial resolution from the previous ResNet layer) and dim = channels.
 
 The block runs LayerNorm + self-attention and LayerNorm + cross-attention first.
-Both attention operations showed up as fused kernels in the log, leaving little room to improve.
+Both attention operations appear as fused kernels in the log, leaving little room to improve.
 
 .. image:: ../_static/project/transformer-fusing-cands.png
    :alt: Transformer block with fusion candidates highlighted
@@ -140,7 +140,7 @@ Both attention operations showed up as fused kernels in the log, leaving little 
 |
 
 The feed-forward network at the end of the block is more promising.
-The kernel log revealed that Inductor emits the LayerNorm and the GEGLU gate as separate kernels, sandwiching two cuBLAS matmul calls:
+The kernel log shows that Inductor emits the LayerNorm and the GEGLU gate as separate kernels, sandwiching two cuBLAS matmul calls:
 
 ::
 
@@ -387,7 +387,7 @@ For a token ``t``, that is one full row of the ``[tokens, dim]`` input:
 where ``K = dim`` is the feature width.
 Every block still has to read all ``K`` columns of its rows before it can normalize a single element, since the mean and variance span the whole row.
 
-GEGLU is the activation that sits on the output of mm1.
+GEGLU is the activation applied to the output of mm1.
 The first matmul projects the normalized input to ``[tokens, 2*inner]``, twice the feed-forward width, which splits into two equal halves:
 
 .. math::
@@ -413,7 +413,7 @@ The Fused Kernel
 
 As with the ResNet kernel, we fixed a reference shape to design against: ``[1, 4096, 320]``.
 The launch side is straightforward.
-We reshape ``x`` to ``[M, dim]``, transpose ``w1`` to ``[dim, 2*inner]`` so the weight tiles load directly, allocate the ``gated`` output buffer, and compute the grid.
+We reshaped ``x`` to ``[M, dim]``, transposed ``w1`` to ``[dim, 2*inner]`` so the weight tiles load directly, allocated the ``gated`` output buffer, and computed the grid.
 Because the kernel is tiled, the grid is the number of output tiles: row-tiles times column-tiles.
 
 .. code-block:: python
@@ -475,8 +475,8 @@ Keeping both accumulators live means the normalized input is reused for both pro
 After the loop, the bias is added and GEGLU produces the gated output directly.
 
 For the second matmul we did not write a cuTile kernel at all.
-A plain ``F.linear(gated, w2, b2)`` (which dispatches to cuBLAS) was simply faster than anything we could tile by hand.
-That asymmetry, fusing the first matmul but handing the second to cuBLAS, is the first hint of what the benchmarks confirm below.
+A plain ``F.linear(gated, w2, b2)`` (which dispatches to cuBLAS) was faster than anything we could tile by hand.
+So we fused the first matmul but left the second to cuBLAS. The benchmarks below show why.
 
 Alternative Approaches
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -516,9 +516,9 @@ With that tile fixed, here are the runtimes on the reference shape ``(1, 4096, 3
 |
 
 The swizzle variant is the best, reaching a 1.14x speedup over ``torch.compile``.
-The reason is the same one we identified in Milestone 1: fusing LayerNorm and GEGLU into mm1 avoids the wide-projection round-trip that ``torch.compile`` cannot, so we simply move less data.
+This is the same effect we saw in Milestone 1. Fusing LayerNorm and GEGLU into mm1 avoids the wide-projection round-trip that ``torch.compile`` cannot, so we move less data.
 
-But this shape is the exception, not the rule.
+This is the only shape where we come out ahead.
 Extending the comparison to all four FFN shapes in the U-Net shows where the fusion breaks down:
 
 .. image:: ../_static/project/bench-transformer-shapes.png
@@ -536,5 +536,87 @@ The trade-off is between two competing effects:
 
 ``4096 x 320`` is the one shape where the token count is high and the dim is low, making it the only memory-bound FFN shape. Everywhere else the matmul dominates and cuBLAS wins. On those shapes we are slower than plain eager too, not just ``torch.compile``.
 
-As with the ResNet kernel, this motivates a profitability gate: we only fuse the ``dim = 320`` shape and leave the rest to the original PyTorch path.
-The reasoning is the mirror image of the roofline argument. Fusion helps when a block is memory-bound, and hurts when it is compute-bound and a tuned GEMM library is already doing the heavy lifting.
+As with the ResNet kernel, we added a profitability gate. We fuse only the ``dim = 320`` shape and leave the rest to the original PyTorch path.
+This follows from the roofline argument. Fusion helps when a block is memory-bound, and hurts when it is compute-bound, because there cuBLAS already handles the matmul far better than our hand-written kernel.
+
+Milestone 4: End-to-End Evaluation
+------------------------------------
+
+With both kernels built and gated, the last step is to drop them into the real U-Net and time a full image generation.
+The question is whether the per-kernel wins from the last two milestones still show up once the kernels are only a small part of a much larger model.
+
+Patching the U-Net
+^^^^^^^^^^^^^^^^^^^
+
+The two patches work in-place on a loaded model, walking the module tree and swapping the relevant submodules.
+
+The ResNet patch replaces both GroupNorms in each block with a ``GnSiluFused`` module that folds in the SiLU, then rebinds the block's ``forward`` so the now-redundant SiLU calls after each norm are dropped.
+
+.. code-block:: python
+    :caption: Patching a ResNet block
+
+    def patch_resnet_block(block: ResnetBlock2D) -> ResnetBlock2D:
+        block.norm1 = GnSiluFused(block.norm1)   # GroupNorm + SiLU fused
+        block.norm2 = GnSiluFused(block.norm2)
+        # rebind forward so the separate SiLU activations are no longer applied
+        block.forward = types.MethodType(_fused_forward, block)
+        return block
+
+The FFN patch uses a small trick.
+Each transformer block computes ``ff(norm3(x))``, and our kernel already folds the LayerNorm in.
+So we replaced ``norm3`` with an identity and ``ff`` with the fused module, which makes ``ff(norm3(x))`` collapse to the fused kernel on the raw input, leaving the block's residual structure untouched.
+
+.. code-block:: python
+    :caption: Patching a transformer FFN
+
+    def patch_ffn_block(block: BasicTransformerBlock) -> BasicTransformerBlock:
+        # ff(norm3(x)) becomes FusedFFN(x); the kernel folds LayerNorm in itself
+        block.ff    = FusedFFN(block.norm3, block.ff)
+        block.norm3 = nn.Identity()
+        return block
+
+Both fused modules keep the profitability gates from the earlier milestones.
+``GnSiluFused`` only runs the kernel on the nine beat-eager shapes (and picks the single-pass variant once the batch reaches 3), while ``FusedFFN`` only fires on ``dim = 320``.
+Every other shape falls back to the original PyTorch path, so the patched model can never be slower than eager on an unsupported block.
+
+Before benchmarking, we confirmed the patched pipeline still produces the right image.
+The generated output matches the eager baseline, with the FFN's tanh-GELU approximation introducing a slightly larger but visually indistinguishable difference.
+
+Results
+^^^^^^^
+
+First, a single generation at batch 1 (median milliseconds, lower is better):
+
+.. image:: ../_static/project/bench-e2e-runtimes.png
+   :alt: End-to-end latency at batch 1
+   :align: center
+   :width: 75%
+
+|
+
+Every fused variant is within one to two percent of the eager baseline, and ``torch.compile`` is the fastest.
+This is what we expected.
+GroupNorm and the FFN are only a small part of the roughly 42 ms step, and the convolutions, attention, and VAE take up most of the rest.
+A kernel that runs twice as fast on its own changes the total by maybe a percent, which is well inside the run-to-run noise.
+
+Across different batch sizes, the results differ:
+
+.. image:: ../_static/project/bench-e2e-batch-sizes.png
+   :alt: End-to-end latency across batch sizes
+   :align: center
+   :width: 90%
+
+|
+
+From batch 4 onward, the fused FFN and the combined patch are a few percent faster than the baseline (98.0 ms versus 103.6 ms at batch 4, and 358 ms versus 380 ms at batch 16).
+Almost all of that comes from the FFN.
+As the batch grows, the token count of the ``4096 x 320`` shape grows with it, which pushes that shape further into the memory-bound regime where the fusion helps, the same effect we saw in Milestone 3.
+The ResNet patch stays about neutral, which makes sense given how small the GroupNorm part is.
+
+``torch.compile`` is still faster at every batch size, and its lead grows with the batch (from about 4 percent at batch 1 to 15 percent at batch 16).
+This comes down to how much of the model each approach touches.
+Our patches only swap two block types and leave the rest of the model running eager, while ``torch.compile`` optimizes the whole graph and captures it into CUDA graphs, which removes the per-launch overhead the patched pipeline still pays on every convolution and attention call.
+
+The gates prevent regressions. The patch matches the baseline at batch 1 and is a little faster at larger batches.
+But the end-to-end number is still decided by the parts of the model we left alone.
+To close the gap to ``torch.compile`` we would need to capture the whole fused pipeline into a CUDA graph, rather than write faster individual kernels.
