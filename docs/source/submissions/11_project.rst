@@ -620,3 +620,120 @@ Our patches only swap two block types and leave the rest of the model running ea
 The gates prevent regressions. The patch matches the baseline at batch 1 and is a little faster at larger batches.
 But the end-to-end number is still decided by the parts of the model we left alone.
 To close the gap to ``torch.compile`` we would need to capture the whole fused pipeline into a CUDA graph, rather than write faster individual kernels.
+
+Milestone 5: Gradio UI
+----------------------
+
+As a final deliverable, we wrapped the optimized pipeline in a small `Gradio <https://www.gradio.app/>`__ app.
+Gradio is a Python library that turns a function into a web UI, so the interface runs in the browser while the model itself runs on the DGX Spark.
+
+The UI takes a text prompt and a seed, with a button to randomize the seed and a checkbox to switch the fused kernels on or off.
+Pressing *Generate* runs one denoising step and shows the resulting image next to the controls.
+The fused checkbox applies both patches from Milestone 4, which makes it easy to compare the fused and baseline outputs on the same prompt.
+
+.. image:: ../_static/project/gradio-ui.png
+   :alt: Gradio UI screenshot
+   :align: center
+   :width: 90%
+
+|
+
+The app can be started with:
+
+.. code-block:: bash
+
+    python src/diffusion/app.py
+
+Gradio then prints a local URL that opens the interface in the browser.
+
+Running the Project
+-------------------
+
+This section collects the commands for running the model, the tests, and the benchmarks.
+Everything that touches a cuTile kernel needs a CUDA GPU.
+Any recent one works, but the kernels and their profitability gates were tuned for the DGX Spark, as explained in the milestones, so the exact speedups will differ on other hardware.
+
+Running the Model
+^^^^^^^^^^^^^^^^^
+
+``main.py`` loads SD-Turbo, optionally patches in the fused kernels, and generates a single image.
+It takes a few command-line parameters:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Parameter
+     - Default
+     - Description
+   * - ``--prompt``
+     - ``"Will Smith eating spaghetti"``
+     - Text prompt for the image.
+   * - ``--seed``
+     - ``0``
+     - Random seed for generation.
+   * - ``--out-dir``
+     - ``diffusion/outputs``
+     - Directory the generated image is written to.
+   * - ``--fused`` / ``--no-fused``
+     - ``--fused``
+     - Patch the U-Net with the fused GN+SiLU and LN+GEGLU kernels.
+   * - ``--inspect``
+     - off
+     - Print the U-Net structure and layer information after generating.
+
+.. code-block:: bash
+    :caption: Running the model
+
+    # default: fused kernels on, seed 0
+    python src/diffusion/main.py
+
+    # custom prompt and seed
+    python src/diffusion/main.py --prompt "a red bicycle on a beach" --seed 42
+
+    # run the unpatched baseline
+    python src/diffusion/main.py --no-fused
+
+The Gradio UI from Milestone 5 is the interactive alternative:
+
+.. code-block:: bash
+
+    python src/diffusion/app.py
+
+Running the Tests
+^^^^^^^^^^^^^^^^^
+
+The tests verify that each fused kernel matches its PyTorch reference.
+They run with ``pytest``, which picks up the source paths from ``pyproject.toml``, so no extra setup is needed:
+
+.. code-block:: bash
+    :caption: Running tests
+
+    # all tests
+    python -m pytest
+
+    # a single test file
+    python -m pytest test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py -v
+
+    # all tests matching a keyword
+    python -m pytest -k gn_silu -v
+
+Running the Benchmarks
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The benchmark scripts compare the fused kernels against eager PyTorch and ``torch.compile``, and produce the numbers shown in the milestones above.
+Unlike the tests, they are plain scripts, so the source paths have to be on ``PYTHONPATH``:
+
+.. code-block:: bash
+    :caption: Running benchmarks
+
+    export PYTHONPATH=src/diffusion:test/diffusion
+
+    # GroupNorm + SiLU (Milestone 2)
+    python test/diffusion/benchmarks/bench_gn_silu.py
+
+    # LayerNorm + GEGLU and the full FFN (Milestone 3)
+    python test/diffusion/benchmarks/bench_ln_geglu.py
+    python test/diffusion/benchmarks/bench_ffn.py
+
+    # end-to-end U-Net (Milestone 4)
+    python test/diffusion/benchmarks/bench_e2e.py

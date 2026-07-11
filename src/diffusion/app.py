@@ -2,6 +2,7 @@ import random
 import gradio as gr
 from sd_turbo.image_to_text import generation, initialize_pipeline
 from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
+from sd_turbo_fused.transformer.fused_ffn_block import patch_unet_ffn
 
 _pipes = {}
 
@@ -11,6 +12,7 @@ def get_pipeline(use_fused: bool):
         _pipes[use_fused] = initialize_pipeline()
         if use_fused:
             patch_unet(_pipes[use_fused].unet, verbose=False)
+            patch_unet_ffn(_pipes[use_fused].unet, verbose=False)
     return _pipes[use_fused]
 
 
