@@ -5,6 +5,10 @@ For our final project, we wanted to see how much of a difference custom GPU kern
 We took SD-Turbo, a local text-to-image diffusion model from Stability AI, and spent three weeks trying to cut its inference latency with cuTile.
 Some optimizations paid off, while others worsened performance, but we learned a lot about the model, the hardware, and the optimization process.
 
+By the end we had two fused cuTile kernels, a patched SD-Turbo pipeline that stays correct end-to-end, and a small Gradio UI to run it.
+The kernels beat ``torch.compile`` on the shapes they target, but at the full-model level ``torch.compile`` still comes out ahead, because it optimizes the entire graph while we only swap out two block types.
+The rest of this report walks through how we got there.
+
 The Problem
 --------------------
 
@@ -15,11 +19,11 @@ Every kernel reads its input from memory, performs its computation, and writes i
 This data transfer is expensive and it is repeated for every operation in the chain.
 Fusing consecutive operations keeps intermediate results in registers or shared memory and eliminates memory round-trips.
 
-In our project, we wanted to optimize a local diffusion model with cuTile by identifying and fusing memory-bound operations in the diffusion process. But more on that later. 
+In our project, we wanted to optimize a local diffusion model with cuTile by identifying and fusing memory-bound operations in the diffusion process. But more on that later.
 First, we need to understand the model architecture and the hardware.
 
 The Model
-^^^^^^^^^^^
+---------
 
 The model is ``SD-Turbo``, a distilled text-to-image model from Stability AI, available on `HuggingFace <https://huggingface.co/stabilityai/sd-turbo>`__.
 It generates images in a single denoising step, which makes it a clean latency target, since there is no multi-step averaging to hide slow kernels.
@@ -37,7 +41,7 @@ The *U-Net* denoiser then uses that embedding to generate an image, running 22 R
 Finally, the *VAE Decoder* maps the denoised output to the final RGB image.
 
 The Hardware
-^^^^^^^^^^^^^^
+------------
 
 For the project we had access to a `DGX Spark <https://docs.nvidia.com/dgx/dgx-spark/hardware.html>`__, a compact machine built for local AI workloads.
 It runs the NVIDIA GB10 Grace Blackwell Superchip with 128 GB of unified LPDDR5X memory at 273 GB/s, shared between the CPU and GPU.
@@ -50,7 +54,7 @@ The GPU has 48 Streaming Multiprocessors (SMs) and 24 MiB of L2 cache.
 
 
 Our Milestones
-^^^^^^^^^^^^^^^^
+--------------
 
 We split the three-week project into six milestones:
 
@@ -88,7 +92,7 @@ We simply set it as an environment variable before compiling, which causes Induc
 The ResNet Block
 ^^^^^^^^^^^^^^^^^
 
-Each ResNet block follows the same pattern: GroupNorm and SiLU, a 3x3 convolution that mixes information across neighboring pixels, a time-embedding step that injects the current noise level into the block, and then the same sequence again.
+Each ResNet block follows the same pattern: GroupNorm and SiLU, a 3×3 convolution that mixes information across neighboring pixels, a time-embedding step that injects the current noise level into the block, and then the same sequence again.
 Finally, the block's input is added back to its output as a residual connection.
 
 .. image:: ../_static/project/resnet-fusing-cands.png
@@ -100,11 +104,11 @@ Finally, the block's input is added back to its output as a residual connection.
 
 Two fusion candidates stand out: the GroupNorm + SiLU pairs before and after the time-embedding.
 Running them as separate kernels means the full activation gets read and written twice per pair.
-At the top resolution (320 channels, 64x64 spatial), that activation is 2.5 MiB, so each unfused pair costs an unnecessary 5 MiB of memory traffic.
+At the top resolution (320 channels, 64×64 spatial), that activation is 2.5 MiB, so each unfused pair costs an unnecessary 5 MiB of memory traffic.
 Fusing both operations into a single kernel reduces that to one read and one write.
 
 The activation sizes vary with U-Net depth.
-As the network goes deeper, spatial resolution halves and channel count doubles at each step: 320 channels at 64x64, 640 at 32x32, 1280 at 16x16 and 8x8.
+As the network goes deeper, spatial resolution halves and channel count doubles at each step: 320 channels at 64×64, 640 at 32×32, 1280 at 16×16 and 8×8.
 Fewer spatial locations, but each one carries a richer feature representation.
 All of these shapes are candidates for the same fusion.
 
@@ -115,7 +119,7 @@ All of these shapes are candidates for the same fusion.
 
 |
 
-GroupNorm and SiLU both sit close to the memory bandwidth ceiling and well below the compute roof, which means that they are bandwidth-bound.
+GroupNorm and SiLU both lie close to the memory bandwidth ceiling and well below the compute roof, which means that they are bandwidth-bound.
 Fusing them reduces memory traffic without increasing compute requirements.
 
 In the kernel log, eager PyTorch dispatches 4 separate kernels for the GN+SiLU block.
@@ -152,10 +156,10 @@ The kernel log shows that Inductor emits the LayerNorm and the GEGLU gate as sep
 Because cuBLAS handles the matmuls, Inductor cannot fold LayerNorm or GEGLU into them.
 The mm1 output is written to DRAM and read back by the gate kernel.
 
-The path to fusion is clear: use LayerNorm as a first touch going into mm1 and GEGLU as a last touch coming out of mm1, keeping the intermediate in registers and avoiding the DRAM round-trip entirely.
+So the fusion is straightforward: use LayerNorm as a first touch going into mm1 and GEGLU as a last touch coming out of mm1, keeping the intermediate in registers and avoiding the DRAM round-trip entirely.
 
-The feed-forward expansion factor is 4, and GEGLU requires two projections (hidden and gate), so mm1 projects from [tokens, dim] to [tokens, 8*dim].
-At the top shape (tokens=4096, dim=320), that intermediate is 4096 x 2560 x 2 bytes (fp16) = 20 MiB.
+The feed-forward expansion factor is 4, and GEGLU requires two projections (hidden and gate), so mm1 projects from [tokens, dim] to [tokens, 8*dim] (this is the ``2*inner`` width we refer to in Milestone 3, with ``inner = 4*dim``).
+At the top shape (tokens=4096, dim=320), that intermediate is 4096 × 2560 × 2 bytes (fp16) = 20 MiB.
 Writing it to DRAM and reading it back costs 40 MiB per FFN call.
 The fused kernel avoids that entirely.
 
@@ -306,11 +310,11 @@ Comparing all variants against eager and ``torch.compile`` on a single (1, 320, 
 
 |
 
-Both cuTile and ``torch.compile`` sit at low memory throughput at batch 1. At 2.5 MiB the problem is latency-bound, not bandwidth-bound.
+Both cuTile and ``torch.compile`` run at low memory throughput at batch 1. At 2.5 MiB the problem is latency-bound, not bandwidth-bound.
 The two-pass kernel reaches a 1.85x speedup over ``torch.compile``; the win comes from launch overhead, not kernel efficiency.
-Single-pass still beats torch.compile and unfused at batch 1, but sits behind the two-pass and split variants. Its grid of only 32 blocks leaves 16 of the 48 SMs idle, so the saved launch overhead is partially eaten by lower parallelism.
+Single-pass still beats torch.compile and unfused at batch 1, but trails the two-pass and split variants. Its grid of only 32 blocks leaves 16 of the 48 SMs idle, so the saved launch overhead is partially eaten by lower parallelism.
 
-Sweeping the batch size makes the memory hierarchy directly visible (all times in microseconds).
+Sweeping the batch size makes the memory hierarchy visible (all times in microseconds).
 Each image needs 5 MiB of working set (``x`` + ``out``), so the set crosses the 24 MiB L2 cache between B=1 (5 MiB, L2-resident) and B=8 (40 MiB, spills to DRAM):
 
 .. image:: ../_static/project/bench-resnet-batch-sizes.png
@@ -326,7 +330,8 @@ From B=32 onward, the single-pass kernel takes over.
 The primary driver is intra-kernel cache reuse. Each block runs the stats loop and the apply loop in sequence, so the apply reads hit the L2 cache just primed by the stats pass rather than going back to DRAM.
 The two-pass variant offers no such locality. Here the stats and apply kernels are separate launches with a global synchronization between them, so the apply kernel always reads ``x`` fresh from DRAM.
 
-The measurements agree. At B=128, the theoretical DRAM bandwidth limit is roughly 3,690 µs (3 passes over 128 × 2.5 MiB at 273 GB/s); two-pass measures 4,140 µs (about 12% above the limit, i.e. ~243 GB/s effective), while single-pass measures 3,616 µs, below the theoretical limit, which is only possible if the second read of ``x`` is partially served from L2.
+The measurements agree. At B=128, the theoretical DRAM bandwidth limit is roughly 3,690 µs (3 passes over 128 × 2.5 MiB at 273 GB/s); two-pass measures 4,140 µs (about 12% above the limit, i.e. ~243 GB/s effective), while single-pass measures 3,616 µs, below the theoretical limit.
+The roofline assumes every byte is fetched from DRAM with no cache reuse, so measuring below it is direct evidence that the second read of ``x`` is partially served from L2.
 The single-pass grid grows as ``batch * 32`` blocks, keeping the SMs well occupied, with one fewer kernel launch on top.
 Across all batch sizes, at least one cuTile variant consistently outperforms ``torch.compile``, which dispatches more kernels and therefore pays more launch overhead.
 
@@ -509,7 +514,7 @@ All three cuTile variants prefer the same tile: ``tM = 128``, ``tN = tK = 64``.
 With that tile fixed, here are the runtimes on the reference shape ``(1, 4096, 320)`` (all times in microseconds, lower is better):
 
 .. image:: ../_static/project/bench-transformer-runtimes.png
-   :alt: FFN runtimes at 4096x320, all variants
+   :alt: FFN runtimes at 4096×320, all variants
    :align: center
    :width: 75%
 
@@ -528,13 +533,13 @@ Extending the comparison to all four FFN shapes in the U-Net shows where the fus
 
 |
 
-We only win on ``4096 x 320``, and lose on the other three, often badly.
+We only win on ``4096 × 320``, and lose on the other three, often badly.
 The trade-off is between two competing effects:
 
 - **Larger dim** means the matmul takes up more of the total work. Our hand-written mm1 is a much weaker GEMM than cuBLAS, so as the matmul share grows, we lose more ground to ``torch.compile``.
 - **More tokens** means more data to move, which is exactly where the avoided round-trip pays off, so our kernel does relatively better.
 
-``4096 x 320`` is the one shape where the token count is high and the dim is low, making it the only memory-bound FFN shape. Everywhere else the matmul dominates and cuBLAS wins. On those shapes we are slower than plain eager too, not just ``torch.compile``.
+``4096 × 320`` is the one shape where the token count is high and the dim is low, making it the only memory-bound FFN shape. Everywhere else the matmul dominates and cuBLAS wins. On those shapes we are slower than plain eager too, not just ``torch.compile``.
 
 As with the ResNet kernel, we added a profitability gate. We fuse only the ``dim = 320`` shape and leave the rest to the original PyTorch path.
 This follows from the roofline argument. Fusion helps when a block is memory-bound, and hurts when it is compute-bound, because there cuBLAS already handles the matmul far better than our hand-written kernel.
@@ -610,11 +615,11 @@ Across different batch sizes, the results differ:
 
 From batch 4 onward, the fused FFN and the combined patch are a few percent faster than the baseline (98.0 ms versus 103.6 ms at batch 4, and 358 ms versus 380 ms at batch 16).
 Almost all of that comes from the FFN.
-As the batch grows, the token count of the ``4096 x 320`` shape grows with it, which pushes that shape further into the memory-bound regime where the fusion helps, the same effect we saw in Milestone 3.
+As the batch grows, the token count of the ``4096 × 320`` shape grows with it, which pushes that shape further into the memory-bound regime where the fusion helps, the same effect we saw in Milestone 3.
 The ResNet patch stays about neutral, which makes sense given how small the GroupNorm part is.
 
 ``torch.compile`` is still faster at every batch size, and its lead grows with the batch (from about 4 percent at batch 1 to 15 percent at batch 16).
-This comes down to how much of the model each approach touches.
+This depends on how much of the model each approach touches.
 Our patches only swap two block types and leave the rest of the model running eager, while ``torch.compile`` optimizes the whole graph and captures it into CUDA graphs, which removes the per-launch overhead the patched pipeline still pays on every convolution and attention call.
 
 The gates prevent regressions. The patch matches the baseline at batch 1 and is a little faster at larger batches.
@@ -737,3 +742,12 @@ Unlike the tests, they are plain scripts, so the source paths have to be on ``PY
 
     # end-to-end U-Net (Milestone 4)
     python test/diffusion/benchmarks/bench_e2e.py
+
+Takeaways
+---------
+
+Three weeks of kernel work showed us where hand-written fusion helps and where it does not:
+
+- **What worked.** Fusing memory-bound operations pays off exactly where the roofline predicts. The GN+SiLU kernel beats ``torch.compile`` across every batch size, and the fused FFN wins on the one memory-bound shape (``4096 × 320``), pulling the end-to-end model a few percent ahead of eager from batch 4 onward.
+- **What didn't.** Fusion hurts as soon as a block is compute-bound. On high-channel GroupNorm shapes and every FFN shape with a larger ``dim``, our hand-written matmul cannot compete with cuBLAS, so we gate those shapes back to PyTorch. Occupancy tricks (the split-reduction variant) made no measurable difference, because the real limit was problem size, not parallelism.
+- **What we'd do next.** The remaining gap to ``torch.compile`` is not kernel efficiency but launch overhead. Closing it requires capturing the whole fused pipeline into a CUDA graph, i.e. a graph-level optimization rather than faster individual kernels.
