@@ -13,8 +13,8 @@ import pandas as pd
 import torch
 import triton
 
-from .config import Config, ExecType, DimType
-from typing import List, Tuple
+from .config import ExecType, DimType
+from utils import OUTPUT_DIR
 
 ConstInt = ct.Constant[int]
 
@@ -264,14 +264,14 @@ if __name__ == "__main__":
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources-05")
     benchmarking(
         lambda tM, tN, tK: launch_optimized_config_kernel(A, B, C, tM, tN, tK, m2, n2),
-        f"{path}/task4_optimizer.csv", c, m, n, k
+        OUTPUT_DIR / f"task4_optimizer.csv", c, m, n, k
     )
     benchmarking(
         lambda tM, tN, tK: launch_reference_config_kernel(A, B, C, tM, tN, tK),
-        f"{path}/task4_reference.csv", c, m, n, k
+        OUTPUT_DIR / f"task4_reference.csv", c, m, n, k
     )
     for tK in [16, 32, 64, 128]:
-        heatmap(tK, f"{path}/task4_optimizer.csv", 
-                f"{path}/task4_k={tK}_heatmap.png")
-        heatmap(tK, f"{path}/task4_reference.csv", 
-                f"{path}/task4_k={tK}_heatmap_ref.png")
+        heatmap(tK, OUTPUT_DIR / f"task4_optimizer.csv", 
+                OUTPUT_DIR / f"task4_k={tK}_heatmap.png")
+        heatmap(tK, OUTPUT_DIR / f"task4_reference.csv", 
+                OUTPUT_DIR / f"task4_k={tK}_heatmap_ref.png")
