@@ -98,8 +98,8 @@ def main():
 
     # Comparison
     print("Benchmark (ms per launch):")
-    print("    FP16 time: ", ms_fp16)
-    print("    FP32 time: ", ms_fp32)
+    print("    FP16 time: ", ms_fp16, "ms")
+    print("    FP32 time: ", ms_fp32, "ms")
 
     return
 

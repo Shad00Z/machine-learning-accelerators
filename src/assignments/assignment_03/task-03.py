@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import triton
 
-from utils import heatmap
+from utils import heatmap, OUTPUT_DIR
 
 ConstInt = ct.Constant[int]
 
@@ -83,7 +83,7 @@ def squaredMatrixThroughput():
     plt.ylabel("Throughput (TFLOPS)")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("task3_matrix_sizes.png", dpi=160)
+    plt.savefig(OUTPUT_DIR / "resources-03" / "task3_matrix_sizes.png", dpi=160)
     
 
 def tileShapeThroughput(m, n, k, out_file):
@@ -174,11 +174,11 @@ def main():
     
     # Task 3b)
     for m, n, k in matrix_shapes:
-        tileShapeThroughput(m, n, k, f"task3_{m}_tile_shapes.csv")
-        heatmap(m, f"src/assignments/assignment_03/resources-03/task3_{m}_tile_shapes.csv" ,f"task3_{m}_tile_shapes.png")
+        tileShapeThroughput(m, n, k, OUTPUT_DIR / "resources-03" / f"task3_{m}_tile_shapes.csv")
+        heatmap(m, OUTPUT_DIR / "resources-03" / f"task3_{m}_tile_shapes.csv", OUTPUT_DIR / "resources-03" / f"task3_{m}_tile_shapes.png")
         
     # For Task 4
-    tileShapeThroughput(8192, 8192, 4096, "task3_8192_tile_shapes.csv")
+    tileShapeThroughput(8192, 8192, 4096, OUTPUT_DIR / "resources-03" / "task3_8192_tile_shapes.csv")
 
 
 if __name__ == "__main__":

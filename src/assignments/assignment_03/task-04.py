@@ -2,7 +2,8 @@ import cuda.tile as ct
 import random
 import torch
 
-from utils import heatmap, next_power_of_two, tileShapeSweep
+from pathlib import Path
+from utils import next_power_of_two, tileShapeSweep, OUTPUT_DIR
 
 ConstInt = ct.Constant[int]
 
@@ -101,11 +102,11 @@ def main():
     tile_shapes = [(s, s, s) for s in [256, 512, 2048]]
     
     for m, n, k in tile_shapes:
-        tileShapeSweep(m, n, k, matmul_swizzle_kernel, f"task4_{m}_tile_shapes.csv", 8)
+        tileShapeSweep(m, n, k, matmul_swizzle_kernel, OUTPUT_DIR / "resources-04" / f"task4_{m}_tile_shapes.csv", 8)
         
     # Benchmarking
     for g_size in [4, 8]:
-        tileShapeSweep(8192, 8192, 4096, matmul_swizzle_kernel, f"task4_8192_tile_shapes_group_{g_size}.csv", g_size)
+        tileShapeSweep(8192, 8192, 4096, matmul_swizzle_kernel, OUTPUT_DIR / "resources-04" / f"task4_8192_tile_shapes_group_{g_size}.csv", g_size)
 
 
 if __name__ == "__main__":

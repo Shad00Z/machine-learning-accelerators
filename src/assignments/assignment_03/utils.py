@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 import triton
 
+from pathlib import Path
 
 def next_power_of_two(n: int) -> int:
 	p = 1
@@ -90,4 +91,16 @@ def tileShapeSweep(m, n, k, kernel, out_file, group_size):
         
     df = pd.DataFrame(records)
     df.to_csv(out_file, index=False)
+    return
     
+
+def find_project_root(marker=".git") -> Path:
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        if (parent / marker).exists():
+            return parent
+    raise RuntimeError(f"Could not find project root (no {marker} found)")
+
+PROJECT_ROOT = find_project_root()
+OUTPUT_DIR = PROJECT_ROOT / "src" / "assignments" / "assignment_03"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
