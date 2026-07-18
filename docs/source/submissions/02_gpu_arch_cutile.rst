@@ -168,3 +168,18 @@ The generated plot shows the achieved bandwidth in GB/s for different tensor siz
 
 The plot shows several peaks at multiples of 16, covering `48`, `64`, `80`, `96`, `112` and `128`. 
 
+Optional Task
+-------------
+
+To run the program with ``CUDA_TILE_LOGS=CUTILEIR`` we simply run:
+
+.. code:: bash
+
+    CUDA_TILE_LOGS=CUTILEIR python3 src/assignments/assignment_02/task-04.py 2> src/assignments/assignment_02/tileir_dump.log
+
+This produces a dump that contains the ``assume_div_by`` hints and the ``make_tensor_view`` calls from the compiler.
+
+In this case ``assume_div_by(x=A_0, divisor=16)`` is a hint that tells the downstream compiiler to treat the pointer value as if it is guaranteed to be multiple of 16 bytes. 
+The reason why the compiler is the Tensor Memory Accelerator (TMA).
+TMA requires the global memory address to be 16-byte aligned. 
+However, as the compiler can't know that from a raw runtime pointer it is inserted as a kind of "license" to use the TMA later. 
