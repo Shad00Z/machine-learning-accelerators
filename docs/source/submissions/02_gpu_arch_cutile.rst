@@ -1,5 +1,5 @@
-GPU Architecture and cuTile
-============================
+2. GPU Architecture and cuTile
+==============================
 
 .. _gpu_properties:
 
@@ -125,13 +125,13 @@ Note that the total amount of work and the number of tiles is the same in both c
 Task 4: Benchmarking Bandwidth
 ------------------------------
 
-The goal of this task was to benchmark the bandwidth of the GPU by copying tensors over a range of column sizes `N` (from 16 up to 2048).
+The goal of this task was to benchmark the bandwidth of the GPU by copying tensors over a range of column sizes `N` (from 16 up to 128).
 Since we only do a copy operation, the kernel is rather simple:
 
 .. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 19-30
+    :lines: 38-49
     :caption: `Kernel for copying a tensor from input to output.`
 
 The kernel is launched using a simple utility function.
@@ -141,7 +141,7 @@ This way the kernel supports arbitrary (non-power-of-two) tile and matrix sizes:
 .. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 33-49
+    :lines: 52-68
     :caption: `Launching the copy kernel.`
 
 Next, we define a test function to verify the correctness of the copy kernel by comparing its output with the input tensor:
@@ -149,19 +149,22 @@ Next, we define a test function to verify the correctness of the copy kernel by 
 .. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 52-59
+    :lines: 71-79
     :caption: `Testing the copy kernel by comparing its output with the input tensor.`
 
 Lastly, we benchmark the bandwidth of the GPU by copying tensors of varying sizes and measuring the time taken for each copy operation.
-We sweep the full range of `N` from 16 up to 2048 in steps of 16, collect the achieved bandwidth in GB/s for each tensor size and plot the results:
+We sweep the full range of `N` from 16 up to 128 in steps of 1, collect the achieved bandwidth in GB/s for each tensor size and plot the results:
 
 .. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 62-100
+    :lines: 82-129
     :caption: `Benchmarking the bandwidth of the GPU by copying tensors of varying sizes and plotting the results.`
 
 The generated plot shows the achieved bandwidth in GB/s for different tensor sizes:
 
-.. image:: ../../../src/assignments/assignment_02/task4_bandwidth.png
+.. image:: ../_static/assignment_02/task4_bandwidth.png
     :alt: Bandwidth Plot
+
+The plot shows several peaks at multiples of 16, covering `48`, `64`, `80`, `96`, `112` and `128`. 
+

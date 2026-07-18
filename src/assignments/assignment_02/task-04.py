@@ -1,20 +1,39 @@
+import csv
 import torch
 import cuda.tile as ct
+import random
 import triton
 import matplotlib.pyplot as plt
+
+from pathlib import Path
 
 ConstInt = ct.Constant[int]
 
 # ===========================================================================
-# Task 4: Benchmarking Bandwidth
+# Helper
 # ===========================================================================
 
-def next_power_of_two(n: int) -> int:
-    p = 1
-    while p < n:
-        p *= 2
-    return p
+def find_project_root(marker=".git") -> Path:
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        if (parent / marker).exists():
+            return parent
+    raise RuntimeError(f"Could not find project root (no {marker} found)")
 
+PROJECT_ROOT = find_project_root()
+OUTPUT_DIR = PROJECT_ROOT / "docs" / "source" / "_static" / "assignment_02"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def next_power_of_two(n: int) -> int:
+	p = 1
+	while p < n:
+		p *= 2
+	return p
+
+# ===========================================================================
+# Task 4: Benchmarking Bandwidth
+# ===========================================================================
 
 @ct.kernel
 def copy_matrix_kernel(A, B, tM: ConstInt, tN: ConstInt):
@@ -50,7 +69,8 @@ def copy_matrix(A, tM, tN):
 
 
 def test_copy_matrix():
-    M, N = 2**7, 2**7
+    M = random.randint(17, 2048)
+    N = random.randint(17, 2048)
     tM, tN = 2**4, 2**4
     
     A = torch.randn(M, N, device='cuda')
@@ -67,7 +87,7 @@ def bench_copy_matrix():
     Ns = []
     bandwidths = []
 
-    for N in range(16, 2048 + 1, 16):
+    for N in range(16, 128 + 1, 1):
         tN = next_power_of_two(N)
         grid = (ct.cdiv(M, tM), ct.cdiv(N, tN), 1)
 
@@ -90,6 +110,14 @@ def bench_copy_matrix():
 
         print(f"  M={M:4}, N={N:4}, tM={tM:2}, tN={tN:4}: {bw:.4f} GB/s")
 
+    csv_path = OUTPUT_DIR / "task4_bandwidth.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["M", "N", "tM", "bandwidth_GBps"])
+        for N, bw in zip(Ns, bandwidths):
+            writer.writerow([M, N, tM, f"{bw:.6f}"])
+    print(f"Saved benchmark data to {csv_path}")
+
     plt.figure(figsize=(7, 4))
     plt.plot(Ns, bandwidths, marker="o", markersize=3)
     plt.title("copy_matrix bandwidth vs N")
@@ -97,7 +125,9 @@ def bench_copy_matrix():
     plt.ylabel("Bandwidth (GB/s)")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig("task4_bandwidth.png", dpi=160)
+    plt.savefig(OUTPUT_DIR / "task4_bandwidth.png", dpi=160)
+    return
+
     
 if __name__ == "__main__":
     test_copy_matrix()

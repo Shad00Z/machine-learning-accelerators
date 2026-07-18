@@ -1,5 +1,5 @@
-Tensor and Einsum
-=================
+1. Tensor and Einsum
+====================
 
 .. _dot-product:
 
