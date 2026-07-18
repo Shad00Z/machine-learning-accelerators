@@ -1,5 +1,5 @@
-Contraction Interface and L2 Optimization
-=========================================
+5. Contraction Interface and L2 Optimization
+============================================
 
 .. _config:
 
