@@ -6,7 +6,7 @@ import random
 import torch
 import triton
 
-from utils import next_power_of_two, tensor_initialization
+from utils import next_power_of_two, OUTPUT_DIR
 
 a = 16
 b = 16
@@ -101,9 +101,9 @@ def size_sweep(m, n, k):
         plt.ylabel("TFLOPS")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig("task3_n_throughput.png", dpi=160)
+        plt.savefig(OUTPUT_DIR / "task3_n_throughput.png", dpi=160)
 
-        with open("task3_n_throughput.csv", "w", newline="") as f:
+        with open(OUTPUT_DIR / "task3_n_throughput.csv", "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["N", "TFLOPS", "tN"])
             writer.writerows(zip(Ns, compute, tNs))
@@ -144,9 +144,9 @@ def size_sweep(m, n, k):
         plt.ylabel("TFLOPS")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig("task3_k_throughput.png", dpi=160)
+        plt.savefig(OUTPUT_DIR / "task3_k_throughput.png", dpi=160)
 
-        with open("task3_k_throughput.csv", "w", newline="") as f:
+        with open(OUTPUT_DIR / "task3_k_throughput.csv", "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["K", "TFLOPS", "tK"])
             writer.writerows(zip(Ks, compute, tKs))

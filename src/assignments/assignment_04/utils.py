@@ -2,6 +2,7 @@ import cuda.tile as ct
 import random
 import torch
 
+from pathlib import Path
 
 def next_power_of_two(n: int) -> int:
 	p = 1
@@ -46,3 +47,14 @@ def tensor_initialization() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     C = torch.zeros((e, a, b, c , x, z), dtype=torch.float32, device="cuda")
     
     return [A, B, C]
+
+def find_project_root(marker=".git") -> Path:
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        if (parent / marker).exists():
+            return parent
+    raise RuntimeError(f"Could not find project root (no {marker} found)")
+
+PROJECT_ROOT = find_project_root()
+OUTPUT_DIR = PROJECT_ROOT / "src" / "assignments" / "assignment_04"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
