@@ -1,5 +1,5 @@
-Multi-Input Einsum Contraction
-==============================
+6. Multi-Input Einsum Contraction
+=================================
 
 Task 1: PyTorch Reference Contraction
 -------------------------------------
