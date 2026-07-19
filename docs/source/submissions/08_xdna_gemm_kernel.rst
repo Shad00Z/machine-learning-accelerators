@@ -1,4 +1,4 @@
-XDNA GEMM Kernel
+8. XDNA GEMM Kernel
 ==========================================
 
 Task 1: Verify Function
@@ -233,8 +233,8 @@ Task 6: Performance
 ^^^^^^^^^^^^^^^^^^^^^
 
 Because our kernel is fully unrolled and every instruction occupies its own VLIW word
-(all other slots are filled with ``nop``), the number of instructions equals the number of
-issue cycles. Counting the mnemonics in ``src/matmul.s`` gives:
+(all other slots are filled with ``nop``s), the number of instructions equals the number of
+issued cycles. Counting the mnemonics in ``src/matmul.s`` gives:
 
 .. list-table:: Instruction count
    :widths: 60 20
