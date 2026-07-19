@@ -1,5 +1,5 @@
-XDNA GEMM
-=========
+9. XDNA GEMM
+============
 
 Task 0: Setup
 -------------
