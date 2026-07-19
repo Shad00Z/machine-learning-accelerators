@@ -1,7 +1,7 @@
-Inferring the VLIW ISA of XDNA2
-===============================
+7. Inferring the VLIW ISA of XDNA2
+==================================
 
-With this assignment, the second half of the lecture starts.
+With this assignment, the second half of the lectures start.
 From now on, we are working with the VLIW instruction set architecture of the XDNA2 compute tile.
 
 Task 1: Vector-Add Kernel
