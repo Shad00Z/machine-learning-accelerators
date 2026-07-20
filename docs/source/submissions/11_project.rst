@@ -1,5 +1,5 @@
-Project: cuTile for Local Diffusion
-===================================
+11. Project: cuTile for Local Diffusion
+=======================================
 
 For our final project, we wanted to see how much of a difference custom GPU kernels can make on a real model.
 We took SD-Turbo, a local text-to-image diffusion model from Stability AI, and spent three weeks trying to cut its inference latency with cuTile.
