@@ -71,15 +71,13 @@ Milestone 0: SD-Turbo Model
 ---------------------------
 
 The SD-Turbo pipeline needs a few libraries beyond a base PyTorch install.
-``diffusers`` and ``transformers`` provide the model and text encoder; ``accelerate`` is a HuggingFace utility that suppresses dispatch warnings; ``torchvision`` handles image I/O.
+``diffusers`` and ``transformers`` provide the model and text encoder; ``accelerate`` is a HuggingFace utility that suppresses dispatch warnings; ``torchvision`` handles image I/O; ``gradio`` powers the UI; ``numpy`` and ``matplotlib`` drive the benchmarks and plots; ``pytest`` runs the tests.
+They are collected in ``requirements.txt`` at the repository root:
 
 .. code-block:: bash
     :caption: requirements
 
-    pip install diffusers
-    pip install transformers
-    pip install accelerate
-    pip install torchvision
+    pip install -r requirements.txt
 
 Milestone 1: Fusion Candidates
 -------------------------------

@@ -1,3 +1,6 @@
+import os
+os.environ.setdefault("GRADIO_TEMP_DIR", os.path.expanduser("~/.cache/gradio"))
+
 import random
 import gradio as gr
 from sd_turbo.pipeline import generation, initialize_pipeline
