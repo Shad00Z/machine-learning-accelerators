@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch.nn.functional as F
 
 from diffusers.models.attention import BasicTransformerBlock, FeedForward
-from sd_turbo.image_to_text import initialize_pipeline
+from sd_turbo.pipeline import initialize_pipeline
 
 
 def ffn_reference(x, ln_weight, ln_bias, eps, w1, b1, w2, b2):

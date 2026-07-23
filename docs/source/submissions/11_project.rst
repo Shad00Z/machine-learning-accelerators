@@ -717,7 +717,7 @@ They run with ``pytest``, which picks up the source paths from ``pyproject.toml`
     python -m pytest
 
     # a single test file
-    python -m pytest test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py -v
+    python -m pytest test/diffusion/resnet/test_kernel_shapes.py -v
 
     # all tests matching a keyword
     python -m pytest -k gn_silu -v

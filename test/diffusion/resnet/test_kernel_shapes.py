@@ -1,9 +1,9 @@
 import pytest, torch
 
-from sd_turbo.image_to_text import initialize_pipeline, survey_groupnorm_shapes
-from sd_turbo.resnet.resnet_block import gn_silu_reference
-from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
-from sd_turbo_fused.resnet.gn_silu_split_kernel import launch_split_config_kernel
+from sd_turbo.pipeline import initialize_pipeline, survey_groupnorm_shapes
+from sd_turbo.resnet.reference import gn_silu_reference
+from sd_turbo.resnet.kernels.gn_silu import launch_reference_config_kernel
+from sd_turbo.resnet.kernels.gn_silu_split import launch_split_config_kernel
 from utils.helper import _cutile_available
 
 ATOL, RTOL, EPS = 2e-2, 2e-2, 1e-5

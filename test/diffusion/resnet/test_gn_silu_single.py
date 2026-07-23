@@ -1,8 +1,8 @@
 import torch
 import pytest
 
-from sd_turbo.resnet.resnet_block import gn_silu_reference
-from sd_turbo_fused.resnet.gn_silu_single_kernel import launch_single_pass_kernel
+from sd_turbo.resnet.reference import gn_silu_reference
+from sd_turbo.resnet.kernels.gn_silu_single import launch_single_pass_kernel
 from utils.helper import _cutile_available
 
 ATOL, RTOL = 2e-2, 2e-2

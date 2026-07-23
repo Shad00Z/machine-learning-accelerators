@@ -1,8 +1,9 @@
 """Benchmark the fused LayerNorm -> GEGLU FFN cuTile kernel (Milestone 5).
 
-Two benchmarks:
-  bench_tiles   -- sweep (tM, tN, tK) for the fused kernel to find the best tiling.
-  bench_compare -- eager vs torch.compile vs cuTile fused, on the transformer FFN block.
+Benchmarks:
+  bench_tiles        -- sweep (tM, tN, tK) for the fused kernel, one TFLOPS heatmap per k_tile.
+  bench_tile_kernels -- per tile, time the three cuTile kernels (fused/swizzle/split) side by side.
+  bench_compare      -- eager vs torch.compile vs cuTile variants, on the transformer FFN block.
 
     PYTHONPATH=src/diffusion:test/diffusion python test/diffusion/benchmarks/bench_ffn.py
 
@@ -17,10 +18,10 @@ import torch
 import torch.nn as nn
 from diffusers.models.attention import FeedForward
 
-from sd_turbo_fused.transformer.ffn_gemm_split_kernel import launch_ffn_gemm_split
-from sd_turbo_fused.transformer.ffn_kernel import launch_ffn_kernel
-from sd_turbo_fused.transformer.ffn_split_kernel import launch_ffn_split
-from sd_turbo_fused.transformer.ffn_swizzle_kernel import launch_ffn_swizzle
+from sd_turbo.transformer.kernels.ffn_gemm_split import launch_ffn_gemm_split
+from sd_turbo.transformer.kernels.ffn import launch_ffn_kernel
+from sd_turbo.transformer.kernels.ffn_split import launch_ffn_split
+from sd_turbo.transformer.kernels.ffn_swizzle import launch_ffn_swizzle
 from utils.helper import _cutile_available
 
 WARMUP = 30
@@ -124,8 +125,8 @@ def bench_tiles(tokens=4096, dim=320):
     flop = 6 * M * inner * dim        # mm1 (4*M*dim*inner) + mm2 (2*M*inner*dim); LN/GEGLU negligible
 
     pow2 = (16, 32, 64, 128)
-    tMs = [t for t in pow2 if tokens % t == 0]                     # m_tile (rows) -- must divide (no output pad)
-    tNs = [t for t in pow2 if inner % t == 0 and dim % t == 0]     # n_tile (cols) -- must divide (no output pad)
+    tMs = [t for t in pow2 if tokens % t == 0]                     # m_tile (rows - no output pad)
+    tNs = [t for t in pow2 if inner % t == 0 and dim % t == 0]     # n_tile (cols - no output pad)
     tKs = list(pow2)
 
     for tK in tKs:
@@ -142,11 +143,62 @@ def bench_tiles(tokens=4096, dim=320):
         _save_heatmap(values, tMs, tNs, tK, tokens, dim, out=f"ffn_tile_throughput_dim{dim}_tK{tK}.png")
 
 
+def bench_tile_kernels(shapes=SHAPES, kernels=None):
+    """Per tile shape, compare the cuTile FFN kernels side by side in mm1 TFLOPS."""
+    if kernels is None:
+        kernels = {
+            "fused":   launch_ffn_kernel,   # 2-accumulator mm1
+            "swizzle": launch_ffn_swizzle,  # L2 block swizzle
+            "split":   launch_ffn_split,    # register-split mm1
+            # "gsplit": launch_ffn_gemm_split,  # GEGLU fused into cuTile mm2 (different mm2)
+        }
+    names = list(kernels)
+    for tokens, dim in shapes:
+        m, x, W = _make(dim, tokens)
+        inner = W["w1"].shape[0] // 2
+        flop = 4 * tokens * inner * dim        # mm1 only (B=1 so M=tokens); matches bench_tiles
+        args = (x, W["ln_weight"], W["ln_bias"], W["eps"], W["w1"], W["b1"], W["w2"], W["b2"])
+
+        pow2 = (16, 32, 64, 128)
+        tMs = [t for t in pow2 if tokens % t == 0]                     # rows
+        tNs = [t for t in pow2 if inner % t == 0 and dim % t == 0]     # cols
+        tKs = list(pow2)
+
+        print(f"\n=== FFN tile kernels  tokens={tokens} dim={dim}  (mm1 TFLOPS; higher = better; * = fastest per row) ===")
+        print(f"{'tM':>4} {'tN':>4} {'tK':>4} | " + " ".join(f"{n:>9}" for n in names))
+        best = (float("-inf"), None, None)   # (TFLOPS, kernel, tile)
+        for tK in tKs:
+            for tM in tMs:
+                for tN in tNs:
+                    tflops = {}
+                    for n, fn in kernels.items():
+                        try:
+                            ms = _timed(lambda fn=fn, tM=tM, tN=tN, tK=tK: fn(*args, tM, tN, tK))
+                            tflops[n] = flop / (ms * 1e-3) / 1e12
+                        except Exception:
+                            tflops[n] = float("nan")
+                    row_best = max((v for v in tflops.values() if v == v), default=float("nan"))
+                    for n in names:
+                        v = tflops[n]
+                        if v == v and v > best[0]:
+                            best = (v, n, (tM, tN, tK))
+                    cells = " ".join(
+                        (f"{tflops[n]:8.1f}*" if tflops[n] == row_best else f"{tflops[n]:8.1f} ")
+                        if tflops[n] == tflops[n] else f"{'FAIL':>8} "
+                        for n in names
+                    )
+                    print(f"{tM:>4} {tN:>4} {tK:>4} | {cells}")
+        if best[1] is not None:
+            bt = "x".join(map(str, best[2]))
+            print(f"  best: {best[1]:>8}  tile {bt}  {best[0]:.1f} TFLOPS")
+
+
 def main():
     if not _cutile_available():
         print("CUDA not available -- skipping benchmark.")
         return
-    bench_compare()
+    bench_tile_kernels()
+    # bench_compare()
     # for tokens, dim in SHAPES:
     #     bench_tiles(tokens, dim)
 

@@ -5,7 +5,7 @@ import torch
 from diffusers import AutoPipelineForText2Image, Transformer2DModel
 from diffusers.models.resnet import ResnetBlock2D
 from pathlib import Path
-from sd_turbo.resnet.resnet_block import inspect_block
+from sd_turbo.resnet.reference import inspect_block
 from utils.helper import is_shape_fusable
 
 

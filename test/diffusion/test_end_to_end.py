@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 import torch
 
-from sd_turbo.image_to_text import initialize_pipeline, generation
-from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
+from sd_turbo.pipeline import initialize_pipeline, generation
+from sd_turbo.resnet.fused_block import patch_unet
 from utils.helper import _cutile_available
 
 
@@ -61,7 +61,7 @@ def test_end_to_end_image_equivalence(baseline_image, fused_image):
 def test_patch_unet_covers_all_resnet_blocks():
     """Smoke-test: patch_unet must touch at least 22 blocks (as documented)."""
     from diffusers.models.resnet import ResnetBlock2D
-    from sd_turbo_fused.resnet.fused_resnet_block import GnSiluFused
+    from sd_turbo.resnet.fused_block import GnSiluFused
 
     initialize_pipeline.cache_clear()
     pipe = initialize_pipeline()

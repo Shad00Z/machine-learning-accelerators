@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import torch
 
-from sd_turbo.image_to_text import initialize_pipeline, generation
-from sd_turbo_fused.transformer.fused_ffn_block import patch_unet_ffn, FusedFFN
+from sd_turbo.pipeline import initialize_pipeline, generation
+from sd_turbo.transformer.fused_block import patch_unet_ffn, FusedFFN
 
 
 def _cutile_available() -> bool:

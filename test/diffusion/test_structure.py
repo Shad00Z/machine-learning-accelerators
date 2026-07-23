@@ -1,4 +1,4 @@
-from sd_turbo.image_to_text import initialize_pipeline
+from sd_turbo.pipeline import initialize_pipeline
 from diffusers.models.resnet import ResnetBlock2D
 from diffusers.models.attention import BasicTransformerBlock
 

@@ -1,8 +1,8 @@
 import random
 import gradio as gr
-from sd_turbo.image_to_text import generation, initialize_pipeline
-from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
-from sd_turbo_fused.transformer.fused_ffn_block import patch_unet_ffn
+from sd_turbo.pipeline import generation, initialize_pipeline
+from sd_turbo.resnet.fused_block import patch_unet
+from sd_turbo.transformer.fused_block import patch_unet_ffn
 
 _pipes = {}
 

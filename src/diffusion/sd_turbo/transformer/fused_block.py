@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 from diffusers.models.attention import BasicTransformerBlock
 
-from sd_turbo_fused.transformer.ffn_swizzle_kernel import launch_ffn_swizzle
+from sd_turbo.transformer.kernels.ffn_swizzle import launch_ffn_swizzle
 
 # Dims where the fused kernel actually beats the eager fallback (measured, bench_ffn.bench_compare)
 _VALID_DIMS = frozenset({320})

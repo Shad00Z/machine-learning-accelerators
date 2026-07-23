@@ -12,8 +12,8 @@ Speedups are reported vs baseline and vs torch.compile.
 import torch
 from diffusers import AutoPipelineForText2Image
 
-from sd_turbo_fused.resnet.fused_resnet_block import patch_unet
-from sd_turbo_fused.transformer.fused_ffn_block import patch_unet_ffn
+from sd_turbo.resnet.fused_block import patch_unet
+from sd_turbo.transformer.fused_block import patch_unet_ffn
 from utils.helper import _cutile_available
 
 PROMPT = "A photo of a cat wearing a hat, sitting on a bench in the park, with a sunny background, highly detailed."
@@ -92,7 +92,7 @@ def batch_sweep():
     its best shot. The FFN gate stays (dim=320 only) -- the FFN is compute-bound at any batch, so fusing
     its other shapes would only regress. Reported per whole batch (not per image).
     """
-    import sd_turbo_fused.resnet.fused_resnet_block as gnmod
+    import sd_turbo.resnet.fused_block as gnmod
     saved_gate = gnmod._VALID_GN_SHAPES
     gnmod._VALID_GN_SHAPES = None   # fuse every correctness-eligible GN shape
 
@@ -114,7 +114,8 @@ def batch_sweep():
                   f" {r['torch.compile']/r['Fused ResNet']:>11.2f}x")
     finally:
         gnmod._VALID_GN_SHAPES = saved_gate   # restore production gate
-        
+        return
+
 
 def main():
     if not _cutile_available():

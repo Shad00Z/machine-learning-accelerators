@@ -10,7 +10,7 @@ import cuda.tile as ct
 import torch
 import torch.nn.functional as F
 
-from sd_turbo_fused.transformer.ffn_kernel import ffn_mm2
+from sd_turbo.transformer.kernels.ffn import ffn_mm2
 
 ConstInt = ct.Constant[int]
 ZERO = ct.PaddingMode.ZERO

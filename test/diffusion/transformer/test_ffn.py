@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from sd_turbo.transformer.transformer_block import ffn_reference
+from sd_turbo.transformer.reference import ffn_reference
 from data.load_helper import data_path
 from utils.helper import _cutile_available
 
@@ -51,7 +51,7 @@ def test_ffn_reference_matches_captured(ffn_data):
 @pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available (run on the Spark)")
 def test_ffn_kernel_matches_reference(ffn_data):
     """The fused cuTile FFN kernel matches the captured output."""
-    from sd_turbo_fused.transformer.ffn_kernel import launch_ffn_kernel
+    from sd_turbo.transformer.kernels.ffn import launch_ffn_kernel
 
     cu = lambda k: ffn_data[k].cuda()
     out = launch_ffn_kernel(cu("x"), cu("ln_weight"), cu("ln_bias"), ffn_data["eps"],
@@ -64,7 +64,7 @@ def test_ffn_kernel_matches_reference(ffn_data):
 @pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available (run on the Spark)")
 def test_ffn_gemm_split_matches_reference(ffn_data):
     """The (LN,mm1)+(GEGLU,mm2) split matches the captured output."""
-    from sd_turbo_fused.transformer.ffn_gemm_split_kernel import launch_ffn_gemm_split
+    from sd_turbo.transformer.kernels.ffn_gemm_split import launch_ffn_gemm_split
 
     cu = lambda k: ffn_data[k].cuda()
     out = launch_ffn_gemm_split(cu("x"), cu("ln_weight"), cu("ln_bias"), ffn_data["eps"],
@@ -77,7 +77,7 @@ def test_ffn_gemm_split_matches_reference(ffn_data):
 @pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available (run on the Spark)")
 def test_ffn_swizzle_matches_reference(ffn_data):
     """The L2-swizzled FFN matches the captured output."""
-    from sd_turbo_fused.transformer.ffn_swizzle_kernel import launch_ffn_swizzle
+    from sd_turbo.transformer.kernels.ffn_swizzle import launch_ffn_swizzle
 
     cu = lambda k: ffn_data[k].cuda()
     out = launch_ffn_swizzle(cu("x"), cu("ln_weight"), cu("ln_bias"), ffn_data["eps"],
@@ -90,7 +90,7 @@ def test_ffn_swizzle_matches_reference(ffn_data):
 @pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available (run on the Spark)")
 def test_ffn_split_matches_reference(ffn_data):
     """The single-accumulator split FFN matches the captured output."""
-    from sd_turbo_fused.transformer.ffn_split_kernel import launch_ffn_split
+    from sd_turbo.transformer.kernels.ffn_split import launch_ffn_split
 
     cu = lambda k: ffn_data[k].cuda()
     out = launch_ffn_split(cu("x"), cu("ln_weight"), cu("ln_bias"), ffn_data["eps"],
@@ -108,7 +108,7 @@ def test_ffn_split_matches_reference(ffn_data):
 def test_mm1_ln_matches_reference(ffn_data):
     """Stage 2: mm1 + LayerNorm first touch matches F.linear(F.layer_norm(x)) on a real block."""
     import torch.nn.functional as F
-    from sd_turbo_fused.transformer.ffn_gemm_split_kernel import launch_mm1_ln
+    from sd_turbo.transformer.kernels.ffn_gemm_split import launch_mm1_ln
 
     dim = ffn_data["dim"]
     cu = lambda k: ffn_data[k].cuda()
@@ -126,7 +126,7 @@ def test_mm1_ln_matches_reference(ffn_data):
 @pytest.mark.skipif(not _cutile_available(), reason="cuda.tile / CUDA not available (run on the Spark)")
 def test_mm2_matches_linear():
     """The ct.mma mm2 kernel matches F.linear on real FFN dims."""
-    from sd_turbo_fused.transformer.ffn_kernel import launch_mm2
+    from sd_turbo.transformer.kernels.ffn import launch_mm2
 
     torch.manual_seed(0)
     M, inner, dim = 4096, 1280, 320
@@ -145,7 +145,7 @@ def test_mm2_matches_linear():
 def test_mm1_geglu_matches_reference(ffn_data):
     """Kernel A (LN -> mm1 -> GEGLU) matches the reference on a real block."""
     import torch.nn.functional as F
-    from sd_turbo_fused.transformer.ffn_kernel import launch_mm1_geglu
+    from sd_turbo.transformer.kernels.ffn import launch_mm1_geglu
 
     dim = ffn_data["dim"]
     cu = lambda k: ffn_data[k].cuda()

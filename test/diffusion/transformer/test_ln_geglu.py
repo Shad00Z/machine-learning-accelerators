@@ -3,8 +3,8 @@ import math
 import pytest
 import torch
 
-from sd_turbo.transformer.transformer_block import ln_geglu_reference
-from sd_turbo_fused.transformer.ln_geglu_kernel import launch_ln_geglu_mm1
+from sd_turbo.transformer.reference import ln_geglu_reference
+from sd_turbo.transformer.kernels.ln_geglu import launch_ln_geglu_mm1
 from utils.helper import _cutile_available
 
 ATOL, RTOL = 1e-2, 1e-2

@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from sd_turbo.resnet.resnet_block import gn_silu_reference
-from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
+from sd_turbo.resnet.reference import gn_silu_reference
+from sd_turbo.resnet.kernels.gn_silu import launch_reference_config_kernel
 from data.load_helper import data_path, load_data
 from utils.helper import _cutile_available
 

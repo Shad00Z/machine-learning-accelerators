@@ -7,8 +7,8 @@ import torch.nn.functional as F
 
 from diffusers.models.resnet import ResnetBlock2D
 
-from sd_turbo_fused.resnet.gn_silu_kernel import launch_reference_config_kernel
-from sd_turbo_fused.resnet.gn_silu_single_kernel import launch_single_pass_kernel
+from sd_turbo.resnet.kernels.gn_silu import launch_reference_config_kernel
+from sd_turbo.resnet.kernels.gn_silu_single import launch_single_pass_kernel
 from utils.helper import is_shape_fusable
 
 # (C, H, W) shapes where the fused kernel beats eager for sd_turbo resnet block shapes (measured with bench_gn_silu)

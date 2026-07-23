@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from diffusers.models.resnet import ResnetBlock2D
-from sd_turbo.image_to_text import initialize_pipeline
+from sd_turbo.pipeline import initialize_pipeline
 from load_helper import data_path
 
 # Global variables

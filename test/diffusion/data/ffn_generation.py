@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from diffusers.models.attention import BasicTransformerBlock
 
-from sd_turbo.image_to_text import initialize_pipeline
+from sd_turbo.pipeline import initialize_pipeline
 from data.load_helper import data_path
 
 TARGET_DIM = 320
