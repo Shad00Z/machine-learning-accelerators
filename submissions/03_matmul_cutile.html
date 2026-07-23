@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Matrix Multiplication with cuTile &mdash; Machine Learning Accelerators  documentation</title>
+  <title>3. Matrix Multiplication with cuTile &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Tensor Contractions on GPUs" href="04_tensor_contractions.html" />
-    <link rel="prev" title="GPU Architecture and cuTile" href="02_gpu_arch_cutile.html" /> 
+    <link rel="next" title="4. Tensor Contractions on GPUs" href="04_tensor_contractions.html" />
+    <link rel="prev" title="2. GPU Architecture and cuTile" href="02_gpu_arch_cutile.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -48,15 +48,15 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Matrix Multiplication with cuTile</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">3. Matrix Multiplication with cuTile</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#task-1-fp32-vs-fp16-performance">Task 1: FP32 vs FP16 Performance</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-2-simple-matrix-multiplication">Task 2: Simple Matrix Multiplication</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-3-benchmarking-the-matrix-multiplication-kernel">Task 3: Benchmarking the Matrix Multiplication Kernel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-4-l2-cache-optimization-via-block-swizzling">Task 4: L2 Cache Optimization via Block Swizzling</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#a">a)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#b">b)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-swizzle">a) Swizzle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#b-swizzle-benchmark">b) Swizzle Benchmark</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#additional">Additional</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#group-size-m-4-and-8"><code class="docutils literal notranslate"><span class="pre">GROUP_SIZE_M</span> <span class="pre">=</span> <span class="pre">4</span></code> and <code class="docutils literal notranslate"><span class="pre">8</span></code></a></li>
 </ul>
@@ -65,14 +65,14 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">4. Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">5. Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">7. Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">9. XDNA GEMM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">10. Using the whole NPU</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project.html">11. Project: cuTile for Local Diffusion</a></li>
 </ul>
 
         </div>
@@ -89,7 +89,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Matrix Multiplication with cuTile</li>
+      <li class="breadcrumb-item active">3. Matrix Multiplication with cuTile</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/03_matmul_cutile.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -100,7 +100,7 @@
            <div itemprop="articleBody">
              
   <section id="matrix-multiplication-with-cutile">
-<h1>Matrix Multiplication with cuTile<a class="headerlink" href="#matrix-multiplication-with-cutile" title="Link to this heading"></a></h1>
+<h1>3. Matrix Multiplication with cuTile<a class="headerlink" href="#matrix-multiplication-with-cutile" title="Link to this heading"></a></h1>
 <section id="task-1-fp32-vs-fp16-performance">
 <h2>Task 1: FP32 vs FP16 Performance<a class="headerlink" href="#task-1-fp32-vs-fp16-performance" title="Link to this heading"></a></h2>
 <p>Our <code class="docutils literal notranslate"><span class="pre">FP16</span></code> and <code class="docutils literal notranslate"><span class="pre">FP32</span></code> kernels are implemented equally:</p>
@@ -135,8 +135,8 @@
 </div>
 <p>After implementing both, the <code class="docutils literal notranslate"><span class="pre">FP16</span></code> and the <code class="docutils literal notranslate"><span class="pre">FP32</span></code> kernel, we measured the following execution times:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Benchmark (ms per launch):
-    FP16 time: 0.028004568445800248
-    FP32 time: 1.7323399588076567
+    FP16 time: 0.028004568445800248 ms
+    FP32 time: 1.7323399588076567 ms
 </pre></div>
 </div>
 <p>These measurements show that the speedup of the <code class="docutils literal notranslate"><span class="pre">kernel_fp16</span></code> over <code class="docutils literal notranslate"><span class="pre">kernel_fp32</span></code> is about <code class="docutils literal notranslate"><span class="pre">87</span></code>.
@@ -192,7 +192,7 @@ The results for the different squared matrices can be found in <code class="docu
 <p>These measurements show that the peak computational throughput can be achieved with matrices around a squared size of <code class="docutils literal notranslate"><span class="pre">2048</span></code> for a fixed tile shape of <code class="docutils literal notranslate"><span class="pre">(64,</span> <span class="pre">64,</span> <span class="pre">64)</span></code>.
 For larger matrices the throuphput reduces from around <code class="docutils literal notranslate"><span class="pre">48</span> <span class="pre">TFLOPS</span></code> to <code class="docutils literal notranslate"><span class="pre">18</span> <span class="pre">TFLOPS</span></code> and reduces even further with increasing dimension sizes.
 This indicates that these fixed tile shapes can be useful for smaller matrix sizes (up to <span class="math notranslate nohighlight">\(\approx\)</span> <code class="docutils literal notranslate"><span class="pre">2048</span></code>), while for larger matrix sizes different / larger tile shapes might perform better.</p>
-<p>In the second benchmark we initially measured the <code class="docutils literal notranslate"><span class="pre">TFLOPS</span></code> for all 27 possible tile shapes and stored the results in respective <code class="docutils literal notranslate"><span class="pre">csv</span></code> files for the <code class="docutils literal notranslate"><span class="pre">256</span></code>, <code class="docutils literal notranslate"><span class="pre">512</span></code> and the <code class="docutils literal notranslate"><span class="pre">2048</span></code> matrices.
+<p>In the second benchmark we initially measured the <code class="docutils literal notranslate"><span class="pre">TFLOPS</span></code> for all 27 possible tile shapes and stored the results in respective <code class="docutils literal notranslate"><span class="pre">csv</span></code> files for the <code class="docutils literal notranslate"><span class="pre">256</span></code>, <code class="docutils literal notranslate"><span class="pre">512</span></code> and the <code class="docutils literal notranslate"><span class="pre">2048</span></code> matrices (requested were <code class="docutils literal notranslate"><span class="pre">512</span></code> and <code class="docutils literal notranslate"><span class="pre">2048</span></code>).
 It can be clearly seen that the throughput for the larger matrices is significantly higher.</p>
 <img alt="Throughput Plot for ``256`` x ``256`` matrices" src="../_images/task3_256_tile_shapes.png" />
 <img alt="Throughput Plot for ``512`` x ``512`` matrices" src="../_images/task3_512_tile_shapes.png" />
@@ -228,8 +228,8 @@ For the <code class="docutils literal notranslate"><span class="pre">256</span><
 </section>
 <section id="task-4-l2-cache-optimization-via-block-swizzling">
 <span id="cache-swizzle"></span><h2>Task 4: L2 Cache Optimization via Block Swizzling<a class="headerlink" href="#task-4-l2-cache-optimization-via-block-swizzling" title="Link to this heading"></a></h2>
-<section id="a">
-<h3>a)<a class="headerlink" href="#a" title="Link to this heading"></a></h3>
+<section id="a-swizzle">
+<h3>a) Swizzle<a class="headerlink" href="#a-swizzle" title="Link to this heading"></a></h3>
 <p>The important part for this task was to recalculate the block IDs for <code class="docutils literal notranslate"><span class="pre">m</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code>:</p>
 <div class="literal-block-wrapper docutils container" id="id5">
 <span id="swizzled-matmul-kernel"></span><div class="code-block-caption"><span class="caption-text"><cite>Swizzled block id calculation</cite></span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
@@ -285,8 +285,8 @@ We also clamp in case the number of tiles in <code class="docutils literal notra
 <p>At last, we calculate the new <code class="docutils literal notranslate"><span class="pre">m</span></code> and <code class="docutils literal notranslate"><span class="pre">n</span></code> block IDs.</p>
 <p>Note: We calculate the <code class="docutils literal notranslate"><span class="pre">bid_m</span></code> using the clamped value for <code class="docutils literal notranslate"><span class="pre">n</span></code> because indexing inside the <code class="docutils literal notranslate"><span class="pre">mn-block-group</span></code> follows row-major order, and therefore the row index depends on how many columns are available.</p>
 </section>
-<section id="b">
-<h3>b)<a class="headerlink" href="#b" title="Link to this heading"></a></h3>
+<section id="b-swizzle-benchmark">
+<h3>b) Swizzle Benchmark<a class="headerlink" href="#b-swizzle-benchmark" title="Link to this heading"></a></h3>
 <p>All benchmarks were run with a <code class="docutils literal notranslate"><span class="pre">GROUP_SIZE</span></code> of <code class="docutils literal notranslate"><span class="pre">4</span></code>.</p>
 <p>When comparing the results for matrices of sizes <code class="docutils literal notranslate"><span class="pre">256</span></code> x <code class="docutils literal notranslate"><span class="pre">256</span></code>, <code class="docutils literal notranslate"><span class="pre">512</span></code> x <code class="docutils literal notranslate"><span class="pre">512</span></code> and <code class="docutils literal notranslate"><span class="pre">2048</span></code> x <code class="docutils literal notranslate"><span class="pre">2048</span></code> to the <a class="reference internal" href="#benchmarking-results"><span class="std std-ref">benchmarks from task 2</span></a>, we did not find any significant changes.</p>
 <p>However, for <span class="math notranslate nohighlight">\(m \times n \times k\)</span> with the sizes <span class="math notranslate nohighlight">\(8192 \times 8192 \times 4096\)</span> the differences were significant.</p>
@@ -393,8 +393,8 @@ Choosing it per matrix size, a small group for matrices that already fit in L2 a
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="02_gpu_arch_cutile.html" class="btn btn-neutral float-left" title="GPU Architecture and cuTile" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="04_tensor_contractions.html" class="btn btn-neutral float-right" title="Tensor Contractions on GPUs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="02_gpu_arch_cutile.html" class="btn btn-neutral float-left" title="2. GPU Architecture and cuTile" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="04_tensor_contractions.html" class="btn btn-neutral float-right" title="4. Tensor Contractions on GPUs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

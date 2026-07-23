@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>XDNA GEMM &mdash; Machine Learning Accelerators  documentation</title>
+  <title>9. XDNA GEMM &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -22,8 +22,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Using the whole NPU" href="10_whole_npu.html" />
-    <link rel="prev" title="XDNA GEMM Kernel" href="08_xdna_gemm_kernel.html" /> 
+    <link rel="next" title="10. Using the whole NPU" href="10_whole_npu.html" />
+    <link rel="prev" title="8. XDNA GEMM Kernel" href="08_xdna_gemm_kernel.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -47,15 +47,15 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">XDNA GEMM</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">3. Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">4. Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">5. Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">7. Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">9. XDNA GEMM</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#task-0-setup">Task 0: Setup</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-1-mlir-aie-operations">Task 1: MLIR-AIE operations</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#a-aie-tile">a) <code class="docutils literal notranslate"><span class="pre">aie.tile()</span></code></a></li>
@@ -78,8 +78,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#task-4-performance">Task 4: Performance</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">10. Using the whole NPU</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project.html">11. Project: cuTile for Local Diffusion</a></li>
 </ul>
 
         </div>
@@ -96,7 +96,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">XDNA GEMM</li>
+      <li class="breadcrumb-item active">9. XDNA GEMM</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/09_xdna_gemm.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -107,7 +107,7 @@
            <div itemprop="articleBody">
              
   <section id="xdna-gemm">
-<h1>XDNA GEMM<a class="headerlink" href="#xdna-gemm" title="Link to this heading"></a></h1>
+<h1>9. XDNA GEMM<a class="headerlink" href="#xdna-gemm" title="Link to this heading"></a></h1>
 <section id="task-0-setup">
 <h2>Task 0: Setup<a class="headerlink" href="#task-0-setup" title="Link to this heading"></a></h2>
 <p>For this initial task we simply copied our <code class="docutils literal notranslate"><span class="pre">matmul.s</span></code> kernel from the previous week and also added the <code class="docutils literal notranslate"><span class="pre">verify()</span></code> function to the new driver.</p>
@@ -624,8 +624,8 @@ This version is also implemented in the <code class="docutils literal notranslat
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="08_xdna_gemm_kernel.html" class="btn btn-neutral float-left" title="XDNA GEMM Kernel" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="10_whole_npu.html" class="btn btn-neutral float-right" title="Using the whole NPU" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="08_xdna_gemm_kernel.html" class="btn btn-neutral float-left" title="8. XDNA GEMM Kernel" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="10_whole_npu.html" class="btn btn-neutral float-right" title="10. Using the whole NPU" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

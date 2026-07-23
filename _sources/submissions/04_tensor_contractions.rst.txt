@@ -1,5 +1,5 @@
-Tensor Contractions on GPUs
-===========================
+4. Tensor Contractions on GPUs
+==============================
 
 Task 1: Tiled Contraction Kernel Variants
 -----------------------------------------

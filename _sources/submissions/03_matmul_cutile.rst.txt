@@ -1,5 +1,5 @@
-Matrix Multiplication with cuTile
-=================================
+3. Matrix Multiplication with cuTile
+====================================
 
 Task 1: FP32 vs FP16 Performance
 --------------------------------
@@ -25,8 +25,8 @@ After implementing both, the ``FP16`` and the ``FP32`` kernel, we measured the f
 .. code-block:: text
 
     Benchmark (ms per launch):
-        FP16 time: 0.028004568445800248
-        FP32 time: 1.7323399588076567
+        FP16 time: 0.028004568445800248 ms
+        FP32 time: 1.7323399588076567 ms
 
 These measurements show that the speedup of the ``kernel_fp16`` over ``kernel_fp32`` is about ``87``.
 This shows that performing calculations at a lower precision results in significant performance gains.
@@ -71,7 +71,7 @@ These measurements show that the peak computational throughput can be achieved w
 For larger matrices the throuphput reduces from around ``48 TFLOPS`` to ``18 TFLOPS`` and reduces even further with increasing dimension sizes. 
 This indicates that these fixed tile shapes can be useful for smaller matrix sizes (up to :math:`\approx` ``2048``), while for larger matrix sizes different / larger tile shapes might perform better. 
 
-In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256``, ``512`` and the ``2048`` matrices.
+In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256``, ``512`` and the ``2048`` matrices (requested were ``512`` and ``2048``).
 It can be clearly seen that the throughput for the larger matrices is significantly higher.
 
 .. image:: ../../../src/assignments/assignment_03/resources-03/task3_256_tile_shapes.png
@@ -121,8 +121,8 @@ If we cross-reference these results the tile shape that performs best on average
 Task 4: L2 Cache Optimization via Block Swizzling
 -------------------------------------------------
 
-a)
-^^^^^
+a) Swizzle
+^^^^^^^^^^
 
 The important part for this task was to recalculate the block IDs for ``m`` and ``n``:
 
@@ -131,7 +131,7 @@ The important part for this task was to recalculate the block IDs for ``m`` and 
 .. literalinclude:: ../../../src/assignments/assignment_03/task-04.py
     :language: py
     :linenos:
-    :lines: 13-48
+    :lines: 14-49
     :caption: `Swizzled block id calculation`
 
 For each block in matrix ``C`` we need a corresponding tile from matrix ``A`` and from matrix ``B``.
@@ -154,8 +154,8 @@ At last, we calculate the new ``m`` and ``n`` block IDs.
 
 Note: We calculate the ``bid_m`` using the clamped value for ``n`` because indexing inside the ``mn-block-group`` follows row-major order, and therefore the row index depends on how many columns are available.
 
-b)
-^^^^^
+b) Swizzle Benchmark
+^^^^^^^^^^^^^^^^^^^^
 
 All benchmarks were run with a ``GROUP_SIZE`` of ``4``.
 

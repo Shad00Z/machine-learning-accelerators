@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tensor Contractions on GPUs &mdash; Machine Learning Accelerators  documentation</title>
+  <title>4. Tensor Contractions on GPUs &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Contraction Interface and L2 Optimization" href="05_contraction_interface.html" />
-    <link rel="prev" title="Matrix Multiplication with cuTile" href="03_matmul_cutile.html" /> 
+    <link rel="next" title="5. Contraction Interface and L2 Optimization" href="05_contraction_interface.html" />
+    <link rel="prev" title="3. Matrix Multiplication with cuTile" href="03_matmul_cutile.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -48,10 +48,10 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Tensor Contractions on GPUs</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">3. Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">4. Tensor Contractions on GPUs</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#task-1-tiled-contraction-kernel-variants">Task 1: Tiled Contraction Kernel Variants</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#a-dimension-classification">a) Dimension Classification</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#b-cutile-kernel-sequentialize-over-k-and-l">b) cuTile Kernel: Sequentialize over <code class="docutils literal notranslate"><span class="pre">k</span></code> and <code class="docutils literal notranslate"><span class="pre">l</span></code></a></li>
@@ -76,13 +76,13 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">5. Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">7. Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">9. XDNA GEMM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">10. Using the whole NPU</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project.html">11. Project: cuTile for Local Diffusion</a></li>
 </ul>
 
         </div>
@@ -99,7 +99,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Tensor Contractions on GPUs</li>
+      <li class="breadcrumb-item active">4. Tensor Contractions on GPUs</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/04_tensor_contractions.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -110,7 +110,7 @@
            <div itemprop="articleBody">
              
   <section id="tensor-contractions-on-gpus">
-<h1>Tensor Contractions on GPUs<a class="headerlink" href="#tensor-contractions-on-gpus" title="Link to this heading"></a></h1>
+<h1>4. Tensor Contractions on GPUs<a class="headerlink" href="#tensor-contractions-on-gpus" title="Link to this heading"></a></h1>
 <section id="task-1-tiled-contraction-kernel-variants">
 <h2>Task 1: Tiled Contraction Kernel Variants<a class="headerlink" href="#task-1-tiled-contraction-kernel-variants" title="Link to this heading"></a></h2>
 <section id="a-dimension-classification">
@@ -129,42 +129,42 @@
 For that we use a <code class="docutils literal notranslate"><span class="pre">tensor_initialization()</span></code> function that creates these tensors for us:</p>
 <div class="literal-block-wrapper docutils container" id="id1">
 <div class="code-block-caption"><span class="caption-text"><cite>Function to initialize three random tensors</cite></span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
-<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="k">def</span> <span class="nf">tensor_initialization</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
-<span class="linenos"> 2</span>    <span class="c1"># Initialize random tensors</span>
-<span class="linenos"> 3</span>    <span class="n">a</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos"> 4</span>    <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos"> 5</span>    <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos"> 6</span>    <span class="n">e</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos"> 7</span>    <span class="n">k</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos"> 8</span>    <span class="n">l</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos"> 9</span>    <span class="n">x</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos">10</span>    <span class="n">y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos">11</span>    <span class="n">z</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
-<span class="linenos">12</span>    
-<span class="linenos">13</span>    <span class="n">size_A</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
-<span class="linenos">14</span>    <span class="n">size_B</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span>
-<span class="linenos">15</span>    <span class="n">size_C</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">z</span>
-<span class="linenos">16</span>    
-<span class="linenos">17</span>    <span class="k">while</span> <span class="p">(</span><span class="n">size_A</span> <span class="o">+</span> <span class="n">size_B</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">size_C</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">&gt;</span> <span class="mi">34</span> <span class="o">*</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">3</span><span class="p">:</span>
-<span class="linenos">18</span>        <span class="n">a</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
-<span class="linenos">19</span>        <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
-<span class="linenos">20</span>        <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
-<span class="linenos">21</span>        <span class="n">e</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
-<span class="linenos">22</span>        <span class="n">k</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
-<span class="linenos">23</span>        <span class="n">l</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">l</span><span class="p">)</span>
-<span class="linenos">24</span>        <span class="n">x</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
-<span class="linenos">25</span>        <span class="n">y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
-<span class="linenos">26</span>        <span class="n">z</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span>
-<span class="linenos">27</span>        
-<span class="linenos">28</span>        <span class="n">size_A</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
-<span class="linenos">29</span>        <span class="n">size_B</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span>
-<span class="linenos">30</span>        <span class="n">size_C</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">z</span>
-<span class="linenos">31</span>    
-<span class="linenos">32</span>    <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
-<span class="linenos">33</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
-<span class="linenos">34</span>    <span class="n">C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
-<span class="linenos">35</span>    
-<span class="linenos">36</span>    <span class="k">return</span> <span class="p">[</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">]</span>
+<div class="highlight-py notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span>
+<span class="linenos"> 2</span><span class="k">def</span> <span class="nf">tensor_initialization</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="linenos"> 3</span>    <span class="c1"># Initialize random tensors</span>
+<span class="linenos"> 4</span>    <span class="n">a</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 5</span>    <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 6</span>    <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 7</span>    <span class="n">e</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 8</span>    <span class="n">k</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos"> 9</span>    <span class="n">l</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">10</span>    <span class="n">x</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">11</span>    <span class="n">y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">12</span>    <span class="n">z</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">32</span><span class="p">)</span>
+<span class="linenos">13</span>    
+<span class="linenos">14</span>    <span class="n">size_A</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
+<span class="linenos">15</span>    <span class="n">size_B</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">16</span>    <span class="n">size_C</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">17</span>    
+<span class="linenos">18</span>    <span class="k">while</span> <span class="p">(</span><span class="n">size_A</span> <span class="o">+</span> <span class="n">size_B</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">size_C</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">&gt;</span> <span class="mi">34</span> <span class="o">*</span> <span class="mi">1024</span><span class="o">**</span><span class="mi">3</span><span class="p">:</span>
+<span class="linenos">19</span>        <span class="n">a</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+<span class="linenos">20</span>        <span class="n">b</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+<span class="linenos">21</span>        <span class="n">c</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+<span class="linenos">22</span>        <span class="n">e</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+<span class="linenos">23</span>        <span class="n">k</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+<span class="linenos">24</span>        <span class="n">l</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">l</span><span class="p">)</span>
+<span class="linenos">25</span>        <span class="n">x</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+<span class="linenos">26</span>        <span class="n">y</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+<span class="linenos">27</span>        <span class="n">z</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span>
+<span class="linenos">28</span>        
+<span class="linenos">29</span>        <span class="n">size_A</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span>
+<span class="linenos">30</span>        <span class="n">size_B</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="n">l</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">31</span>        <span class="n">size_C</span> <span class="o">=</span> <span class="n">e</span> <span class="o">*</span> <span class="n">a</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">c</span> <span class="o">*</span> <span class="n">x</span> <span class="o">*</span> <span class="n">z</span>
+<span class="linenos">32</span>    
+<span class="linenos">33</span>    <span class="n">A</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">34</span>    <span class="n">B</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">35</span>    <span class="n">C</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s2">&quot;cuda&quot;</span><span class="p">)</span>
+<span class="linenos">36</span>    
 </pre></div>
 </div>
 </div>
@@ -765,8 +765,8 @@ This causes the hardware to hardware to perform MMA operations on these zero-pad
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="03_matmul_cutile.html" class="btn btn-neutral float-left" title="Matrix Multiplication with cuTile" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="05_contraction_interface.html" class="btn btn-neutral float-right" title="Contraction Interface and L2 Optimization" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="03_matmul_cutile.html" class="btn btn-neutral float-left" title="3. Matrix Multiplication with cuTile" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="05_contraction_interface.html" class="btn btn-neutral float-right" title="5. Contraction Interface and L2 Optimization" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

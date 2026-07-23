@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Using the whole NPU &mdash; Machine Learning Accelerators  documentation</title>
+  <title>10. Using the whole NPU &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -22,8 +22,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Project: cuTile for Local Diffusion" href="11_project.html" />
-    <link rel="prev" title="XDNA GEMM" href="09_xdna_gemm.html" /> 
+    <link rel="next" title="11. Project: cuTile for Local Diffusion" href="11_project.html" />
+    <link rel="prev" title="9. XDNA GEMM" href="09_xdna_gemm.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -47,16 +47,16 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Using the whole NPU</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">3. Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">4. Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">5. Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">7. Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">9. XDNA GEMM</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">10. Using the whole NPU</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#task-1-setup-of-the-whole-npu">Task 1: Setup of the Whole NPU</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-2-broadcasting-the-inputs">Task 2: Broadcasting the Inputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-3-writing-the-output">Task 3: Writing the Output</a></li>
@@ -69,7 +69,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project.html">11. Project: cuTile for Local Diffusion</a></li>
 </ul>
 
         </div>
@@ -86,7 +86,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Using the whole NPU</li>
+      <li class="breadcrumb-item active">10. Using the whole NPU</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/10_whole_npu.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -97,7 +97,7 @@
            <div itemprop="articleBody">
              
   <section id="using-the-whole-npu">
-<h1>Using the whole NPU<a class="headerlink" href="#using-the-whole-npu" title="Link to this heading"></a></h1>
+<h1>10. Using the whole NPU<a class="headerlink" href="#using-the-whole-npu" title="Link to this heading"></a></h1>
 <section id="task-1-setup-of-the-whole-npu">
 <h2>Task 1: Setup of the Whole NPU<a class="headerlink" href="#task-1-setup-of-the-whole-npu" title="Link to this heading"></a></h2>
 <p>The <code class="docutils literal notranslate"><span class="pre">npu2</span></code> device has three types of tiles arranged in 8 columns and 6 rows,
@@ -402,8 +402,8 @@ the memory layout as <code class="docutils literal notranslate"><span class="pre
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="09_xdna_gemm.html" class="btn btn-neutral float-left" title="XDNA GEMM" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="11_project.html" class="btn btn-neutral float-right" title="Project: cuTile for Local Diffusion" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="09_xdna_gemm.html" class="btn btn-neutral float-left" title="9. XDNA GEMM" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="11_project.html" class="btn btn-neutral float-right" title="11. Project: cuTile for Local Diffusion" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

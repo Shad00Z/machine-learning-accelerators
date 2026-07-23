@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Inferring the VLIW ISA of XDNA2 &mdash; Machine Learning Accelerators  documentation</title>
+  <title>7. Inferring the VLIW ISA of XDNA2 &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -22,8 +22,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="XDNA GEMM Kernel" href="08_xdna_gemm_kernel.html" />
-    <link rel="prev" title="Multi-Input Einsum Contraction" href="06_multi_input_einsum.html" /> 
+    <link rel="next" title="8. XDNA GEMM Kernel" href="08_xdna_gemm_kernel.html" />
+    <link rel="prev" title="6. Multi-Input Einsum Contraction" href="06_multi_input_einsum.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -47,13 +47,13 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Inferring the VLIW ISA of XDNA2</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">3. Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">4. Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">5. Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">7. Inferring the VLIW ISA of XDNA2</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#task-1-vector-add-kernel">Task 1: Vector-Add Kernel</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#a-element-wise-vector-addition">a) Element-wise Vector Addition</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#b-compiling-to-assembly">b) Compiling to Assembly</a></li>
@@ -81,10 +81,10 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">9. XDNA GEMM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">10. Using the whole NPU</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project.html">11. Project: cuTile for Local Diffusion</a></li>
 </ul>
 
         </div>
@@ -101,7 +101,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Inferring the VLIW ISA of XDNA2</li>
+      <li class="breadcrumb-item active">7. Inferring the VLIW ISA of XDNA2</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/07_xdna2.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -112,8 +112,8 @@
            <div itemprop="articleBody">
              
   <section id="inferring-the-vliw-isa-of-xdna2">
-<h1>Inferring the VLIW ISA of XDNA2<a class="headerlink" href="#inferring-the-vliw-isa-of-xdna2" title="Link to this heading"></a></h1>
-<p>With this assignment, the second half of the lecture starts.
+<h1>7. Inferring the VLIW ISA of XDNA2<a class="headerlink" href="#inferring-the-vliw-isa-of-xdna2" title="Link to this heading"></a></h1>
+<p>This assignment marks the start of the second half of the course.
 From now on, we are working with the VLIW instruction set architecture of the XDNA2 compute tile.</p>
 <section id="task-1-vector-add-kernel">
 <h2>Task 1: Vector-Add Kernel<a class="headerlink" href="#task-1-vector-add-kernel" title="Link to this heading"></a></h2>
@@ -547,8 +547,8 @@ The non-NOP operation count (62 -&gt; 22, ~2.8x) provides an upper bound on spee
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="06_multi_input_einsum.html" class="btn btn-neutral float-left" title="Multi-Input Einsum Contraction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="08_xdna_gemm_kernel.html" class="btn btn-neutral float-right" title="XDNA GEMM Kernel" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="06_multi_input_einsum.html" class="btn btn-neutral float-left" title="6. Multi-Input Einsum Contraction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="08_xdna_gemm_kernel.html" class="btn btn-neutral float-right" title="8. XDNA GEMM Kernel" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

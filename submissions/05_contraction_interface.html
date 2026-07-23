@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Contraction Interface and L2 Optimization &mdash; Machine Learning Accelerators  documentation</title>
+  <title>5. Contraction Interface and L2 Optimization &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Multi-Input Einsum Contraction" href="06_multi_input_einsum.html" />
-    <link rel="prev" title="Tensor Contractions on GPUs" href="04_tensor_contractions.html" /> 
+    <link rel="next" title="6. Multi-Input Einsum Contraction" href="06_multi_input_einsum.html" />
+    <link rel="prev" title="4. Tensor Contractions on GPUs" href="04_tensor_contractions.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -48,11 +48,11 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Contraction Interface and L2 Optimization</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">3. Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">4. Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">5. Contraction Interface and L2 Optimization</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#task-1-config-class">Task 1: Config Class</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-2-generating-a-basic-config">Task 2: Generating a Basic Config</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#task-3-optimizer-class">Task 3: Optimizer Class</a><ul>
@@ -72,12 +72,12 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
-<li class="toctree-l1"><a class="reference internal" href="11_project.html">Project: cuTile for Local Diffusion</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">7. Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">9. XDNA GEMM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">10. Using the whole NPU</a></li>
+<li class="toctree-l1"><a class="reference internal" href="11_project.html">11. Project: cuTile for Local Diffusion</a></li>
 </ul>
 
         </div>
@@ -94,7 +94,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Contraction Interface and L2 Optimization</li>
+      <li class="breadcrumb-item active">5. Contraction Interface and L2 Optimization</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/05_contraction_interface.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -105,7 +105,7 @@
            <div itemprop="articleBody">
              
   <section id="contraction-interface-and-l2-optimization">
-<h1>Contraction Interface and L2 Optimization<a class="headerlink" href="#contraction-interface-and-l2-optimization" title="Link to this heading"></a></h1>
+<h1>5. Contraction Interface and L2 Optimization<a class="headerlink" href="#contraction-interface-and-l2-optimization" title="Link to this heading"></a></h1>
 <section id="task-1-config-class">
 <span id="config"></span><h2>Task 1: Config Class<a class="headerlink" href="#task-1-config-class" title="Link to this heading"></a></h2>
 <p>For our Config object we first defined enumeration types using <code class="docutils literal notranslate"><span class="pre">enum.Enum</span></code> for all of the configuration parameters.</p>
@@ -807,8 +807,8 @@ This shows the importance of well thought out memory usage.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="04_tensor_contractions.html" class="btn btn-neutral float-left" title="Tensor Contractions on GPUs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="06_multi_input_einsum.html" class="btn btn-neutral float-right" title="Multi-Input Einsum Contraction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="04_tensor_contractions.html" class="btn btn-neutral float-left" title="4. Tensor Contractions on GPUs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="06_multi_input_einsum.html" class="btn btn-neutral float-right" title="6. Multi-Input Einsum Contraction" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

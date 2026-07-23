@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Project: cuTile for Local Diffusion &mdash; Machine Learning Accelerators  documentation</title>
+  <title>11. Project: cuTile for Local Diffusion &mdash; Machine Learning Accelerators  documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,7 +23,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="prev" title="Using the whole NPU" href="10_whole_npu.html" /> 
+    <link rel="prev" title="10. Using the whole NPU" href="10_whole_npu.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -47,17 +47,17 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Submissions</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">Tensor and Einsum</a></li>
-<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">GPU Architecture and cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">Matrix Multiplication with cuTile</a></li>
-<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">Tensor Contractions on GPUs</a></li>
-<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">Contraction Interface and L2 Optimization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">Multi-Input Einsum Contraction</a></li>
-<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">Inferring the VLIW ISA of XDNA2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">XDNA GEMM Kernel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">XDNA GEMM</a></li>
-<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">Using the whole NPU</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Project: cuTile for Local Diffusion</a><ul>
+<li class="toctree-l1"><a class="reference internal" href="01_tensor_einsum.html">1. Tensor and Einsum</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02_gpu_arch_cutile.html">2. GPU Architecture and cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03_matmul_cutile.html">3. Matrix Multiplication with cuTile</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04_tensor_contractions.html">4. Tensor Contractions on GPUs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05_contraction_interface.html">5. Contraction Interface and L2 Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06_multi_input_einsum.html">6. Multi-Input Einsum Contraction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07_xdna2.html">7. Inferring the VLIW ISA of XDNA2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08_xdna_gemm_kernel.html">8. XDNA GEMM Kernel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="09_xdna_gemm.html">9. XDNA GEMM</a></li>
+<li class="toctree-l1"><a class="reference internal" href="10_whole_npu.html">10. Using the whole NPU</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">11. Project: cuTile for Local Diffusion</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#the-problem">The Problem</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-model">The Model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-hardware">The Hardware</a></li>
@@ -116,7 +116,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Project: cuTile for Local Diffusion</li>
+      <li class="breadcrumb-item active">11. Project: cuTile for Local Diffusion</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/submissions/11_project.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -127,7 +127,7 @@
            <div itemprop="articleBody">
              
   <section id="project-cutile-for-local-diffusion">
-<h1>Project: cuTile for Local Diffusion<a class="headerlink" href="#project-cutile-for-local-diffusion" title="Link to this heading"></a></h1>
+<h1>11. Project: cuTile for Local Diffusion<a class="headerlink" href="#project-cutile-for-local-diffusion" title="Link to this heading"></a></h1>
 <p>For our final project, we wanted to see how much of a difference custom GPU kernels can make on a real model.
 We took SD-Turbo, a local text-to-image diffusion model from Stability AI, and spent three weeks trying to cut its inference latency with cuTile.
 Some optimizations paid off, while others worsened performance, but we learned a lot about the model, the hardware, and the optimization process.</p>
@@ -185,13 +185,11 @@ The GPU has 48 Streaming Multiprocessors (SMs) and 24 MiB of L2 cache.</p>
 <section id="milestone-0-sd-turbo-model">
 <h2>Milestone 0: SD-Turbo Model<a class="headerlink" href="#milestone-0-sd-turbo-model" title="Link to this heading"></a></h2>
 <p>The SD-Turbo pipeline needs a few libraries beyond a base PyTorch install.
-<code class="docutils literal notranslate"><span class="pre">diffusers</span></code> and <code class="docutils literal notranslate"><span class="pre">transformers</span></code> provide the model and text encoder; <code class="docutils literal notranslate"><span class="pre">accelerate</span></code> is a HuggingFace utility that suppresses dispatch warnings; <code class="docutils literal notranslate"><span class="pre">torchvision</span></code> handles image I/O.</p>
+<code class="docutils literal notranslate"><span class="pre">diffusers</span></code> and <code class="docutils literal notranslate"><span class="pre">transformers</span></code> provide the model and text encoder; <code class="docutils literal notranslate"><span class="pre">accelerate</span></code> is a HuggingFace utility that suppresses dispatch warnings; <code class="docutils literal notranslate"><span class="pre">torchvision</span></code> handles image I/O; <code class="docutils literal notranslate"><span class="pre">gradio</span></code> powers the UI; <code class="docutils literal notranslate"><span class="pre">numpy</span></code> and <code class="docutils literal notranslate"><span class="pre">matplotlib</span></code> drive the benchmarks and plots; <code class="docutils literal notranslate"><span class="pre">pytest</span></code> runs the tests.
+They are collected in <code class="docutils literal notranslate"><span class="pre">requirements.txt</span></code> at the repository root:</p>
 <div class="literal-block-wrapper docutils container" id="id3">
 <div class="code-block-caption"><span class="caption-text">requirements</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>diffusers
-pip<span class="w"> </span>install<span class="w"> </span>transformers
-pip<span class="w"> </span>install<span class="w"> </span>accelerate
-pip<span class="w"> </span>install<span class="w"> </span>torchvision
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
 </pre></div>
 </div>
 </div>
@@ -721,7 +719,7 @@ They run with <code class="docutils literal notranslate"><span class="pre">pytes
 python<span class="w"> </span>-m<span class="w"> </span>pytest
 
 <span class="c1"># a single test file</span>
-python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>test/diffusion/sd_turbo_fused/resnet/test_kernel_shapes.py<span class="w"> </span>-v
+python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>test/diffusion/resnet/test_kernel_shapes.py<span class="w"> </span>-v
 
 <span class="c1"># all tests matching a keyword</span>
 python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-k<span class="w"> </span>gn_silu<span class="w"> </span>-v
@@ -749,6 +747,8 @@ python<span class="w"> </span>test/diffusion/benchmarks/bench_e2e.py
 </pre></div>
 </div>
 </div>
+<p>Both roots are required: <code class="docutils literal notranslate"><span class="pre">src/diffusion</span></code> makes <code class="docutils literal notranslate"><span class="pre">sd_turbo</span></code> and <code class="docutils literal notranslate"><span class="pre">utils</span></code> importable, while <code class="docutils literal notranslate"><span class="pre">test/diffusion</span></code> makes the shared <code class="docutils literal notranslate"><span class="pre">data</span></code> helper importable.
+A <code class="docutils literal notranslate"><span class="pre">ModuleNotFoundError:</span> <span class="pre">No</span> <span class="pre">module</span> <span class="pre">named</span> <span class="pre">'data'</span></code> (or <code class="docutils literal notranslate"><span class="pre">'sd_turbo'</span></code>) means one of the two is missing from <code class="docutils literal notranslate"><span class="pre">PYTHONPATH</span></code>. In this case set the full export above and re-run.</p>
 </section>
 </section>
 <section id="takeaways">
@@ -766,7 +766,7 @@ python<span class="w"> </span>test/diffusion/benchmarks/bench_e2e.py
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="10_whole_npu.html" class="btn btn-neutral float-left" title="Using the whole NPU" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="10_whole_npu.html" class="btn btn-neutral float-left" title="10. Using the whole NPU" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
 
   <hr/>
