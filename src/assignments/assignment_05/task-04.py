@@ -1,3 +1,11 @@
+import sys, os
+if __name__ == "__main__" and __package__ is None:
+    # Allow relative imports when running as script directly
+    _parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _parent not in sys.path:
+        sys.path.insert(0, _parent)
+    __package__ = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
+
 import cuda.tile as ct
 import itertools
 import matplotlib.pyplot as plt
@@ -5,9 +13,8 @@ import pandas as pd
 import torch
 import triton
 
-from .config import Config, ExecType, DimType
-from typing import List, Tuple
-from .utils import next_power_of_two
+from .config import ExecType, DimType
+from utils import OUTPUT_DIR
 
 ConstInt = ct.Constant[int]
 
@@ -213,7 +220,15 @@ if __name__ == "__main__":
     cur_cache_use = (m2 * k + k * n2) * 2 + (m2 * n2) * 4
     print(f"Memory load after splitting M dimension: {cur_cache_use}")
     print(f"Comparing to 24MiB: l2_size - memory load = {l2_size - cur_cache_use} free\n")
-    
+
+    # Incorporate tile sizes into the config by splitting PRIM dimensions.
+    # After the two splits above the dimension order is:
+    #   [C(0), M_outer(1), M_inner(2), K(3), N_outer(4), N_inner(5)]
+    tM = tN = tK = 64
+    opt.split_dim(2, m2 // tM, tM)   # M_inner(1024) -> (16, 64); K shifts to index 4
+    opt.split_dim(4, k  // tK, tK)   # K(4096)       -> (64, 64); N_inner shifts to index 7
+    opt.split_dim(7, n2 // tN, tN)   # N_inner(1024) -> (16, 64)
+
     opt.make_executable()
     print(cfg)
     
@@ -223,19 +238,16 @@ if __name__ == "__main__":
     C = torch.zeros((c, m, n), dtype=torch.float32, device="cuda")
     
     tM = tN = tK = 0
-    
-    # Step 1: Calculate tile sizes
+
+    # Step 1: Extract tile sizes directly from PRIM dimensions in the config
     for dim_size, dim_type, exec_type in zip(cfg.dim_sizes, cfg.dim_types, cfg.exec_types):
         if exec_type == ExecType.PRIM:
-            # Reduce tile size
-            tile = next_power_of_two(dim_size // 16)
-            
             if dim_type == DimType.M:
-                tM = tile
+                tM = dim_size
             elif dim_type == DimType.N:
-                tN = tile
+                tN = dim_size
             else:
-                tK = tile
+                tK = dim_size
     
     C_torch = torch.einsum('cmk,ckn->cmn', A.float(), B.float())
     
@@ -249,17 +261,17 @@ if __name__ == "__main__":
     print("Kernel 4c reference passed!")
     
     # d) benchmarking
-    path = "src/assignments/assignment_05/resources-05"
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources-05")
     benchmarking(
         lambda tM, tN, tK: launch_optimized_config_kernel(A, B, C, tM, tN, tK, m2, n2),
-        f"{path}/task4_optimizer.csv", c, m, n, k
+        OUTPUT_DIR / f"task4_optimizer.csv", c, m, n, k
     )
     benchmarking(
         lambda tM, tN, tK: launch_reference_config_kernel(A, B, C, tM, tN, tK),
-        f"{path}/task4_reference.csv", c, m, n, k
+        OUTPUT_DIR / f"task4_reference.csv", c, m, n, k
     )
     for tK in [16, 32, 64, 128]:
-        heatmap(tK, f"{path}/task4_optimizer.csv", 
-                f"{path}/task4_k={tK}_heatmap.png")
-        heatmap(tK, f"{path}/task4_reference.csv", 
-                f"{path}/task4_k={tK}_heatmap_ref.png")
+        heatmap(tK, OUTPUT_DIR / f"task4_optimizer.csv", 
+                OUTPUT_DIR / f"task4_k={tK}_heatmap.png")
+        heatmap(tK, OUTPUT_DIR / f"task4_reference.csv", 
+                OUTPUT_DIR / f"task4_k={tK}_heatmap_ref.png")

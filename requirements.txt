@@ -1,0 +1,16 @@
+# Dependencies for the SD-Turbo cuTile project.
+#     pip install -r requirements.txt
+torch
+cuda.tile
+diffusers
+transformers
+accelerate
+torchvision
+numpy
+matplotlib
+
+# Gradio UI
+gradio
+
+# Test suite
+pytest

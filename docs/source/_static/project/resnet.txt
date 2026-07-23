@@ -1,0 +1,9 @@
+ResnetBlock2D(
+  (norm1): GroupNorm(32, 320, eps=1e-05, affine=True)
+  (conv1): Conv2d(320, 320, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+  (time_emb_proj): Linear(in_features=1280, out_features=320, bias=True)
+  (norm2): GroupNorm(32, 320, eps=1e-05, affine=True)
+  (dropout): Dropout(p=0.0, inplace=False)
+  (conv2): Conv2d(320, 320, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+  (nonlinearity): SiLU()
+)

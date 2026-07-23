@@ -1,12 +1,12 @@
-Matrix Multiplication with cuTile
-=================================
+3. Matrix Multiplication with cuTile
+====================================
 
 Task 1: FP32 vs FP16 Performance
 --------------------------------
 
 Our ``FP16`` and ``FP32`` kernels are implemented equally:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-01.py
     :language: py
     :linenos:
     :lines: 14-24
@@ -14,7 +14,7 @@ Our ``FP16`` and ``FP32`` kernels are implemented equally:
 
 However, the data types for the input matrices differ between the two kernels:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-01.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-01.py
     :language: py
     :linenos:
     :lines: 44-50
@@ -25,8 +25,8 @@ After implementing both, the ``FP16`` and the ``FP32`` kernel, we measured the f
 .. code-block:: text
 
     Benchmark (ms per launch):
-        FP16 time: 0.028004568445800248
-        FP32 time: 1.7323399588076567
+        FP16 time: 0.028004568445800248 ms
+        FP32 time: 1.7323399588076567 ms
 
 These measurements show that the speedup of the ``kernel_fp16`` over ``kernel_fp32`` is about ``87``.
 This shows that performing calculations at a lower precision results in significant performance gains.
@@ -39,7 +39,7 @@ Implementing the matrix multiplication kernel using ``ct.mma``, we followed the 
 1. The two input matrices ``A`` and ``B`` are created with dimensions in the range from ``1`` to ``4096``.
 2. Our grid depends on the amount of tiles for the ``n`` and ``m`` dimension.
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-02.py
     :language: py
     :linenos:
     :lines: 53
@@ -50,7 +50,7 @@ Implementing the matrix multiplication kernel using ``ct.mma``, we followed the 
 
 .. _simple_matmul_kernel:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-02.py
     :language: py
     :linenos:
     :lines: 13-31
@@ -64,23 +64,23 @@ Task 3: Benchmarking the Matrix Multiplication Kernel
 Benchmarking the matrix multiplication kernel has been approached via a loop over the different matrix sizes and the different tile shapes.
 The results for the different squared matrices can be found in ``task3_matrix_sizes.png``.
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_matrix_sizes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_matrix_sizes.png
     :alt: Throughput Plot
 
 These measurements show that the peak computational throughput can be achieved with matrices around a squared size of ``2048`` for a fixed tile shape of ``(64, 64, 64)``.
 For larger matrices the throuphput reduces from around ``48 TFLOPS`` to ``18 TFLOPS`` and reduces even further with increasing dimension sizes. 
 This indicates that these fixed tile shapes can be useful for smaller matrix sizes (up to :math:`\approx` ``2048``), while for larger matrix sizes different / larger tile shapes might perform better. 
 
-In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256``, ``512`` and the ``2048`` matrices.
+In the second benchmark we initially measured the ``TFLOPS`` for all 27 possible tile shapes and stored the results in respective ``csv`` files for the ``256``, ``512`` and the ``2048`` matrices (requested were ``512`` and ``2048``).
 It can be clearly seen that the throughput for the larger matrices is significantly higher.
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_256_tile_shapes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_256_tile_shapes.png
     :alt: Throughput Plot for ``256`` x ``256`` matrices
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_512_tile_shapes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_512_tile_shapes.png
     :alt: Throughput Plot for ``512`` x ``512`` matrices
 
-.. image:: ../../../src/assignments/03_assignment/resources-03/task3_2048_tile_shapes.png
+.. image:: ../../../src/assignments/assignment_03/resources-03/task3_2048_tile_shapes.png
     :alt: Throughput Plot for ``2048`` x ``2048`` matrices
 
 .. _benchmarking_results:
@@ -121,17 +121,17 @@ If we cross-reference these results the tile shape that performs best on average
 Task 4: L2 Cache Optimization via Block Swizzling
 -------------------------------------------------
 
-a)
-^^^^^
+a) Swizzle
+^^^^^^^^^^
 
 The important part for this task was to recalculate the block IDs for ``m`` and ``n``:
 
 .. _swizzled_matmul_kernel:
 
-.. literalinclude:: ../../../src/assignments/03_assignment/task-04.py
+.. literalinclude:: ../../../src/assignments/assignment_03/task-04.py
     :language: py
     :linenos:
-    :lines: 13-48
+    :lines: 14-49
     :caption: `Swizzled block id calculation`
 
 For each block in matrix ``C`` we need a corresponding tile from matrix ``A`` and from matrix ``B``.
@@ -154,8 +154,8 @@ At last, we calculate the new ``m`` and ``n`` block IDs.
 
 Note: We calculate the ``bid_m`` using the clamped value for ``n`` because indexing inside the ``mn-block-group`` follows row-major order, and therefore the row index depends on how many columns are available.
 
-b)
-^^^^^
+b) Swizzle Benchmark
+^^^^^^^^^^^^^^^^^^^^
 
 All benchmarks were run with a ``GROUP_SIZE`` of ``4``.
 
@@ -238,3 +238,18 @@ If we consider the largest tile-shapes (``tM=128``), ``k=4096``, and ``FP16`` we
 .. math::
 
     16 \times 4096 \times 128 \times 2 \approx 16 \text{MiB}
+
+``GROUP_SIZE_M = 4`` and ``8``
+""""""""""""""""""""""""""""""
+
+The optimal ``GROUP_SIZE_M`` is not a single fixed value but depends on the problem size, which is exactly why we compared ``4`` and ``8`` instead of committing to one value.
+The purpose of block swizzling is to keep the working set of a row-group and its corresponding column-group resident in the ``24 MiB`` L2 cache so that the tiles of ``A`` and ``B`` are reused across a ``mn_block_group`` instead of being re-fetched from DRAM.
+This gives us an upper bound on a useful ``GROUP_SIZE_M``: the working set grows roughly linearly with ``GROUP_SIZE_M`` (:math:`GROUP\_SIZE\_M \times tM \times K \times dtype\_bytes` for the ``A`` row-group), so the group size must be small enough to stay below the L2 capacity for the given ``M``, ``K`` and tile shape.
+
+For our two settings this means:
+
+* For the small matrices (``256``, ``512``, ``2048``) the whole working set already fits comfortably in L2 for both ``4`` and ``8``, so there is almost nothing to gain from swizzling, which matches the observation that the results barely change compared to task 2. Here a small ``GROUP_SIZE_M`` (or even ``1``) is sufficient.
+* For the large ``8192 x 8192 x 4096`` case the DRAM traffic dominates. Increasing ``GROUP_SIZE_M`` from ``4`` to ``8`` measurably improves throughput (up to :math:`\approx 17` TFLOPS for small ``tM``), because more of the reuse is captured in L2 while the working set still stays under ``24 MiB``. Pushing to ``16`` would exceed the L2 capacity for the largest tiles (see the estimate above) and is therefore expected to regress.
+
+In short, ``GROUP_SIZE_M`` should be chosen as large as possible while keeping the row-group's working set inside L2, and this bound scales with the matrix and tile dimensions.
+Choosing it per matrix size, a small group for matrices that already fit in L2 and a larger group (bounded by the L2 estimate) for the large, DRAM-bound case, is therefore preferable to a single global constant, and ``4``/``8`` are the two representative points we used to demonstrate this trade-off.

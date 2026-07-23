@@ -1,5 +1,5 @@
-Contraction Interface and L2 Optimization
-=========================================
+5. Contraction Interface and L2 Optimization
+============================================
 
 .. _config:
 
@@ -133,7 +133,7 @@ The last step is to calculate the strides for the new dimensions and store them 
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 33-42
+    :lines: 44-53
     :caption: `Split dimension: Stride calculation`
 
 b) Fuse Dimensions
@@ -154,7 +154,7 @@ Next we check if the dimensions are placed contiguously in memory.
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 80-94
+    :lines: 80-106
     :caption: `Fuse dimensions: Check continuity`
 
 After this check we calculate the new stride for the fused dimension. 
@@ -162,7 +162,7 @@ After this check we calculate the new stride for the fused dimension.
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 97-110
+    :lines: 108-122
     :caption: `Fuse dimensions: Stride calculation`
 
 Finally we store the fused dimension and the stride at the respective position and remove the previous indices. 
@@ -170,7 +170,7 @@ Finally we store the fused dimension and the stride at the respective position a
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 113-117
+    :lines: 124-129
     :caption: `Fuse dimensions: Storing the new dimension`
 
 c) Permute Dimensions
@@ -182,7 +182,7 @@ That means the ``i-th`` entry of the result comes from the position ``permutatio
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 129-142
+    :lines: 135-154
     :caption: `Permute dimensions`
 
 d) Execution
@@ -198,7 +198,7 @@ We select a dimension for each of the dimension types ``M``, ``N``, and ``K``.
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 158-185
+    :lines: 175-197
     :caption: `Exec types: PRIM selection`
 
 After assigning the ``PRIM`` execution types, we once again loop over all dimensions and change all dimensions to a ``PAR`` execution type that aren't of dimension type ``K``.
@@ -206,7 +206,7 @@ After assigning the ``PRIM`` execution types, we once again loop over all dimens
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 188-194
+    :lines: 199-206
     :caption: `Exec types: PAR assignments`
 
 The last step is to move the ``SEQ`` dimensions to the leftmost positions and the ``PRIM`` dimensions to the rightmost positions. 
@@ -215,8 +215,8 @@ We verify the new execution types with the :ref:`verify <verification>` function
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 197-205
-    :caption: `Exec types: PAR assignments`
+    :lines: 208-215
+    :caption: `Exec types: SEQ and PRIM reordering`
 
 .. _verification:
 
@@ -230,12 +230,12 @@ e) Verification
 The ``verify`` function checks the executability of the config object. 
 We perform several checks in order to guarantee that a config object is executable.
 
-First, we verify that no dimensiony of type ``K`` has the ``PAR`` execution type assigned. 
+First, we verify that no dimension of type ``K`` has the ``PAR`` execution type assigned. 
 
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 217-221
+    :lines: 228-233
     :caption: `Verify: No PAR assignments for K types`
 
 Then we verify the dimension order. 
@@ -243,7 +243,7 @@ Then we verify the dimension order.
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 223-248
+    :lines: 235-267
     :caption: `Verify: SEQ, PAR, PRIM ordering`
 
 The next step is to verify that each tensor has at least 2 ``PRIM`` dimensions (``M, K``, ``K, N``, ``M, N``).
@@ -252,7 +252,7 @@ We also check their continuity in memory.
 .. literalinclude:: ../../../src/assignments/assignment_05/optimizer.py
     :language: py
     :linenos:
-    :lines: 250-271
+    :lines: 269-283
     :caption: `Verify: Tensor PRIM dimensions`
 
 Task 4: L2-Optimized Batched Contraction
@@ -281,29 +281,32 @@ For the batched matrix multiplication ``cmk, ckn -> cmn`` our ``generate_config`
 b) Optimized Config
 ^^^^^^^^^^^^^^^^^^^
 
-To optimize the initial config object we made two transformations. 
+To optimize the initial config object we made five transformations. 
 
-First, we split the ``N`` dimension into ``n1=4`` and ``n2=1024``
-Second, we split the ``M`` dimension into ``m1=4`` and ``m2=1024``
-
-.. code-block:: text
-
-    Config(
-        data_type  = DataType.FLOAT16
-        prim_main  = PrimType.GEMM
-        prim_last  = LastType.NONE
-        prim_first = FirstType.ZERO
-        dim_types  = ['C', 'M', 'N', 'M', 'K', 'N']
-        exec_types = ['PAR', 'PAR', 'PAR', 'PRIM', 'PRIM', 'PRIM']
-        dim_sizes  = [4, 4, 4, 1024, 4096, 1024]
-        strides[0] = [16777216, 4194304, 0, 4096, 1, 0]
-        strides[1] = [16777216, 0, 1024, 0, 4096, 1]
-        strides[2] = [16777216, 4194304, 1024, 4096, 0, 1]
-    )
+First, we split the ``N`` dimension into ``n1=4`` and ``n2=1024``.
+Second, we split the ``M`` dimension into ``m1=4`` and ``m2=1024``.
+To incorporate the tile sizes directly into the configuration, we additionally split the three PRIM dimensions:
+the ``M`` inner dimension (1024) into ``(16, tM=64)``, the ``K`` dimension (4096) into ``(64, tK=64)``, and the ``N`` inner dimension (1024) into ``(16, tN=64)``.
+After calling ``make_executable()``, the PRIM dimensions carry exactly the tile sizes, so no separate heuristic is needed to derive them.
 
 We decided to go with ``n2=m2=1024`` because with these dimensions we use the L2 cache optimally. 
 After this dimension splitting we have ``4194304 bytes`` left in the L2 cache. 
 With a bigger dimension size we would not be able to keep the whole computation within the L2 cache.
+
+.. code-block:: text
+
+    Config(
+      data_type  = DataType.FLOAT16
+      prim_main  = PrimType.GEMM
+      prim_last  = LastType.NONE
+      prim_first = FirstType.ZERO
+      dim_types  = ['C', 'M', 'M', 'N', 'N', 'K', 'M', 'K', 'N']
+      exec_types = ['PAR', 'PAR', 'PAR', 'PAR', 'PAR', 'SEQ', 'PRIM', 'PRIM', 'PRIM']
+      dim_sizes  = [4, 4, 16, 4, 16, 64, 64, 64, 64]
+      strides[0] = [16777216, 4194304, 262144, 0, 0, 64, 4096, 1, 0]
+      strides[1] = [16777216, 0, 0, 1024, 64, 262144, 0, 4096, 1]
+      strides[2] = [16777216, 4194304, 262144, 1024, 64, 0, 4096, 0, 1]
+    )
 
 c) Optimized Kernel
 ^^^^^^^^^^^^^^^^^^^
@@ -318,7 +321,7 @@ The launch kernel creates the grid according to the output tensor ``c * m1 * n1 
 .. literalinclude:: ../../../src/assignments/assignment_05/task-04.py
     :language: py
     :linenos:
-    :lines: 98-110
+    :lines: 105-117
     :caption: `Launch function`
 
 The kernel itself calculates the block IDs according to the shape of the output tensor. 
@@ -326,7 +329,7 @@ The kernel itself calculates the block IDs according to the shape of the output 
 .. literalinclude:: ../../../src/assignments/assignment_05/task-04.py
     :language: py
     :linenos:
-    :lines: 66-80
+    :lines: 73-87
     :caption: `BID calculation`
 
 Then we load the tiles and calculate our batched matrix multiplication.
@@ -334,7 +337,7 @@ Then we load the tiles and calculate our batched matrix multiplication.
 .. literalinclude:: ../../../src/assignments/assignment_05/task-04.py
     :language: py
     :linenos:
-    :lines: 83-94
+    :lines: 89-99
     :caption: `Batched Matrix Multiplication`
 
 The last thing we do is to compare the correctnes of our kernel against ``torch.allclose``. 

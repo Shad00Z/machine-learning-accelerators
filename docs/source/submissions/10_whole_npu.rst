@@ -1,5 +1,5 @@
-Using the whole NPU
-====================
+10. Using the whole NPU
+=======================
 
 Task 1: Setup of the Whole NPU
 --------------------------------

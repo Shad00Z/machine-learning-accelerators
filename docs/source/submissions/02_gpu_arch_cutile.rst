@@ -1,5 +1,5 @@
-GPU Architecture and cuTile
-============================
+2. GPU Architecture and cuTile
+==============================
 
 .. _gpu_properties:
 
@@ -21,7 +21,7 @@ In this task, we had to write a cuTile kernel that reduces a 2D input matrix of 
 along its last dimension (K), producing a 1D output vector of shape (M,) that contains the per-row sum.
 For the reduction, the kernel relies on `ct.sum` to perform the summation of elements along the specified dimension:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-02.py
     :language: py
     :linenos:
     :lines: 8-17
@@ -31,7 +31,7 @@ Since we only tile in the M dimension, we use a 1D grid.
 
 The kernel is launched using a utility function, which also pads the number of columns (K) to the nearest multiple of 2:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-02.py
     :language: py
     :linenos:
     :lines: 20-38
@@ -39,7 +39,7 @@ The kernel is launched using a utility function, which also pads the number of c
 
 Next, to verify the correctness of the kernel, we compare its output with the result obtained from PyTorch's built-in reduction function:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-02.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-02.py
     :language: py
     :linenos:
     :lines: 41-49
@@ -58,13 +58,13 @@ Note that all tensors have identical shape and dimensions (M, N, K, L).
 
 Part of the task was to implement two kernels, where one tiles over the K and L dimensions, and the other tiles over the M and N dimensions:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-03.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-03.py
     :language: py
     :linenos:
     :lines: 18-38
     :caption: `Kernel for element-wise addition of two 4D tensors with tiling over K and L dimensions.`
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-03.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-03.py
     :language: py
     :linenos:
     :lines: 41-61
@@ -74,7 +74,7 @@ In both kernels, we access the tiles using a 2D grid and simply add up the tiles
 In addition to the tensors, the kernels also take the tile sizes as constant input parameters.
 Similarly to the previous task, we launch the kernels using a utility function that pads the dimensions of the input tensors to the nearest multiple of the tile sizes:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-03.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-03.py
     :language: py
     :linenos:
     :lines: 64-85
@@ -85,7 +85,7 @@ and then use `K` and `L` instead of `M` and `N` for the grid dimensions.
 
 Next, we verify the correctness of both kernels by comparing their outputs with the result obtained from PyTorch's built-in addition operation:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-03.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-03.py
     :language: py
     :linenos:
     :lines: 112-119
@@ -94,7 +94,7 @@ Next, we verify the correctness of both kernels by comparing their outputs with 
 Lastly, we analyze the performance of both kernels by benchmarking the addition of matrices of shape (16, 128, 16, 128).
 For measuring the time per kernel execution, we use `triton.testing.do_bench` with a warmup time of 0.2 seconds and a repetition time of 2 seconds:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-03.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-03.py
     :language: py
     :linenos:
     :lines: 132-176
@@ -112,47 +112,74 @@ We obtained the following results on the DGX Spark:
 We can see that the kernel that tiles over the K and L dimensions performs on par with PyTorch's built-in addition operation, 
 while the kernel that tiles over the M and N dimensions is significantly slower.
 We can assume that PyTorch uses a similar tiling strategy as the first kernel, which is why it achieves similar performance.
-The second kernel, on the other hand, shows that tiling over the M and N dimensions is not as efficient for this particular operation, 
-likely due to less optimal memory access patterns and reduced parallelism.
+
+The performance difference is explained by the memory access pattern.
+The tensors are stored in row-major (C-contiguous) order, so the last dimension (L) is the fastest-varying dimension with stride 1, followed by K, N and M.
+The KL-tiling kernel loads a tile spanning the two innermost dimensions (K, L) for a fixed (M, N).
+These elements are contiguous in memory, so the loads and stores are fully coalesced: consecutive threads access consecutive memory addresses, and the hardware can service them with a minimal number of wide memory transactions.
+The MN-tiling kernel instead loads a tile spanning the two outermost dimensions (M, N) for a fixed (K, L).
+Consecutive elements within such a tile are separated by a stride of ``K * L`` (along N) and ``N * K * L`` (along M).
+The accesses are therefore strided and uncoalesced, so each requested element pulls in a separate, mostly unused cache line, which wastes a large fraction of the available memory bandwidth and explains the roughly 3.5x slowdown.
+Note that the total amount of work and the number of tiles is the same in both cases, so the slowdown is caused by the uncoalesced (and thus less parallel-friendly) memory transactions rather than by a lower degree of parallelism.
 
 Task 4: Benchmarking Bandwidth
 ------------------------------
 
-The goal of this task was to benchmark the bandwidth of the GPU by copying tensors of sizes `16, 32, 64 and 128`.
+The goal of this task was to benchmark the bandwidth of the GPU by copying tensors over a range of column sizes `N` (from 16 up to 128).
 Since we only do a copy operation, the kernel is rather simple:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 12-23
+    :lines: 38-49
     :caption: `Kernel for copying a tensor from input to output.`
 
-The kernel is launched using a simple utility function as well, without any manual padding:
+The kernel is launched using a simple utility function.
+Since cuTile requires power-of-two tile shapes, the requested tile sizes are rounded up to the next power of two, while partial tiles at the matrix borders are handled by the zero padding mode.
+This way the kernel supports arbitrary (non-power-of-two) tile and matrix sizes:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 26-41
+    :lines: 52-68
     :caption: `Launching the copy kernel.`
 
 Next, we define a test function to verify the correctness of the copy kernel by comparing its output with the input tensor:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 44-51
+    :lines: 71-79
     :caption: `Testing the copy kernel by comparing its output with the input tensor.`
 
 Lastly, we benchmark the bandwidth of the GPU by copying tensors of varying sizes and measuring the time taken for each copy operation.
-Furthermore, we collect the achieved bandwidth in GB/s for each tensor size and plot the results:
+We sweep the full range of `N` from 16 up to 128 in steps of 1, collect the achieved bandwidth in GB/s for each tensor size and plot the results:
 
-.. literalinclude:: ../../../src/assignments/02_assignment/task-04.py
+.. literalinclude:: ../../../src/assignments/assignment_02/task-04.py
     :language: py
     :linenos:
-    :lines: 54-92
+    :lines: 82-129
     :caption: `Benchmarking the bandwidth of the GPU by copying tensors of varying sizes and plotting the results.`
 
 The generated plot shows the achieved bandwidth in GB/s for different tensor sizes:
 
-.. image:: ../../../src/assignments/02_assignment/task4_bandwidth.png
+.. image:: ../_static/assignment_02/task4_bandwidth.png
     :alt: Bandwidth Plot
+
+The plot shows several peaks at multiples of 16, covering `48`, `64`, `80`, `96`, `112` and `128`. 
+
+Optional Task
+-------------
+
+To run the program with ``CUDA_TILE_LOGS=CUTILEIR`` we simply run:
+
+.. code:: bash
+
+    CUDA_TILE_LOGS=CUTILEIR python3 src/assignments/assignment_02/task-04.py 2> src/assignments/assignment_02/tileir_dump.log
+
+This produces a dump that contains the ``assume_div_by`` hints and the ``make_tensor_view`` calls from the compiler.
+
+In this case ``assume_div_by(x=A_0, divisor=16)`` is a hint that tells the downstream compiiler to treat the pointer value as if it is guaranteed to be multiple of 16 bytes. 
+The reason why the compiler is the Tensor Memory Accelerator (TMA).
+TMA requires the global memory address to be 16-byte aligned. 
+However, as the compiler can't know that from a raw runtime pointer it is inserted as a kind of "license" to use the TMA later. 

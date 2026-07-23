@@ -1,4 +1,4 @@
-XDNA GEMM Kernel
+8. XDNA GEMM Kernel
 ==========================================
 
 Task 1: Verify Function
@@ -229,5 +229,83 @@ After all eight r-iterations the four accumulators are written back to the outpu
 Task 6: Performance
 ------------------------------------------
 
-Our kernel could be considered a "maximal" version since it uses many nops and no vliw instructions.
-We simply did not have enough time to explore optimisations and were already happy that the kernel worked correctly.
+1. Instruction count
+^^^^^^^^^^^^^^^^^^^^^
+
+Because our kernel is fully unrolled and every instruction occupies its own VLIW word
+(all other slots are filled with ``nop``s), the number of instructions equals the number of
+issued cycles. Counting the mnemonics in ``src/matmul.s`` gives:
+
+.. list-table:: Instruction count
+   :widths: 60 20
+   :header-rows: 1
+
+   * - Instruction
+     - Count
+   * - ``nop``
+     - 422
+   * - ``vlda.conv.fp32.bf16`` (8 output load + 32 in0 load)
+     - 40
+   * - ``vshuffle``
+     - 32
+   * - ``vmac.f``
+     - 32
+   * - ``vldb``
+     - 32
+   * - ``vconv.bfp16ebs8.fp32``
+     - 32
+   * - ``padda``
+     - 18
+   * - ``vmul.f``
+     - 16
+   * - ``vst.conv.bf16.fp32``
+     - 8
+   * - ``paddb``
+     - 7
+   * - ``mova``
+     - 4
+   * - ``mov``
+     - 2
+   * - ``vbcst.16`` / ``vmov`` / ``movxm`` / ``ret``
+     - 4
+   * - **Useful (non-nop) instructions**
+     - **227**
+   * - **Total issued instructions / cycles**
+     - **649**
+
+The GEMM contracts ``p=2, q=2, r=8, m=8, n=8, k=8``, i.e. a :math:`16 \times 16` output
+accumulated over :math:`r \cdot k = 64`. This is :math:`16 \cdot 16 \cdot 64 = 16384` MACs
+(:math:`32768` FLOPs). Each ``vmac.f`` performs one :math:`8 \times 8 \times 8` tile
+(:math:`512` MACs), so :math:`(16/8)(16/8)(64/8) = 32` ``vmac.f`` instructions are issued,
+which matches the count above.
+
+**Expected performance.** With one instruction per cycle, the kernel takes about ``649``
+cycles for ``16384`` MACs, i.e. roughly :math:`32768 / 649 \approx 50` FLOP/cycle.
+Assuming the vector MAC unit sustains one :math:`8 \times 8 \times 8` ``vmac.f`` per cycle
+(:math:`512` MAC/cycle :math:`= 1024` FLOP/cycle peak), our kernel reaches only about
+:math:`50 / 1024 \approx 5\%` of the vector-MAC peak.
+
+2. Is the instruction count minimal?
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+No, mainly because we programmed this kernel in a "safe" way without VLIW packing and with many nop instructions.
+Possible improvements include:
+
+- **VLIW packing** The ``422`` ``nop`` instructions exist
+  only because each real instruction sits alone in its VLIW word while it waits out the
+  latency of the previous one. The A, B, M, V and S slots are almost entirely idle. By
+  packing independent instructions from different slots (loads on A/B, shuffles and
+  conversions on M, ``vmul``/``vmac`` on V, stores on S) and by software-pipelining
+  consecutive ``r`` iterations, many ``nop``\ s can be removed. The schedule is then
+  bounded by the busiest slot, which here is the V slot with ``16`` ``vmul.f`` + ``32``
+  ``vmac.f`` = ``48`` operations, i.e. a lower bound of roughly ``48`` cycles instead of ``649``.
+
+- **Removing the** ``vmul.f`` **-by-ones trick.** The ``16`` ``vmul.f`` multiply ``in1`` by a
+  vector of ones purely to push it through the FP32 datapath before the BFP16 conversion.
+  ``in0`` is instead converted directly on load via ``vlda.conv.fp32.bf16``. Loading ``in1``
+  the same way removes the ``16`` ``vmul.f`` and
+  frees the V slot for MACs only, bringing the V-slot bound down to the ``32`` ``vmac.f``.
+
+In conclusion, although the ``vmac.f`` count is minimal, the surrounding load/convert/transpose work
+and the missing VLIW scheduling make the current kernel roughly ``13x`` longer than
+a well-scheduled version (``~649`` vs. ``~48`` cycles).

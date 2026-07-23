@@ -206,6 +206,10 @@ def main():
     m1, m2 = 12, 128
     opt.split_dim(4, m1, m2)
     opt.make_executable()
+    # Interleave PAR M and PAR N dimensions for L2-optimal ordering.
+    # After make_executable the PAR order is [a(M), c(M), x_outer(M), b(N), y_outer(N), ...].
+    # Reorder to [a(M), b(N), c(M), x_outer(M), y_outer(N), ...].
+    opt.permute_dims([0, 3, 1, 2, 4, 5, 6, 7, 8])
     print(cfg)
     
     print("------- Config information -------")
