@@ -741,6 +741,9 @@ Unlike the tests, they are plain scripts, so the source paths have to be on ``PY
     # end-to-end U-Net (Milestone 4)
     python test/diffusion/benchmarks/bench_e2e.py
 
+Both roots are required: ``src/diffusion`` makes ``sd_turbo`` and ``utils`` importable, while ``test/diffusion`` makes the shared ``data`` helper importable.
+A ``ModuleNotFoundError: No module named 'data'`` (or ``'sd_turbo'``) means one of the two is missing from ``PYTHONPATH``. In this case set the full export above and re-run.
+
 Takeaways
 ---------
 
